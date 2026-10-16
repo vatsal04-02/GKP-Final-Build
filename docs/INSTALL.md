@@ -55,14 +55,23 @@ Grist is the CRM database; nothing here replaces it. The workflow reads and writ
 ## 4. n8n: webhook, authentication, credentials **[LIVE]**
 * The website webhook is `POST /webhook/website-lead` (workflow W1), `authentication: headerAuth`, `responseMode: responseNode`. n8n compares the request header with the **credential** attached to the `W1 – Webhook` node. The website function sends header name `N8N_WEBHOOK_AUTH_HEADER` with value `N8N_WEBHOOK_SECRET`; both must equal that credential's header name and value.
 * n8n registers `/webhook/…` only while the workflow is **active** and `/webhook-test/…` only while the editor is listening ("Listen for test event"). With the workflow active, the test URL answers 404.
-* **Credentials are matched by id on import.** The selected workflow carries your existing credential ids (`OpenRouter API`, `Header Auth account 2`, `WhatsApp Cloud API`, `Telegram account`, `SMTP account`). Importing it into the instance that owns those ids re-links them without re-entering anything. **Do not assume the names are right**: run `node n8n/final/tools/audit-credentials.js n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json` and read `docs/CREDENTIAL_AUDIT.md`: the website webhook, nine Grist nodes and W13's AI call share one credential, and `W9 – Ask Model` uses the Grist one. Decide in n8n (open each listed node → pick the credential of the right *role*) before activation. Credential values are never in this repository.
+* **Three credentials, three roles, never shared.** The selected workflow now assigns them by what each node calls (full table: `docs/OPENROUTER.md`, audit: `docs/CREDENTIAL_AUDIT.md`):
+
+  | Role | n8n credential (type) | Used by | Holds |
+  |---|---|---|---|
+  | Grist API | `Header Auth account 2` (Header Auth) | every Grist node | `Authorization: Bearer <Grist API key>` |
+  | OpenRouter | `OpenRouter API` (Header Auth) | `W13 – Ask Model`, `W9 – Ask Model` only | `Authorization: Bearer <OpenRouter key>` |
+  | Website webhook | `FlowHQ W1 Webhook Auth` (Header Auth) | `W1 – Webhook` only | header `X-Lead-Secret` (or `N8N_WEBHOOK_AUTH_HEADER`) = a random secret you generate; the same value is `N8N_WEBHOOK_SECRET` on Vercel |
+
+* **Credentials are matched by id on import.** `OpenRouter API` and `Header Auth account 2` already exist in your instance and re-link on import. `FlowHQ W1 Webhook Auth` (id `FhqCredW1Hook001`) is **new**: create it before activation, either in the UI (Credentials → Header Auth, name exactly `FlowHQ W1 Webhook Auth`; then select it on `W1 – Webhook` if n8n does not re-link by id) or with `node n8n/production/scripts/create-credentials.js --only FhqCredW1Hook001` (reads `FLOWHQ_W1_WEBHOOK_SECRET`, at least 20 characters, from your local environment and prints no values; use the same value as `N8N_WEBHOOK_SECRET` on Vercel). Never reuse the OpenRouter key as the webhook secret: the website function refuses an `sk-or-…` value or one equal to `OPENROUTER_API_KEY`. Check what you have: `node n8n/final/tools/audit-credentials.js --check n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json` must print `OK: every credential serves exactly one role`. The assumption that `Header Auth account 2` holds the Grist key and `OpenRouter API` the OpenRouter key could not be verified from the repository (F-GRIST-CRED): open each credential once and confirm. Credential values are never in this repository.
+* **External AI (OpenRouter) stays off until you switch it on.** One switch, `FLOWHQ_AI_EXTERNAL_ENABLED` (only `true` enables it), plus `FLOWHQ_AI_MODEL` (`vendor/model`, default `openai/gpt-4o-mini`). With the switch on, a missing or malformed model or a non-OpenRouter `FLOWHQ_AI_BASE_URL` stops W13 and W9 at the config guard instead of calling out. See `docs/OPENROUTER.md`.
 * `n8n/production/scripts/create-credentials.js` creates six **new** credentials named `FlowHQ …` for a fresh install (reference export). Do not run it on the existing instance unless you want those extra credentials.
 
 ## 5. Import and validate the selected workflow **[LIVE: import only; do not activate]**
 1. Export your current workflow from n8n first (backup; see `docs/ROLLBACK.md`).
 2. Import `n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json` through the UI ("Import from file") into a **copy**; the CLI `n8n import:workflow` deactivates what it imports. The file says `active: false`.
 3. Validate offline before and after: `node n8n/final/tools/audit-credentials.js <file>`; `node n8n/final/tests/final.test.js`; `node n8n/final/run-tests.js authoritative`.
-4. Review `docs/KNOWN_FINDINGS.md`; decide whether to import the **proposed** file instead (`n8n/final/workflows/proposed/…`: removes the AI override F-AI-01 and adds the W1 race guard).
+4. Review `docs/KNOWN_FINDINGS.md`; decide whether to import the **proposed** file instead (`n8n/final/workflows/proposed/…`: the selected workflow plus the W1 race guard).
 5. `W12 – Test input` (manual test node) carries fictional values; put a number you own in it **locally** if you use it, never in git.
 
 ## 6. Synthetic tests (all offline, fake services)
@@ -76,7 +85,7 @@ SITE_DIR=apps/clinic-website node n8n/production/tests/website-w1.test.js     # 
 N8N_RUNTIME_DIR=… N8N_NODE_DIR=… node n8n/production/tests/real/real-n8n.test.js
 N8N_RUNTIME_DIR=… N8N_NODE_DIR=… SITE_DIR=apps/clinic-website MAILPIT_BIN=… node n8n/production/tests/real/website-real-n8n.test.js
 ```
-Test files for the credential names of an imported instance use `SIM_CRED='{"meta":"…","openrouter":"…"}'` and `SIM_ALLOW_SHARED_CRED=1` (already set by `run-tests.js` for the selected workflow).
+Test files for the credential names of an imported instance use `SIM_CRED='{"meta":"…","openrouter":"…"}'` and `SIM_ALLOW_SHARED_CRED=1` (`run-tests.js` sets `SIM_CRED` for the selected workflow; credential sharing is no longer allowed there).
 
 ## 7. A controlled first live test **[LIVE]**, only after `docs/PRODUCTION_CHECKLIST.md` items 1 to 6
 `FLOWHQ_WA_SEND_MODE=off`, `FLOWHQ_ALERT_EMAIL_TO` empty, `FLOWHQ_AI_EXTERNAL_ENABLED=false`; a **Preview** deployment of the website with `N8N_WEBHOOK_URL` = the n8n **test** URL; click "Listen for test event" in n8n; submit one form with a made-up name and a number you own. Expect: one new row in Grist `LEADS` (consent flag as ticked), one `W1-website-lead` row in `Run_Log`, no WhatsApp or e-mail sent, no AI call.

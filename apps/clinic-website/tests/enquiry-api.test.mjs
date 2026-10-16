@@ -134,6 +134,16 @@ test('9d not configured (no URL / secret / slug): 503 "unavailable", nothing for
   }
 });
 
+test('9d-2 the website secret is its own: a value that looks like an OpenRouter key (or equals OPENROUTER_API_KEY) is refused, nothing is forwarded', async () => {
+  for (const secret of ['sk-or-v1-0123456789abcdef0123456789abcdef', 'Bearer sk-or-v1-0123456789abcdef', 'plain-looking-but-equal-to-openrouter']) {
+    const env = { ...ENV, N8N_WEBHOOK_SECRET: secret, OPENROUTER_API_KEY: 'plain-looking-but-equal-to-openrouter' };
+    const { handler, calls } = mk(() => n8nOk(), env);
+    const r = await call(handler);
+    assert.deepEqual([r.status, r.json.error], [503, 'unavailable'], secret.slice(0, 8));
+    assert.equal(calls.length, 0);
+  }
+});
+
 test('9e same-host origin is accepted when ALLOWED_ORIGINS is not set; rate limit: the 7th request in a minute is refused', async () => {
   const env = { ...ENV }; delete env.ALLOWED_ORIGINS;
   const { handler } = mk(() => n8nOk(), env);

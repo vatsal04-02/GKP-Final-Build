@@ -64,7 +64,7 @@ const startW13 = (o, { g = crm(), claude = F.fakeClaude(), meta = fakeMeta(), ai
 // ---------------------------------------------------------------- the fix itself
 test('the fix changes only what it says (visible-skip line in "W13 – Build Context", the literal AI override in "W13 – Config"): credentials, ids, URLs and connections are identical', () => {
   const changed = after.nodes.filter((n, i) => JSON.stringify(n) !== JSON.stringify(before.nodes[i])).map((n) => n.name).sort();
-  const expected = bc(loaded).includes(REPLACE) ? (literalOverride ? ['W13 – Config'] : []) : expectedChanged;
+  const expected = bc(loaded).includes(REPLACE) ? [NODE, ...(literalOverride ? ['W13 – Config'] : [])].sort() : expectedChanged;   // "before" is rebuilt by undoing the visible-skip edit
   assert.deepStrictEqual(changed, expected);
   assert.strictEqual(after.nodes.length, before.nodes.length);
   assert.strictEqual(JSON.stringify(after.connections), JSON.stringify(before.connections));

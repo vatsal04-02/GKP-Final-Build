@@ -5,7 +5,8 @@
 // Server-only environment variables (Vercel > Project > Settings > Environment Variables; never PUBLIC_*):
 //   N8N_WEBHOOK_URL          the n8n webhook. Start with the TEST url (.../webhook-test/website-lead); switch to .../webhook/website-lead
 //                            only when the clinic has approved go-live.
-//   N8N_WEBHOOK_SECRET       the value n8n's header-auth credential for that webhook expects.
+//   N8N_WEBHOOK_SECRET       the value n8n's header-auth credential for that webhook expects: a secret made for this webhook only, NEVER an OpenRouter
+//                            or Grist key (a value that looks like an OpenRouter key, sk-or-..., is refused).
 //   N8N_WEBHOOK_AUTH_HEADER  that credential's header NAME (default X-Lead-Secret).
 //   CLINIC_SLUG              the clinic's Clinic_Slug in the Agency Registry (table Clinics). Not guessed anywhere in the code.
 //   ALLOWED_ORIGINS          optional, comma separated https origins allowed to post (default: the request's own host).
@@ -33,9 +34,11 @@ const readConfig = (env) => ({
   timeoutMs: Math.min(30_000, Math.max(1000, Number(env.N8N_TIMEOUT_MS) || 8000)),
 });
 
-const configProblem = (c) => {
+const configProblem = (c, env = {}) => {
   if (!/^https?:\/\/[^\s/]+\/\S+$/i.test(c.url)) return 'N8N_WEBHOOK_URL';
   if (c.secret.length < 8) return 'N8N_WEBHOOK_SECRET';
+  // the website secret is its own secret: an OpenRouter API key (sk-or-...) must never be used for it
+  if (/^(Bearer\s+)?sk-or-/i.test(c.secret) || (env.OPENROUTER_API_KEY && c.secret === String(env.OPENROUTER_API_KEY))) return 'N8N_WEBHOOK_SECRET (looks like an OpenRouter key)';
   if (!/^[A-Za-z0-9-]{1,60}$/.test(c.header)) return 'N8N_WEBHOOK_AUTH_HEADER';
   if (!/^[a-z0-9-]{2,40}$/.test(c.slug)) return 'CLINIC_SLUG';
   return '';
@@ -122,7 +125,7 @@ export function createHandler({ env = process.env, fetchImpl = (...a) => fetch(.
     if (!v.ok) return send(res, 422, { ok: false, error: 'invalid', fields: v.errors });
     if (v.value.honeypot) { log('honeypot'); return send(res, 200, { ok: true, status: 'received' }); }   // a bot: say nothing useful, store nothing
 
-    const problem = configProblem(c);
+    const problem = configProblem(c, env);
     if (problem) { log('not_configured', { var: problem }); return send(res, 503, { ok: false, error: 'unavailable' }); }
 
     const rid = v.value.request_id || `srv-${t.toString(36)}`;

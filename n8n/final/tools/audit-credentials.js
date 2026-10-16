@@ -2,7 +2,8 @@
 // Which credential does each node use, and what is that node FOR? Classifies by what the node calls (not by the credential's name) and reports every
 // credential that serves more than one role. It reads the export only: it never sees a credential value and changes nothing.
 //
-//   node n8n/final/tools/audit-credentials.js <workflow.json> [--json]
+//   node n8n/final/tools/audit-credentials.js <workflow.json> [--json] [--check]
+//   --check  exit code 1 when any credential serves more than one role (what the tests and the pre-import checklist use)
 'use strict';
 const fs = require('fs');
 
@@ -44,10 +45,11 @@ if (require.main === module) {
   const [file] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   if (!file) { console.error('usage: node audit-credentials.js <workflow.json> [--json]'); process.exit(2); }
   const res = audit(JSON.parse(fs.readFileSync(file, 'utf8')));
-  if (process.argv.includes('--json')) { console.log(JSON.stringify(res, null, 2)); process.exit(0); }
+  if (process.argv.includes('--json')) { console.log(JSON.stringify(res, null, 2)); process.exit(process.argv.includes('--check') && res.credentials.some((c) => c.shared) ? 1 : 0); }
   console.log(`${res.nodes} credential references\n`);
   for (const c of res.credentials) {
     console.log(`${c.credentialType} "${c.credentialName}" (id ${c.credentialId})${c.shared ? '   <-- USED FOR MORE THAN ONE ROLE' : ''}`);
     for (const [role, nodes] of Object.entries(c.roles)) console.log(`    ${role}: ${nodes.length} node(s)${nodes.length <= 12 ? ` - ${nodes.join(', ')}` : ''}`);
   }
+  if (process.argv.includes('--check')) { const bad = res.credentials.filter((c) => c.shared); console.log(bad.length ? `\nFAIL: ${bad.length} credential(s) serve more than one role` : '\nOK: every credential serves exactly one role'); process.exit(bad.length ? 1 : 0); }
 }

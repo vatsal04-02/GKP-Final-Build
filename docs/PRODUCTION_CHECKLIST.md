@@ -3,8 +3,8 @@
 Activation needs your explicit decision for each step. This repository did not deploy, activate or change anything live.
 
 ## Must be resolved first
-1. **Credential roles (F-CRED-ROLE).** Inspect the credentials `OpenRouter API` and `Header Auth account 2` in n8n (header **names** only), re-assign the 11 nodes listed in `docs/CREDENTIAL_AUDIT.md` to credentials of the right role, give the website webhook its own secret. Re-run `audit-credentials.js`: no credential may serve two roles.
-2. **External AI (F-AI-01).** Decide whether the AI override stays. If AI should be off by default, import the proposed workflow (or delete the second `ai_external_enabled = true` in `W13 – Config`). Enabling external AI needs the clinic's approval of the privacy notice (`docs/PRIVACY_DRAFT.md`).
+1. **Credentials (F-WEBHOOK-CRED, F-GRIST-CRED).** Create `FlowHQ W1 Webhook Auth` (`docs/OPENROUTER.md` §3). In n8n open `OpenRouter API` and `Header Auth account 2` and confirm the header **names** (`Authorization`; values never leave n8n): the first must hold the OpenRouter key, the second the Grist key. Run `node n8n/final/tools/audit-credentials.js <export> --check`: every credential serves one role.
+2. **OpenRouter.** Decide when to switch it on: `FLOWHQ_AI_EXTERNAL_ENABLED=true` and `FLOWHQ_AI_MODEL` (`docs/OPENROUTER.md`). It stays **off** until the clinic has approved the privacy notice (`docs/PRIVACY_DRAFT.md`) and your OpenRouter key has credit and access to the model.
 3. **Verify Grist.** The live document has a `LEADS` table with the columns of `grist/schema.md`, plus `Send_Ledger` and the consent columns (`migrate-grist.js --check`, then `--apply` after a backup).
 4. **Verify the clinic slug** in the registry's `Clinics` table and set `CLINIC_SLUG` in Vercel. `FLOWHQ_REGISTRY_DOC_ID` set on the server.
 5. **Clinic approval of the wording** (`PRIVACY_DRAFT.md`), a published privacy page, a retention period, and the `CONSENT_VERSION` bumped (drop `DRAFT-`).
@@ -18,4 +18,4 @@ Activation needs your explicit decision for each step. This repository did not d
 11. Activate the workflow, set `N8N_WEBHOOK_URL` to the production webhook, promote the Vercel deployment. Watch `Run_Log` and `LEADS` for the first day.
 
 ## Known gaps to accept or fix (see `docs/KNOWN_FINDINGS.md`)
-No real-provider verification of any kind has happened. W6 stays silent for leads without consent (F-W6-SILENT). The selected workflow has no split opening hours (F-HOURS).
+No real-provider verification of any kind has happened (no real OpenRouter request was ever made). W6 stays silent for leads without consent (F-W6-SILENT). The selected workflow has no split opening hours (F-HOURS).

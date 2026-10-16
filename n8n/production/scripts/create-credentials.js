@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Creates the n8n credentials the production workflow expects (stable ids and names) from environment variables - without ever printing a value.
 //   node scripts/create-credentials.js --dry-run                         list the credentials and which variables are missing (values are never shown)
+//   node scripts/create-credentials.js --only FhqCredW1Hook001 ...       only the named credential(s) (by id or name); needed for an existing instance: see docs/OPENROUTER.md
 //   node scripts/create-credentials.js --out credentials.import.local.json   write the import file (mode 600) and print the import command
 //   node scripts/create-credentials.js --import "<command that runs n8n import:credentials --input=%FILE%>"   write, import, then overwrite + delete the file
 // Variables: FLOWHQ_GRIST_API_KEY, FLOWHQ_W1_WEBHOOK_SECRET, FLOWHQ_WA_ACCESS_TOKEN, FLOWHQ_AI_API_KEY (optional), FLOWHQ_TELEGRAM_BOT_TOKEN, FLOWHQ_SMTP_*.
@@ -32,7 +33,10 @@ const SPEC = [
   { id: 'FhqCredSmtp00001', name: 'FlowHQ SMTP', type: 'smtp', need: ['FLOWHQ_SMTP_HOST', 'FLOWHQ_SMTP_PORT'], optional: true, note: 'only needed for e-mail alerts (staging: Mailpit)', data: (e) => ({ user: e.FLOWHQ_SMTP_USER || '', password: e.FLOWHQ_SMTP_PASSWORD || '', host: e.FLOWHQ_SMTP_HOST, port: Number(e.FLOWHQ_SMTP_PORT), secure: String(e.FLOWHQ_SMTP_SECURE).toLowerCase() === 'true', disableStarttls: String(e.FLOWHQ_SMTP_DISABLE_STARTTLS).toLowerCase() === 'true', hostName: '' }) },
 ];
 
-const plan = SPEC.map((s) => {
+// --only "FhqCredW1Hook001,FlowHQ W1 Webhook Auth": create just these (by id or name). For an existing instance whose Grist / OpenRouter / WhatsApp credentials already exist, create ONLY the website webhook credential: --only FhqCredW1Hook001
+const wanted = arg('--only') ? arg('--only').split(',').map((s) => s.trim()).filter(Boolean) : null;
+if (wanted) { const known = SPEC.flatMap((s) => [s.id, s.name]); const bad = wanted.filter((w) => !known.includes(w)); if (bad.length) { console.error(`--only: unknown credential(s): ${bad.join(', ')}`); process.exit(2); } }
+const plan = SPEC.filter((s) => !wanted || wanted.includes(s.id) || wanted.includes(s.name)).map((s) => {
   const missing = s.need.filter((k) => blank(env[k]));
   const short = Object.entries(s.min || {}).filter(([k, n]) => !blank(env[k]) && String(env[k]).length < n).map(([k]) => k);
   return { ...s, missing, short, ready: missing.length === 0 && short.length === 0 };

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// PROPOSED changes to the authoritative workflow. Nothing here is applied to your n8n: it writes a NEW file you can review, diff and import into a COPY.
+// PROPOSED changes to the authoritative workflow (the OpenRouter configuration itself is already IN the authoritative file: tools/apply-openrouter-config.js). Nothing here is applied to your n8n: it writes a NEW file you can review, diff and import into a COPY.
 //
 //   node n8n/final/tools/propose-fixes.js <authoritative.json> <proposed.json>
 //
-// Fix 1  W13 – Config has TWO `ai_external_enabled` assignments in the authoritative export: the environment expression AND a later literal true. The later one wins,
+// Fix 1  (no longer needed for the authoritative file, kept so the tool also works on the as-supplied one)  W13 – Config has TWO `ai_external_enabled` assignments in the authoritative export: the environment expression AND a later literal true. The later one wins,
 //        so external AI is ON whatever FLOWHQ_AI_EXTERNAL_ENABLED says (this contradicts the documented safe default "external AI off"). The literal override is
 //        removed, leaving the environment expression ={{ $env.FLOWHQ_AI_EXTERNAL_ENABLED === 'true' }}.  Skipped when there is no literal override.
 // Fix 2  W1 race guard: two enquiries for one phone at the same moment no longer leave two leads (n8n/production/tools/patch-w1-race-guard.js, 6 nodes added).

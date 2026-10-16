@@ -10,6 +10,7 @@ Nothing in this repository changes a live system by itself. Each step below undo
 ## n8n workflow
 * **Before importing anything, export the live workflow** (workflow ⋯ → Download) and keep that file: it is the only exact copy of what runs today. The selected file is a *sanitized* copy and is not a substitute.
 * To restore: re-import that backup (importing a file with the same workflow id into the same instance replaces the workflow there). The CLI deactivates what it imports; activate deliberately.
+* The selected workflow differs from the supplied one by 16 nodes (the OpenRouter switch and the credential roles). The supplied file is `n8n/final/workflows/history/…as-supplied.sanitized.json` (sanitized, for diffing); your **export of the live workflow** remains the only exact restore point. To go back to the supplied credential wiring and the hard-coded AI override, re-import that backup.
 * The proposed file's changes are additive and small (remove the AI override; six W1 nodes). To undo the race guard by hand: delete `W1 – Recheck lead`, `W1 – Race guard`, `W1 – Race?`, `W1 – Respond Duplicate (race)`, `W1 – Remove duplicate row`, `W1 – Race log` and connect `W1 – Create lead` to `W1 – Respond Created` again.
 
 ## Settings

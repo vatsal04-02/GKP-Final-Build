@@ -28,7 +28,7 @@
 1. WhatsApp consent is separate from submitting an enquiry. An enquiry is stored with `Consent_WhatsApp=false` when the box is unticked; W12 sends **no template to a patient without consent**.
 2. Every patient-facing message passes W12: consent, opt-out, pause, quiet hours 21:00–08:00 IST, test mode, send mode, idempotency ledger (claim before the Meta call; an uncertain call is never retried automatically).
 3. The website never holds an n8n URL or secret in the browser; the success message says "received", never "confirmed".
-4. External AI never sends and never computes numbers; patient identifiers are masked before any provider call; it is off unless `FLOWHQ_AI_EXTERNAL_ENABLED=true` (see F-AI-01 for the selected file).
+4. External AI is OpenRouter only (W13 and W9); it never sends and never computes numbers; patient identifiers are masked before any provider call; it is off unless `FLOWHQ_AI_EXTERNAL_ENABLED=true` (one switch, `docs/OPENROUTER.md`). Credentials have one role each: OpenRouter key → the two AI calls, website-webhook secret → W1's webhook, Grist key → Grist (`docs/CREDENTIAL_AUDIT.md`).
 5. Configuration comes from the environment (`$env.FLOWHQ_*`); the clinic slug and registry id are never in the workflow.
 6. Grist stays the database. Nothing replaces it; no patient record is stored in git.
 

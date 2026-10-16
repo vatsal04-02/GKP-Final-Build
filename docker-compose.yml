@@ -58,6 +58,7 @@ services:
       - FLOWHQ_ALERT_EMAIL_TO=${FLOWHQ_ALERT_EMAIL_TO:-}
       - FLOWHQ_EMAIL_FROM=${FLOWHQ_EMAIL_FROM:-}
       - FLOWHQ_EMAIL_PATIENT_ACK=${FLOWHQ_EMAIL_PATIENT_ACK:-false}
+      # AI: only the switch, model and rate limit are passed. FLOWHQ_AI_BASE_URL is deliberately NOT passed (the workflow defaults to OpenRouter); the key lives in an n8n credential.
       - FLOWHQ_AI_EXTERNAL_ENABLED=${FLOWHQ_AI_EXTERNAL_ENABLED:-false}
       - FLOWHQ_AI_MODEL=${FLOWHQ_AI_MODEL:-openai/gpt-4o-mini}
       - FLOWHQ_AI_MAX_REPLIES_PER_HOUR=${FLOWHQ_AI_MAX_REPLIES_PER_HOUR:-6}

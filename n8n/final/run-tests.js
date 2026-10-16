@@ -5,8 +5,8 @@
 //   node n8n/final/run-tests.js [reference|authoritative|proposed|<path to an export>]     (default: all three)
 //
 //   reference      n8n/production/clinic-autopilot-production.json   the earlier hardened build (FlowHQ credential names): everything passes
-//   authoritative  n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json   the selected workflow, as supplied (sanitized)
-//   proposed       n8n/final/workflows/proposed/…   authoritative + the proposed fixes (not applied to any live n8n)
+//   authoritative  n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json   the selected workflow: OpenRouter configured, credentials by role (+ the openrouter suite)
+//   proposed       n8n/final/workflows/proposed/…   authoritative + the W1 race guard (not applied to any live n8n)
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -20,26 +20,22 @@ const TARGETS = {
   reference: { file: path.join(ROOT, 'clinic-autopilot-production.json'), env: {}, known: [], extraSuites: ['mutation'] },
   authoritative: {
     file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidatefinal.json'),
-    env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }), SIM_ALLOW_SHARED_CRED: '1' },
+    env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }) },
+    extraSuites: ['openrouter'],
     known: [
       ['F-ID', /^identity: inactive, own id and name/],
       ['F-CRED-NAMES', /^credentials: only the production credentials/],
-      ['F-CRED-NAMES', /^the webhook keeps its n8n header authentication/],
       ['F-CRED-NAMES', /SMTP credential "FlowHQ SMTP"/],
-      ['F-AI-01', /^external AI is OFF by default/],
-      ['F-CRED-ROLE', /^W9 with external AI enabled calls the provider once/],
     ],
   },
   proposed: {
-    file: path.join(__dirname, 'workflows', 'proposed', 'FlowHQ_final_proposed_safe-ai-gate_w1-race-guard.json'),
-    env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }), SIM_ALLOW_SHARED_CRED: '1' },
+    file: path.join(__dirname, 'workflows', 'proposed', 'FlowHQ_final_proposed_w1-race-guard.json'),
+    env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }) },
+    extraSuites: ['openrouter'],
     known: [
       ['F-ID', /^identity: inactive, own id and name/],
       ['F-CRED-NAMES', /^credentials: only the production credentials/],
-      ['F-CRED-NAMES', /^the webhook keeps its n8n header authentication/],
       ['F-CRED-NAMES', /SMTP credential "FlowHQ SMTP"/],
-      ['F-CRED-ROLE', /^W9 with external AI enabled calls the provider once/],
-      ['F-NODECOUNT', /^(node count|the export has)/],
     ],
   },
 };
