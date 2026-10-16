@@ -1,0 +1,510 @@
+---
+import Icon from './Icon.astro';
+import { clinic, hours, links, nav } from '../data/site';
+---
+
+<header class="site-header" data-header>
+  <div class="site-header__inner">
+    <div class="bar">
+      <a class="brand" href="#top">
+        <span class="brand__mark">{clinic.monogram}</span>
+        <span class="brand__text">
+          <span class="brand__name">{clinic.shortName}</span>
+          <span class="brand__sub">Physiotherapy</span>
+        </span>
+      </a>
+
+      <nav class="primary-nav" aria-label="Primary">
+        <ul data-nav-list>
+          {
+            nav.map((item) => (
+              <li>
+                <a href={item.href} data-nav-link>
+                  {item.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+        <span class="nav-indicator" data-nav-indicator aria-hidden="true"></span>
+      </nav>
+
+      <div class="actions">
+        <a class="btn btn-primary btn-sm cta-desktop" href={links.whatsapp} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location="header">
+          WhatsApp the Clinic
+          <Icon name="arrow-right" size={18} class="icon-arrow" />
+        </a>
+        <a class="icon-btn icon-btn--wa" href={links.whatsapp} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp the Clinic" data-track="whatsapp_click" data-location="header-mobile">
+          <Icon name="message-circle" size={22} />
+        </a>
+        <button class="icon-btn icon-btn--menu" type="button" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu" data-menu-toggle>
+          <Icon name="menu" size={22} class="i-open" />
+          <Icon name="x" size={22} class="i-close" />
+        </button>
+      </div>
+    </div>
+    <div class="scroll-progress" aria-hidden="true"><span data-progress></span></div>
+  </div>
+</header>
+
+<div id="mobile-menu" class="mobile-menu on-dark" data-menu inert aria-hidden="true">
+  <div class="mobile-menu__panel glass-dark" role="dialog" aria-modal="true" aria-label="Site menu">
+    <!-- One scrollable column: the links, the hours and the call button -->
+    <div class="mobile-menu__scroll">
+      <nav aria-label="Mobile">
+        <ul>
+          {
+            nav.map((item, i) => (
+              <li style={`--i:${i}`}>
+                <a href={item.href} data-menu-link>
+                  <span class="num">{String(i + 1).padStart(2, '0')}</span>
+                  <span class="label">{item.label}</span>
+                  <Icon name="arrow-up-right" size={20} class="go" />
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+      <div class="mobile-menu__extra" style={`--i:${nav.length}`}>
+        <p class="hours">
+          <Icon name="clock" size={16} />
+          {hours.days} · {hours.sessions.join(' · ')} · {hours.closed}
+        </p>
+        <a class="btn btn-glass btn-block" href={links.tel} data-track="phone_click" data-location="menu">
+          <Icon name="phone" size={18} /> Call the Clinic
+        </a>
+      </div>
+    </div>
+
+    <!-- Pinned: always visible, however long the list is or however short the screen -->
+    <div class="mobile-menu__foot">
+      <a class="btn btn-primary btn-block" href={links.whatsapp} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location="menu">
+        <Icon name="message-circle" size={20} /> WhatsApp the Clinic
+      </a>
+    </div>
+  </div>
+</div>
+
+<style>
+  .site-header {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 50;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 0;
+    pointer-events: none;
+  }
+  .site-header__inner {
+    position: relative;
+    max-width: 1280px;
+    margin-inline: auto;
+    pointer-events: auto;
+  }
+
+  .bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: 60px;
+    padding: 0 10px 0 12px;
+    border-radius: 18px;
+    transform-origin: top center;
+    transition: transform 300ms ease;
+  }
+  /* Glass layer fades in once the page scrolls: warm-white at rest, frosted when scrolled */
+  .bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgb(250 248 242 / 0.84), rgb(250 248 242 / 0.62));
+    border: 1px solid rgb(255 255 255 / 0.7);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.85),
+      0 10px 30px -12px rgb(12 59 54 / 0.28);
+    -webkit-backdrop-filter: blur(16px) saturate(1.6);
+    backdrop-filter: blur(16px) saturate(1.6);
+    opacity: 0;
+    transition: opacity 300ms ease;
+  }
+  /* Past 40px of scroll the bar tucks up and shrinks a little, and the frosted layer fades in.
+     Transform and opacity only: nothing here changes layout. */
+  :global(.site-header.is-scrolled) .bar {
+    transform: translate3d(0, -3px, 0) scale(0.965);
+  }
+  :global(.site-header.is-scrolled) .bar::before {
+    opacity: 1;
+  }
+  /* While the bar floats over the hero video a blur behind it would be recomputed for every video frame (measured:
+     the only thing in the hero that cost scrolling smoothness), so there it is a near-opaque warm white instead. */
+  :global(.site-header.is-over-video) .bar::before {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: linear-gradient(135deg, rgb(250 248 242 / 0.94), rgb(250 248 242 / 0.9));
+  }
+
+  /* Over the hero video (before the page scrolls) the bar is transparent with light type; once it scrolls it turns
+     into the frosted light bar above. Without JavaScript it never learns it has scrolled, so it stays frosted. */
+  :global(.js .site-header:not(.is-scrolled)) .brand {
+    color: var(--color-ivory);
+  }
+  :global(.js .site-header:not(.is-scrolled)) .brand__sub {
+    color: var(--color-sand);
+  }
+  :global(.js .site-header:not(.is-scrolled)) .primary-nav a {
+    color: rgb(250 248 242 / 0.88);
+  }
+  :global(.js .site-header:not(.is-scrolled)) .primary-nav a:hover,
+  :global(.js .site-header:not(.is-scrolled)) .primary-nav a[aria-current='true'] {
+    color: #fff;
+  }
+  :global(.js .site-header:not(.is-scrolled)) .nav-indicator {
+    background: var(--color-sand);
+  }
+  :global(.js .site-header:not(.is-scrolled)) .icon-btn--menu {
+    border-color: rgb(250 248 242 / 0.34);
+    background: rgb(12 59 54 / 0.42);
+    color: var(--color-ivory);
+  }
+  :global(.js .site-header:not(.is-scrolled)) .icon-btn--menu:hover {
+    background: rgb(12 59 54 / 0.7);
+  }
+  :global(html:not(.js)) .bar::before {
+    opacity: 1;
+  }
+
+  /* Brand */
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    min-height: 46px;
+    gap: 0.7rem;
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+  .brand__mark {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(145deg, var(--color-teal), var(--color-pine));
+    color: var(--color-ivory);
+    font: 400 1.0625rem/1 var(--font-serif);
+    letter-spacing: 0.02em;
+    box-shadow: 0 6px 14px -6px rgb(12 59 54 / 0.6);
+  }
+  .brand__text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+  }
+  .brand__name {
+    font: 400 1.125rem/1.1 var(--font-serif);
+    letter-spacing: -0.005em;
+  }
+  .brand__sub {
+    margin-top: 3px;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--color-teal);
+  }
+
+  /* Desktop nav */
+  .primary-nav {
+    display: none;
+    position: relative;
+  }
+  .primary-nav ul {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .primary-nav a {
+    position: relative;
+    z-index: 1;
+    display: block;
+    padding: 0.55rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--color-ink) 78%, transparent);
+    text-decoration: none;
+    transition: color var(--dur-fast) ease;
+  }
+  .primary-nav a:hover,
+  .primary-nav a[aria-current='true'] {
+    color: var(--color-pine);
+  }
+  /* Active section: a thin teal underline that slides between links, sized to the label text */
+  .nav-indicator {
+    position: absolute;
+    left: 0;
+    bottom: 3px;
+    height: 2px;
+    width: calc(var(--w, 0px) - 1.6rem);
+    border-radius: 2px;
+    background: var(--color-teal);
+    opacity: 0;
+    transform: translate3d(calc(var(--x, 0px) + 0.8rem), 0, 0);
+    transition:
+      transform var(--dur-normal) var(--ease-soft),
+      width var(--dur-normal) var(--ease-soft),
+      opacity var(--dur-normal) ease;
+  }
+  .nav-indicator[data-visible='true'] {
+    opacity: 1;
+  }
+
+  /* Actions */
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .cta-desktop {
+    display: none;
+  }
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 46px; /* 46px so the scrolled-state shrink (x0.965) still leaves a 44px+ target */
+    height: 46px;
+    border-radius: 11px;
+    border: 1px solid rgb(12 59 54 / 0.12);
+    background: rgb(255 255 255 / 0.55);
+    color: var(--color-pine);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      transform var(--dur-fast) var(--ease-soft),
+      background-color var(--dur-normal) ease;
+  }
+  .icon-btn:hover {
+    background: rgb(255 255 255 / 0.9);
+  }
+  .icon-btn:active {
+    transform: scale(0.95);
+  }
+  .icon-btn--wa {
+    background: var(--color-cta);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 8px 18px -8px rgb(234 88 12 / 0.7);
+  }
+  .icon-btn--wa:hover {
+    background: #d94e09;
+  }
+  .icon-btn--menu {
+    position: relative;
+  }
+  .icon-btn--menu :global(.icon) {
+    position: absolute;
+    transition:
+      opacity var(--dur-fast) ease,
+      transform var(--dur-normal) var(--ease-soft);
+  }
+  .icon-btn--menu :global(.i-close) {
+    opacity: 0;
+    transform: rotate(-60deg) scale(0.6);
+  }
+  .icon-btn--menu[aria-expanded='true'] :global(.i-open) {
+    opacity: 0;
+    transform: rotate(60deg) scale(0.6);
+  }
+  .icon-btn--menu[aria-expanded='true'] :global(.i-close) {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Scroll progress: transform-only, sits on the bottom edge of the bar */
+  .scroll-progress {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 0;
+    height: 2px;
+    overflow: hidden;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity var(--dur-normal) ease;
+  }
+  :global(.site-header.is-scrolled) .scroll-progress {
+    opacity: 1;
+  }
+  .scroll-progress span {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-teal), var(--teal-light));
+    transform: scaleX(var(--p, 0));
+    transform-origin: left center;
+  }
+
+  @media (min-width: 640px) {
+    .site-header {
+      padding-inline: 20px;
+    }
+    .bar {
+      padding: 0 14px 0 18px;
+    }
+  }
+
+  @media (min-width: 1100px) {
+    .primary-nav {
+      display: block;
+    }
+    .cta-desktop {
+      display: inline-flex;
+    }
+    .icon-btn--wa,
+    .icon-btn--menu {
+      display: none;
+    }
+    .bar {
+      height: 66px;
+    }
+  }
+
+  /* ---------- Mobile menu ---------- */
+  .mobile-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    display: grid;
+    padding: calc(env(safe-area-inset-top, 0px) + 76px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+    background: rgb(12 59 54 / 0.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    visibility: hidden;
+    opacity: 0;
+    transition:
+      opacity var(--dur-normal) ease,
+      visibility 0s linear var(--dur-normal);
+  }
+  .mobile-menu[data-open='true'] {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s;
+  }
+  .mobile-menu {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .mobile-menu__panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-width: 560px;
+    width: 100%;
+    margin-inline: auto;
+    border-radius: 24px;
+    background: linear-gradient(160deg, rgb(12 59 54 / 0.94), rgb(10 48 44 / 0.9));
+    overflow: hidden;
+    transform: translate3d(0, -10px, 0) scale(0.985);
+    transition: transform var(--dur-normal) var(--ease-soft);
+  }
+  .mobile-menu[data-open='true'] .mobile-menu__panel {
+    transform: none;
+  }
+  .mobile-menu__scroll {
+    flex: 1;
+    min-height: 0;
+    padding: 0.5rem 1.25rem 1rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-menu ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .mobile-menu li,
+  .mobile-menu__extra,
+  .mobile-menu__foot {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+    transition:
+      opacity var(--dur-normal) ease,
+      transform var(--dur-normal) var(--ease-soft);
+  }
+  .mobile-menu[data-open='true'] li,
+  .mobile-menu[data-open='true'] .mobile-menu__extra,
+  .mobile-menu[data-open='true'] .mobile-menu__foot {
+    opacity: 1;
+    transform: none;
+    transition-delay: calc(60ms + var(--i, 0) * 35ms);
+  }
+  /* 20px links on a 1.4 line with 12px above and below: 52px rows, comfortably over the 44px touch minimum */
+  .mobile-menu li a {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-height: 44px;
+    padding: 12px 0.25rem;
+    border-bottom: 1px solid rgb(250 248 242 / 0.1);
+    color: var(--color-ivory);
+    text-decoration: none;
+  }
+  .mobile-menu li:last-child a {
+    border-bottom: 0;
+  }
+  .mobile-menu .num {
+    width: 1.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--color-sand);
+    opacity: 0.8;
+  }
+  .mobile-menu .label {
+    flex: 1;
+    font: 400 1.25rem/1.4 var(--font-serif);
+  }
+  .mobile-menu .go {
+    opacity: 0.5;
+    transition:
+      transform var(--dur-normal) var(--ease-soft),
+      opacity var(--dur-normal) ease;
+  }
+  .mobile-menu li a:hover .go,
+  .mobile-menu li a:focus-visible .go {
+    opacity: 1;
+    transform: translate(3px, -2px);
+  }
+  .mobile-menu__extra {
+    display: grid;
+    gap: 0.9rem;
+    padding-top: 0.75rem;
+  }
+  .mobile-menu .hours {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: rgb(250 248 242 / 0.7);
+  }
+  .mobile-menu .hours :global(.icon) {
+    margin-top: 2px;
+  }
+  .mobile-menu__foot {
+    flex: none;
+    padding: 0.85rem 1.25rem calc(env(safe-area-inset-bottom, 0px) + 0.85rem);
+    border-top: 1px solid rgb(250 248 242 / 0.12);
+    background: rgb(10 48 44 / 0.96);
+  }
+
+  @media (min-width: 1100px) {
+    .mobile-menu {
+      display: none;
+    }
+  }
+</style>

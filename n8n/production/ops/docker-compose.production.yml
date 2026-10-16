@@ -1,0 +1,128 @@
+# FlowHQ production stack: Caddy (HTTPS) -> n8n and Grist. Run from n8n/production/:  docker compose -f ops/docker-compose.production.yml --env-file .env up -d
+# Only Caddy is published. n8n and Grist sit on a private network. Only /webhook/* of n8n is reachable from the internet.
+# Tested: the workflow against n8n 2.43.5 (see TEST_REPORT.md). NOT tested: this compose file against real Docker images (no Docker daemon in the build sandbox);
+# `docker compose config` was run on it (syntax, interpolation).
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      N8N_DOMAIN: ${N8N_DOMAIN:?set N8N_DOMAIN}
+      N8N_ADMIN_DOMAIN: ${N8N_ADMIN_DOMAIN:?set N8N_ADMIN_DOMAIN}
+      ADMIN_ALLOW_CIDR: ${ADMIN_ALLOW_CIDR:?set ADMIN_ALLOW_CIDR}
+      GRIST_DOMAIN: ${GRIST_DOMAIN:?set GRIST_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./ops/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - ./data/caddy_data:/data
+      - ./data/caddy_config:/config
+    networks: [edge, internal]
+    depends_on:
+      n8n: { condition: service_healthy }
+      grist: { condition: service_healthy }
+    logging: *logging
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:?pin N8N_VERSION, tested with 2.43.5}
+    restart: unless-stopped
+    networks: [internal]
+    mem_limit: ${N8N_MEM_LIMIT:-1536m}
+    environment:
+      N8N_HOST: ${N8N_DOMAIN}
+      N8N_PROTOCOL: https
+      N8N_PORT: "5678"
+      WEBHOOK_URL: https://${N8N_DOMAIN}/
+      N8N_PROXY_HOPS: "1"
+      N8N_SECURE_COOKIE: "true"
+      N8N_ENCRYPTION_KEY_FILE: /run/secrets/n8n_encryption_key
+      GENERIC_TIMEZONE: ${TZ:-Asia/Kolkata}
+      TZ: ${TZ:-Asia/Kolkata}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_PAYLOAD_SIZE_MAX: "4"
+      N8N_LOG_LEVEL: info
+      # the workflow reads its settings with $env.FLOWHQ_*; n8n blocks that by default
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODES_EXCLUDE: '["n8n-nodes-base.executeCommand","n8n-nodes-base.localFileTrigger","n8n-nodes-base.readWriteFile"]'
+      # executions hold patient phone numbers and message text: keep failures only, 7 days, at most 5000
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: "5000"
+      # exactly the settings the workflow reads (nothing else from .env reaches the container)
+      FLOWHQ_GRIST_URL: ${FLOWHQ_GRIST_URL:-http://grist:8484}
+      FLOWHQ_REGISTRY_DOC_ID: ${FLOWHQ_REGISTRY_DOC_ID:?set FLOWHQ_REGISTRY_DOC_ID}
+      FLOWHQ_DEFAULT_COUNTRY_CODE: ${FLOWHQ_DEFAULT_COUNTRY_CODE:-91}
+      FLOWHQ_WA_SEND_MODE: ${FLOWHQ_WA_SEND_MODE:-allowlist}
+      FLOWHQ_WA_ALLOWLIST: ${FLOWHQ_WA_ALLOWLIST:-}
+      FLOWHQ_WA_GRAPH_VERSION: ${FLOWHQ_WA_GRAPH_VERSION:-v23.0}
+      FLOWHQ_WA_TEMPLATE_LANGUAGE: ${FLOWHQ_WA_TEMPLATE_LANGUAGE:-en}
+      FLOWHQ_WA_ALLOW_HELLO_WORLD: ${FLOWHQ_WA_ALLOW_HELLO_WORLD:-false}
+      FLOWHQ_META_APP_SECRET: ${FLOWHQ_META_APP_SECRET:?set FLOWHQ_META_APP_SECRET}
+      FLOWHQ_META_VERIFY_TOKEN: ${FLOWHQ_META_VERIFY_TOKEN:?set FLOWHQ_META_VERIFY_TOKEN}
+      FLOWHQ_W2_IMPLIED_CONSENT: ${FLOWHQ_W2_IMPLIED_CONSENT:-true}
+      FLOWHQ_W1_REQUIRE_CONSENT: ${FLOWHQ_W1_REQUIRE_CONSENT:-true}
+      FLOWHQ_CAL_WEBHOOK_SECRET: ${FLOWHQ_CAL_WEBHOOK_SECRET:?set FLOWHQ_CAL_WEBHOOK_SECRET}
+      FLOWHQ_CAL_MAX_AGE_HOURS: ${FLOWHQ_CAL_MAX_AGE_HOURS:-24}
+      FLOWHQ_TELEGRAM_CHAT_ID: ${FLOWHQ_TELEGRAM_CHAT_ID:-}
+      FLOWHQ_TEST_PHONE: ${FLOWHQ_TEST_PHONE:-}
+      FLOWHQ_ALERT_EMAIL_TO: ${FLOWHQ_ALERT_EMAIL_TO:-}
+      FLOWHQ_EMAIL_FROM: ${FLOWHQ_EMAIL_FROM:-}
+      FLOWHQ_EMAIL_PATIENT_ACK: ${FLOWHQ_EMAIL_PATIENT_ACK:-false}
+      FLOWHQ_AI_EXTERNAL_ENABLED: ${FLOWHQ_AI_EXTERNAL_ENABLED:-false}
+      FLOWHQ_AI_MODEL: ${FLOWHQ_AI_MODEL:-openai/gpt-4o-mini}
+      FLOWHQ_AI_MAX_REPLIES_PER_HOUR: ${FLOWHQ_AI_MAX_REPLIES_PER_HOUR:-6}
+    secrets: [n8n_encryption_key]
+    volumes:
+      - ./data/n8n:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5678/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging: *logging
+
+  grist:
+    image: gristlabs/grist:${GRIST_VERSION:?pin GRIST_VERSION}
+    restart: unless-stopped
+    networks: [internal]
+    mem_limit: ${GRIST_MEM_LIMIT:-1024m}
+    environment:
+      APP_HOME_URL: https://${GRIST_DOMAIN}
+      GRIST_SESSION_SECRET: ${GRIST_SESSION_SECRET:?set GRIST_SESSION_SECRET}
+      GRIST_DEFAULT_EMAIL: ${GRIST_ADMIN_EMAIL:?set GRIST_ADMIN_EMAIL}
+      GRIST_SINGLE_ORG: ${GRIST_TEAM_NAME:-agency}
+      GRIST_FORCE_LOGIN: "true"
+      GRIST_SANDBOX_FLAVOR: ${GRIST_SANDBOX_FLAVOR:-gvisor}
+      GRIST_OIDC_IDP_ISSUER: https://accounts.google.com
+      GRIST_OIDC_IDP_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID}
+      GRIST_OIDC_IDP_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?set GOOGLE_CLIENT_SECRET}
+      GRIST_OIDC_IDP_SCOPES: openid email profile
+    volumes:
+      - ./data/grist:/persist
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8484/status',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging: *logging
+
+networks:
+  edge: {}
+  internal:
+    internal: false   # n8n must reach Meta, the AI provider and the SMTP server; nothing but Caddy publishes a port
+
+secrets:
+  n8n_encryption_key:
+    file: ./secrets/n8n_encryption_key

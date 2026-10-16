@@ -1,0 +1,175 @@
+---
+import Depth from './Depth.astro';
+import DarkFx from './DarkFx.astro';
+import Icon from './Icon.astro';
+import { principles } from '../data/site';
+---
+
+<section id="why" class="section curve surface-pine on-dark" data-section data-ambient aria-labelledby="why-title">
+  <Depth tone="dark" sweep drift={false} />
+  <DarkFx />
+
+  <div class="container-site relative">
+    <header class="head reveal">
+      <div class="head__title">
+        <p class="eyebrow">03 / Why this approach</p>
+        <h2 id="why-title" class="h2">We listen before we treat.</h2>
+      </div>
+      <a class="link-arrow head__link" href="#doctors">
+        Meet the clinic leads
+        <Icon name="arrow-right" size={18} />
+      </a>
+    </header>
+
+    <ol class="items">
+      {
+        principles.map((p, i) => (
+          <li class="item reveal" data-reveal="group" style={`--i:${i}`}>
+            <span class="item__ghost" aria-hidden="true">{p.n}</span>
+            <span class="item__n">{p.n}</span>
+            <h3 class="item__title">{p.title}</h3>
+            <p class="item__body">{p.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .relative {
+    position: relative;
+  }
+  .head {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: clamp(28px, 4vw, 48px);
+  }
+  .head__title {
+    display: grid;
+    gap: 0.8rem;
+    max-width: 36rem;
+  }
+
+  .items {
+    display: grid;
+    gap: 0 28px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* Blocks activate one after another: the rule draws, the numeral surfaces, then the text arrives */
+  .item {
+    --d: calc(var(--i, 0) * 80ms);
+    position: relative;
+    overflow: hidden;
+    padding: 1.1rem 0 1.4rem;
+  }
+  .item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: rgb(250 248 242 / 0.18);
+    transform-origin: left;
+    transition: transform 800ms var(--ease-inout);
+    transition-delay: var(--d);
+  }
+  .item__ghost,
+  .item__n,
+  .item__title,
+  .item__body {
+    transition:
+      opacity 650ms ease-out,
+      transform 650ms ease-out;
+  }
+  .item__ghost {
+    transition-delay: calc(var(--d) + 150ms);
+  }
+  .item__n {
+    transition-delay: calc(var(--d) + 220ms);
+  }
+  .item__title {
+    transition-delay: calc(var(--d) + 300ms);
+  }
+  .item__body {
+    transition-delay: calc(var(--d) + 380ms);
+  }
+  :global(.js) .item:not(.in-view)::before {
+    transform: scaleX(0);
+  }
+  :global(.js) .item:not(.in-view) .item__ghost {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  :global(.js) .item:not(.in-view) .item__n,
+  :global(.js) .item:not(.in-view) .item__title,
+  :global(.js) .item:not(.in-view) .item__body {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  @media (max-width: 599px) {
+    .item {
+      --d: 0ms; /* stacked blocks enter one by one as you scroll, so no extra wait */
+    }
+  }
+  /* Oversized background numerals — subtle, never competing with the text */
+  .item__ghost {
+    position: absolute;
+    right: -0.15rem;
+    top: 0.1rem;
+    font: 400 5.5rem/1 var(--font-serif);
+    color: rgb(250 248 242 / 0.06);
+    pointer-events: none;
+    user-select: none;
+  }
+  .item__n {
+    position: relative;
+    font: 400 1.25rem/1 var(--font-serif);
+    color: var(--color-sand);
+  }
+  .item__title {
+    position: relative;
+    margin-top: 0.85rem;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-ivory);
+  }
+  .item__body {
+    position: relative;
+    margin-top: 0.5rem;
+    max-width: 17rem;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: rgb(250 248 242 / 0.74);
+  }
+
+  @media (min-width: 600px) {
+    .items {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1024px) {
+    .head {
+      grid-template-columns: 1fr auto;
+      align-items: end;
+    }
+    .items {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0 32px;
+    }
+    .item {
+      padding-bottom: 0.4rem;
+    }
+  }
+</style>

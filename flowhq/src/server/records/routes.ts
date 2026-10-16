@@ -1,0 +1,84 @@
+// Clinic records API (mounted under /api/w/:ws). Auth, CSRF and workspace access are applied by the parent app before these run.
+import { Hono, type Context } from 'hono';
+import { z } from 'zod';
+import { PAYMENT_METHODS, PATIENT_STATUSES, SEXES, VISIT_STATUSES, type InvoiceInput } from '../../core/clinical';
+import type { Ctx, WorkspaceBackend } from '../adapters/types';
+import { bad } from './ids';
+import type { Actor, RecordsService } from './service';
+
+type E = { Variables: { backend: WorkspaceBackend; ctx: Ctx } };
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const nullDate = date.nullable().or(z.literal(''));
+const patientFields = z.object({
+  name: z.string().max(120), phone: z.string().max(30), address: z.string().max(400), age: z.string().max(20), sex: z.enum([...SEXES, '']), referredBy: z.string().max(120), occupation: z.string().max(120),
+  mainComplaint: z.string().max(500), notes: z.string().max(2000), status: z.enum(PATIENT_STATUSES), registeredOn: nullDate, followUpOn: nullDate, sourceLeadId: z.string().max(40),
+}).partial();
+const text = (n: number) => z.string().max(n);
+const rxBody = z.object({ rxId: z.string().max(20).optional(), baseVersion: z.number().int().optional(), patientId: z.string().min(1).max(40), rxDate: nullDate, treatingPhysio: text(120), bp: text(40), vitals: text(300),
+  history: text(4000), examination: text(4000), diagnosis: text(2000), treatmentPlan: text(4000), exercises: text(4000), advice: text(4000), followUpOn: nullDate });
+const paise = z.number().int().min(0).max(99_99_99_999_99);
+const paymentBody = z.object({ amountPaise: paise, method: z.enum(PAYMENT_METHODS), reference: text(120), paidOn: date });
+const invoiceBody = z.object({ patientId: z.string().min(1).max(40), date, lines: z.array(z.object({ description: text(200), qty: z.number().int(), unitPaise: paise })).max(30), discountPaise: paise, applyTax: z.boolean(), notes: text(1000),
+  idemKey: z.string().min(8).max(64), payment: paymentBody.optional() });
+
+export function recordsRoutes() {
+  const r = new Hono<E>();
+  const svc = (c: Context<E>): RecordsService => { const s = c.get('backend').records?.(); if (!s) throw bad('records_unavailable', 'Clinic records are not set up for this workspace yet', 404); return s; };
+  const who = (c: Context<E>): Actor => { const v = c.get('ctx').viewer; return { email: v.email, name: v.name, role: v.role }; };
+  const found = <T,>(x: T | null) => { if (x === null) throw bad('not_found', 'Not found', 404); return x; };
+  const clean = <T extends Record<string, unknown>>(o: T) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v === '' && /On$/.test(k) ? null : v])) as T;
+
+  r.get('/clinic', (c) => c.json(svc(c).clinic()));
+  r.get('/clinic-summary', async (c) => c.json(await svc(c).doctorSummary(Number(c.req.query('days') || 7))));
+
+  r.get('/patients', async (c) => c.json(await svc(c).listPatients({ q: c.req.query('q'), status: c.req.query('status') || undefined, followUp: c.req.query('followUp') === '1', owing: c.req.query('owing') === '1',
+    sort: c.req.query('sort'), dir: c.req.query('dir') === 'desc' ? 'desc' : 'asc', page: Number(c.req.query('page') || 1), pageSize: Number(c.req.query('pageSize') || 50), week: c.req.query('week') })));
+  r.get('/patients/check', async (c) => c.json({ matches: await svc(c).findDuplicates(c.req.query('name') || '', c.req.query('phone') || '', c.req.query('except') || undefined) }));
+  r.post('/patients', async (c) => {
+    const b = patientFields.extend({ name: z.string().min(1).max(120), confirmDuplicate: z.boolean().optional() }).parse(await c.req.json());
+    const { confirmDuplicate, ...f } = b;
+    return c.json(await svc(c).createPatient(clean(f) as never, who(c), confirmDuplicate), 201);
+  });
+  r.get('/patients/:id', async (c) => c.json(found(await svc(c).profile(c.req.param('id')))));
+  r.patch('/patients/:id', async (c) => {
+    const { confirmDuplicate, ...f } = patientFields.extend({ confirmDuplicate: z.boolean().optional() }).parse(await c.req.json());
+    return c.json(await svc(c).updatePatient(c.req.param('id'), clean(f) as never, who(c), confirmDuplicate));
+  });
+
+  r.get('/prescriptions', async (c) => c.json(await svc(c).listPrescriptions({ patientId: c.req.query('patient') || undefined, q: c.req.query('q') })));
+  r.post('/prescriptions', async (c) => c.json(await svc(c).savePrescription(clean(rxBody.parse(await c.req.json())) as never, who(c)), 201));
+  r.get('/prescriptions/:id', async (c) => c.json(found(await svc(c).getPrescription(c.req.param('id')))));
+  r.put('/prescriptions/:id', async (c) => c.json(await svc(c).savePrescription(clean({ ...rxBody.parse(await c.req.json()), rxId: c.req.param('id') }) as never, who(c))));
+  r.post('/prescriptions/:id/images', async (c) => {
+    const len = Number(c.req.header('content-length') || 0);
+    if (len > 6 * 1024 * 1024) throw bad('file_too_large', 'The photo is larger than 5 MB', 413);
+    let form: FormData;
+    try { form = await c.req.formData(); } catch { throw bad('invalid', 'Send the photo as a form upload'); }
+    const f = form.get('file');
+    if (!(f instanceof File)) throw bad('invalid', 'No photo was sent');
+    const caption = typeof form.get('caption') === 'string' ? (form.get('caption') as string) : '';
+    return c.json(await svc(c).addImage(c.req.param('id'), { bytes: new Uint8Array(await f.arrayBuffer()), name: f.name, caption }, who(c)), 201);
+  });
+  r.delete('/prescriptions/:id/images/:imageId', async (c) => { await svc(c).removeImage(c.req.param('id'), c.req.param('imageId'), who(c)); return c.json({ ok: true }); });
+  r.get('/prescriptions/:id/images/:imageId', async (c) => {      // patient photos are only ever served here, to a signed-in user with access to this workspace
+    const img = found(await svc(c).readImage(c.req.param('id'), c.req.param('imageId')));
+    return c.body(img.bytes as unknown as ArrayBuffer, 200, { 'Content-Type': img.mime, 'Cache-Control': 'private, no-store', 'Content-Disposition': 'inline; filename="photo"' });
+  });
+
+  r.get('/invoices', async (c) => c.json(await svc(c).listInvoices({ patientId: c.req.query('patient') || undefined, status: c.req.query('status') || undefined, q: c.req.query('q') })));
+  r.post('/invoices', async (c) => {
+    const out = await svc(c).createInvoice(invoiceBody.parse(await c.req.json()) as InvoiceInput, who(c));
+    return c.json(out, out.duplicate ? 200 : 201);
+  });
+  r.get('/invoices/:no', async (c) => c.json(found(await svc(c).getInvoice(c.req.param('no')))));
+  r.post('/invoices/:no/payments', async (c) => c.json(await svc(c).addPayment(c.req.param('no'), paymentBody.extend({ idemKey: z.string().min(8).max(64) }).parse(await c.req.json()), who(c)), 201));
+  r.post('/invoices/:no/void', async (c) => c.json(await svc(c).voidInvoice(c.req.param('no'), z.object({ reason: z.string().max(300) }).parse(await c.req.json()).reason, who(c))));
+  r.post('/payments/:id/void', async (c) => c.json(await svc(c).voidPayment(c.req.param('id'), z.object({ reason: z.string().max(300) }).parse(await c.req.json()).reason, who(c))));
+
+  r.get('/visits', async (c) => c.json(await svc(c).visitsWeek(c.req.query('week') || '')));
+  r.put('/visits', async (c) => {
+    const b = z.object({ patientId: z.string().min(1).max(40), date, status: z.enum(VISIT_STATUSES).nullable(), notes: text(500).optional() }).parse(await c.req.json());
+    return c.json({ visit: await svc(c).setVisit(b, who(c)) });
+  });
+  return r;
+}

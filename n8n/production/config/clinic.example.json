@@ -1,0 +1,28 @@
+{
+  "note": "FICTIONAL example of what one clinic needs. Nothing here is real. Registry row = Agency Registry document, table Clinics. Settings = the clinic's own Grist document, table Settings (Key / Value). Phone numbers are E.164.",
+  "agency_registry_clinics_row": {
+    "Clinic_Slug": "demo-physio",
+    "Clinic_Name": "Demo Physio",
+    "Grist_Doc_ID": "<the clinic's Grist document id>",
+    "WA_Phone_Number_ID": "<Meta phone-number id of THIS clinic's WhatsApp number, digits only>",
+    "Active": true
+  },
+  "clinic_settings": {
+    "clinic_name": "Demo Physio",
+    "owner_phone": "+919000000018",
+    "TEST_MODE": "true",
+    "TEST_PHONE": "+919000000019",
+    "open_time": "09:00",
+    "close_time": "19:00",
+    "working_days": "Mon-Sat",
+    "booking_link": "https://cal.com/demo-physio/assessment",
+    "review_link": "https://g.page/r/demo-physio/review",
+    "ai_mode": "off",
+    "outcome_checkin": "off",
+    "review_requests": "off",
+    "weekly_report_whatsapp": "off"
+  },
+  "go_live_changes": { "TEST_MODE": "false  (only after the checklist in DEPLOYMENT.md; a missing row counts as ON)", "ai_mode": "stays off unless FLOWHQ_AI_EXTERNAL_ENABLED=true AND the clinic approved the provider (PRIVACY.md)" },
+  "website_form_fields": { "clinic_slug": "demo-physio", "name": "required", "phone": "required (E.164 or a local number)", "email": "optional", "enquiry": "text", "consent_whatsapp": "required checkbox: true / \"on\"", "consent_email": "optional checkbox", "consent_version": "label of the consent text shown", "website": "hidden honeypot, must stay empty", "header": "X-Lead-Secret: <FLOWHQ_W1_WEBHOOK_SECRET>" },
+  "cal_com_webhook": { "url": "https://<N8N_DOMAIN>/webhook/cal?clinic=demo-physio", "secret": "<FLOWHQ_CAL_WEBHOOK_SECRET>", "events": ["BOOKING_CREATED", "BOOKING_RESCHEDULED", "BOOKING_CANCELLED"], "required_event_question": "phone number (required)" }
+}

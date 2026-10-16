@@ -1,0 +1,49 @@
+# FlowHQ STAGING / local rehearsal: n8n + Grist + Mailpit on 127.0.0.1 only, WhatsApp in allowlist mode. Nothing is published to the network.
+# Run from n8n/production/:  docker compose -f ops/docker-compose.staging.yml --env-file .env.staging up -d
+# Mailpit (web UI http://127.0.0.1:8025) catches every e-mail the workflow sends: set FLOWHQ_SMTP_HOST=mailpit FLOWHQ_SMTP_PORT=1025 FLOWHQ_SMTP_SECURE=false.
+services:
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports: ["127.0.0.1:8025:8025", "127.0.0.1:1025:1025"]
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:?pin N8N_VERSION}
+    restart: unless-stopped
+    ports: ["127.0.0.1:5678:5678"]
+    environment:
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      N8N_SECURE_COOKIE: "false"
+      WEBHOOK_URL: http://localhost:5678/
+      N8N_ENCRYPTION_KEY_FILE: /run/secrets/n8n_encryption_key
+      GENERIC_TIMEZONE: Asia/Kolkata
+      TZ: Asia/Kolkata
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      FLOWHQ_GRIST_URL: http://grist:8484
+      FLOWHQ_REGISTRY_DOC_ID: ${FLOWHQ_REGISTRY_DOC_ID:?set FLOWHQ_REGISTRY_DOC_ID}
+      FLOWHQ_WA_SEND_MODE: allowlist
+      FLOWHQ_WA_ALLOWLIST: ${FLOWHQ_WA_ALLOWLIST:?set FLOWHQ_WA_ALLOWLIST}
+      FLOWHQ_WA_GRAPH_VERSION: ${FLOWHQ_WA_GRAPH_VERSION:-v23.0}
+      FLOWHQ_META_APP_SECRET: ${FLOWHQ_META_APP_SECRET:?set FLOWHQ_META_APP_SECRET}
+      FLOWHQ_META_VERIFY_TOKEN: ${FLOWHQ_META_VERIFY_TOKEN:?set FLOWHQ_META_VERIFY_TOKEN}
+      FLOWHQ_CAL_WEBHOOK_SECRET: ${FLOWHQ_CAL_WEBHOOK_SECRET:?set FLOWHQ_CAL_WEBHOOK_SECRET}
+      FLOWHQ_ALERT_EMAIL_TO: ${FLOWHQ_ALERT_EMAIL_TO:-staff@example.test}
+      FLOWHQ_EMAIL_FROM: ${FLOWHQ_EMAIL_FROM:-noreply@example.test}
+      FLOWHQ_AI_EXTERNAL_ENABLED: "false"
+    secrets: [n8n_encryption_key]
+    volumes: ["./data-staging/n8n:/home/node/.n8n"]
+    depends_on: [grist, mailpit]
+  grist:
+    image: gristlabs/grist:${GRIST_VERSION:?pin GRIST_VERSION}
+    restart: unless-stopped
+    ports: ["127.0.0.1:8484:8484"]
+    environment:
+      GRIST_SANDBOX_FLAVOR: unsandboxed
+      GRIST_FORCE_LOGIN: "false"
+      GRIST_SESSION_SECRET: staging-only-not-a-secret
+    volumes: ["./data-staging/grist:/persist"]
+secrets:
+  n8n_encryption_key:
+    file: ./secrets/n8n_encryption_key.staging

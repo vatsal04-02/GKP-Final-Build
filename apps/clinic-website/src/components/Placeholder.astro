@@ -1,0 +1,82 @@
+---
+import Icon from './Icon.astro';
+import type { IconName } from '../data/icons';
+
+/**
+ * Quiet "photograph goes here" slot used wherever real clinic photography is still pending.
+ * One shared look keeps hero, doctors and gallery consistent; the visible TBD tag is the
+ * controlled internal marker (PRD §3) and disappears automatically once a photo is added.
+ */
+interface Props {
+  label: string;
+  icon?: IconName;
+  tone?: 'pine' | 'teal' | 'sand';
+  tag?: string;
+}
+
+const { label, icon = 'camera', tone = 'pine', tag = '[TBD - clinic to provide]' } = Astro.props;
+---
+
+<div class={`ph ph--${tone}`} data-placeholder>
+  <span class="ph__dots" aria-hidden="true"></span>
+  <span class="ph__icon" aria-hidden="true"><Icon name={icon} size={30} strokeWidth={1.25} /></span>
+  <p class="ph__label">{label}</p>
+  <span class="ph__tag">{tag}</span>
+</div>
+
+<style>
+  .ph {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 0.5rem;
+    padding: 1rem 1rem 3rem;
+    text-align: center;
+    color: var(--color-sand);
+    background: radial-gradient(120% 90% at 20% 0%, #14574f, var(--color-pine) 62%, #082e2a);
+  }
+  .ph--teal {
+    background: radial-gradient(120% 90% at 80% 0%, #0f766e, #0c4a45 60%, var(--color-pine));
+  }
+  .ph--sand {
+    color: var(--color-pine);
+    background: radial-gradient(120% 90% at 20% 0%, #f1e9d6, var(--color-sand) 60%, #ddd0b3);
+  }
+  .ph__dots {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, currentColor 1px, transparent 1.4px);
+    background-size: 22px 22px;
+    opacity: 0.14;
+    -webkit-mask-image: radial-gradient(ellipse at center, #000 20%, transparent 78%);
+    mask-image: radial-gradient(ellipse at center, #000 20%, transparent 78%);
+  }
+  .ph__icon {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    opacity: 0.7;
+  }
+  .ph__label {
+    position: relative;
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .ph__tag {
+    position: relative;
+    padding: 0.15rem 0.65rem;
+    border: 1px dashed currentColor;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    opacity: 0.7;
+  }
+</style>

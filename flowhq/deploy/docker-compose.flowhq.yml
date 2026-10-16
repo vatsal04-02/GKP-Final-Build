@@ -1,0 +1,28 @@
+# Adds FLOW HQ to the existing stack (Caddy -> n8n, Grist). Run from the repository root:
+#   docker compose -f docker-compose.yml -f flowhq/deploy/docker-compose.flowhq.yml up -d --build
+# FLOW HQ talks to Grist over the private Docker network; only Caddy is public. See flowhq/README.md (H).
+services:
+  flowhq:
+    build:
+      context: .
+      dockerfile: flowhq/Dockerfile
+    restart: unless-stopped
+    env_file: flowhq/.env
+    environment:
+      - GRIST_BASE_URL=http://grist:8484
+      - FLOWHQ_SECURE_COOKIES=true
+      - FLOWHQ_USERS_FILE=/app/flowhq/users.json
+      - FLOWHQ_CLINIC_FILE=/app/flowhq/clinic.json
+    volumes:
+      - flowhq_config:/app/flowhq/config                          # workspace profiles written by Settings
+      - ./flowhq/config/users.json:/app/flowhq/users.json:ro      # create it first (README H); never committed
+      - ./flowhq/config/clinic.json:/app/flowhq/clinic.json:ro    # clinic letterhead + invoice rules (README L); public details, no secrets
+    depends_on:
+      - grist
+
+  caddy:
+    environment:
+      - FLOWHQ_DOMAIN=${FLOWHQ_DOMAIN}
+
+volumes:
+  flowhq_config:

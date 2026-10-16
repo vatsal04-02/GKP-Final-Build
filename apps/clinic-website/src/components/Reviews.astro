@@ -1,0 +1,590 @@
+---
+import DarkFx from './DarkFx.astro';
+import Icon from './Icon.astro';
+import { clinic, links, reviews } from '../data/site';
+
+// Only clinic-approved reviews are ever shown. With none supplied we render one clearly
+// marked placeholder rather than inventing a quote (PRD §17).
+const count = reviews.length;
+const mode = count === 0 ? 'placeholder' : count === 1 ? 'featured' : 'cards';
+const visible = Math.min(Math.max(count, 1), 3);
+---
+
+<section id="reviews" class="section curve surface-pine on-dark" data-section data-ambient aria-labelledby="reviews-title">
+  <div class="bg" aria-hidden="true"><div class="dots"></div></div>
+  <DarkFx flip />
+
+  <div class="container-site relative seq reveal" data-reveal="group" data-reveal-on=".feature, .slider">
+    <div class="top">
+      <header class="top__copy">
+        <p class="eyebrow">07 / Patient experiences</p>
+        <h2 id="reviews-title" class="h2">In patients’ own words.</h2>
+      </header>
+
+      <div class="score">
+        <span class="score__num" data-live-rating>{clinic.rating.value}</span>
+        <div class="score__meta">
+          <span class="score__stars" aria-hidden="true">
+            {Array.from({ length: 5 }).map(() => <Icon name="star" size={16} class="star" />)}
+          </span>
+          <span class="score__count"><span data-live-count>{clinic.rating.count}</span> Google reviews</span>
+          <span class="sr-only" data-live-text="Rated {rating} out of 5 stars">Rated {clinic.rating.value} out of 5 stars</span>
+        </div>
+      </div>
+    </div>
+
+    {
+      mode !== 'cards' && (
+        <div class="feature glass-dark">
+          <span class="feature__mark" aria-hidden="true">“</span>
+          <figure class="quote">
+            <blockquote>
+              {mode === 'placeholder' ? (
+                <p class="quote__text quote__text--ph" data-placeholder>[PATIENT STORY PLACEHOLDER — CLINIC CONTENT REQUIRED]</p>
+              ) : (
+                <p class="quote__text">{reviews[0].quote}</p>
+              )}
+            </blockquote>
+            <figcaption class="quote__cite">
+              {mode === 'placeholder' ? (
+                <span class="tbd">[TBD - approved patient label]</span>
+              ) : (
+                <>
+                  <strong>{reviews[0].author}</strong>
+                  {reviews[0].source && <span> · {reviews[0].source}</span>}
+                </>
+              )}
+            </figcaption>
+          </figure>
+          <a class="link-arrow feature__link" href={links.reviews} target="_blank" rel="noopener noreferrer" data-reviews-link data-track="review_interaction" data-location="reviews-link">
+            Read all reviews on Google
+            <Icon name="arrow-right" size={18} />
+          </a>
+        </div>
+      )
+    }
+
+    {
+      mode === 'cards' && (
+        <div class="slider" style={`--k:${visible}`} data-slider role="region" aria-roledescription="carousel" aria-label="Patient reviews" aria-live="off">
+          <div class="slider__track" data-slider-track tabindex="0">
+            {reviews.map((r, i) => (
+              <figure class="card glass-dark" role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${count}`} style={`--ci:${i}`}>
+                <span class="card__mark" aria-hidden="true">“</span>
+                <blockquote>
+                  <p class="card__text">{r.quote}</p>
+                  <button type="button" class="card__more" aria-expanded="false" hidden>Read more</button>
+                </blockquote>
+                <figcaption>
+                  <strong class="card__author">{r.author}</strong>
+                  {r.source && <span> · {r.source}</span>}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <div class="slider__foot">
+            <a class="link-arrow" href={links.reviews} target="_blank" rel="noopener noreferrer" data-reviews-link data-track="review_interaction" data-location="reviews-link">
+              Read all reviews on Google
+              <Icon name="arrow-right" size={18} />
+            </a>
+            <div class="slider__ctrl" hidden>
+              <button type="button" class="round" data-slider-prev aria-label="Previous review" data-track="review_interaction">
+                <Icon name="chevron-left" size={20} />
+              </button>
+              <div class="slider__dots" data-slider-dots></div>
+              <button type="button" class="round" data-slider-next aria-label="Next review" data-track="review_interaction">
+                <Icon name="chevron-right" size={20} />
+              </button>
+              <button type="button" class="round round--pause" data-slider-pause aria-pressed="false" aria-label="Pause automatic slides">
+                <Icon name="pause" size={18} class="i-pause" />
+                <Icon name="play" size={18} class="i-play" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Cloned by src/scripts/google-reviews.ts when live Google reviews arrive (scoped styles travel with the template) -->
+          <template data-review-card>
+            <figure class="card glass-dark" role="group" aria-roledescription="slide">
+              <span class="card__mark" aria-hidden="true">“</span>
+              <blockquote>
+                <p class="card__text" data-text></p>
+                <button type="button" class="card__more" aria-expanded="false" hidden>Read more</button>
+              </blockquote>
+              <figcaption>
+                <strong class="card__author" data-author></strong>
+                <span class="card__meta" data-meta hidden></span>
+              </figcaption>
+            </figure>
+          </template>
+          <template data-review-skeleton>
+            <figure class="card card--skeleton glass-dark" aria-hidden="true">
+              <span class="sk sk--mark"></span>
+              <span class="sk"></span>
+              <span class="sk"></span>
+              <span class="sk sk--short"></span>
+              <span class="sk sk--name"></span>
+            </figure>
+          </template>
+        </div>
+      )
+    }
+  </div>
+</section>
+
+<style>
+  .bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .relative {
+    position: relative;
+  }
+  .top {
+    display: grid;
+    gap: 20px;
+    margin-bottom: clamp(24px, 3.5vw, 36px);
+  }
+  .top__copy {
+    display: grid;
+    gap: 0.8rem;
+  }
+  .score {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .score__num {
+    font: 400 clamp(3.5rem, 2.8rem + 3vw, 5rem) / 0.9 var(--font-serif);
+    letter-spacing: -0.03em;
+    color: var(--color-ivory);
+  }
+  .score__meta {
+    display: grid;
+    gap: 0.3rem;
+  }
+  .score__stars {
+    display: inline-flex;
+    gap: 3px;
+    color: var(--color-sand);
+  }
+  .score__stars :global(.star) {
+    fill: currentColor;
+    stroke-width: 1.5;
+  }
+  .score__count {
+    font-size: 1rem;
+    font-weight: 700;
+    color: rgb(250 248 242 / 0.9);
+  }
+
+  /* Featured single review / placeholder */
+  .feature {
+    position: relative;
+    display: grid;
+    gap: 1.25rem;
+    padding: 1.5rem 1.35rem 1.3rem;
+    border-radius: 24px;
+    overflow: hidden;
+  }
+  .feature__mark,
+  .card__mark {
+    position: absolute;
+    font: 400 8rem/1 var(--font-serif);
+    color: var(--color-sand);
+    opacity: 0.12;
+    pointer-events: none;
+    user-select: none;
+  }
+  .feature__mark {
+    top: -0.05em;
+    left: 0.15em;
+  }
+  .quote {
+    position: relative;
+    margin: 0;
+    display: grid;
+    gap: 1rem;
+    padding-top: 1.6rem;
+  }
+  .quote blockquote {
+    margin: 0;
+  }
+  .quote__text {
+    font: 400 clamp(1.25rem, 1.05rem + 1vw, 1.75rem) / 1.35 var(--font-serif);
+    color: var(--color-ivory);
+  }
+  .quote__text--ph {
+    display: inline-block;
+    padding: 0.85rem 1.1rem;
+    border: 1px dashed rgb(233 223 201 / 0.5);
+    border-radius: 14px;
+    font: 700 0.875rem/1.5 var(--font-sans);
+    letter-spacing: 0.04em;
+    color: var(--color-sand);
+  }
+  .quote__cite {
+    font-size: 0.9375rem;
+    color: rgb(250 248 242 / 0.74);
+  }
+  .quote__cite strong {
+    color: var(--color-ivory);
+  }
+  .feature__link {
+    position: relative;
+    justify-self: start;
+    padding-top: 1rem;
+    border-top: 1px solid rgb(250 248 242 / 0.14);
+    width: 100%;
+  }
+
+  /* ---- Sequence (once): quote mark → review text → rating and stars last ---- */
+  .top__copy,
+  .feature,
+  .slider,
+  .quote blockquote,
+  .quote__cite,
+  .feature__link,
+  .card blockquote,
+  .card figcaption,
+  .score__num,
+  .score__count,
+  .score__stars :global(.star) {
+    transition:
+      opacity 700ms ease-out,
+      transform 700ms ease-out;
+  }
+  .feature__mark,
+  .card__mark {
+    transform-origin: 20% 70%;
+    transition:
+      opacity 900ms ease-out,
+      transform 1100ms var(--ease-soft);
+    transition-delay: calc(300ms + var(--ci, 0) * 80ms);
+  }
+  .feature,
+  .slider {
+    transition-delay: 120ms;
+  }
+  .quote blockquote,
+  .card blockquote {
+    transition-delay: calc(460ms + var(--ci, 0) * 80ms);
+  }
+  .quote__cite,
+  .card figcaption {
+    transition-delay: calc(580ms + var(--ci, 0) * 80ms);
+  }
+  .feature__link {
+    transition-delay: 640ms;
+  }
+  .score__num {
+    transition-delay: 800ms;
+  }
+  .score__stars :global(.star) {
+    transition-delay: calc(880ms + var(--k, 0) * 70ms);
+  }
+  .score__stars :global(.star:nth-child(2)) {
+    --k: 1;
+  }
+  .score__stars :global(.star:nth-child(3)) {
+    --k: 2;
+  }
+  .score__stars :global(.star:nth-child(4)) {
+    --k: 3;
+  }
+  .score__stars :global(.star:nth-child(5)) {
+    --k: 4;
+  }
+  .score__count {
+    transition-delay: 1040ms;
+  }
+
+  :global(.js) .seq:not(.in-view) .top__copy {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  :global(.js) .seq:not(.in-view) .feature,
+  :global(.js) .seq:not(.in-view) .slider {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0);
+  }
+  :global(.js) .seq:not(.in-view) .feature__mark,
+  :global(.js) .seq:not(.in-view) .card__mark {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  :global(.js) .seq:not(.in-view) .quote blockquote,
+  :global(.js) .seq:not(.in-view) .quote__cite,
+  :global(.js) .seq:not(.in-view) .feature__link,
+  :global(.js) .seq:not(.in-view) .card blockquote,
+  :global(.js) .seq:not(.in-view) .card figcaption {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  :global(.js) .seq:not(.in-view) .score__num,
+  :global(.js) .seq:not(.in-view) .score__count {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  :global(.js) .seq:not(.in-view) .score__stars :global(.star) {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  /* 2+ approved reviews: cards (3-up desktop, swipeable on mobile) */
+  .slider__track {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    padding-bottom: 4px;
+  }
+  .slider__track::-webkit-scrollbar {
+    display: none;
+  }
+  .card {
+    position: relative;
+    flex: 0 0 100%; /* one review at a time on phones */
+    margin: 0;
+    display: grid;
+    align-content: start;
+    gap: 0.9rem;
+    padding: 1.5rem 1.3rem 1.3rem;
+    border-radius: 20px;
+    scroll-snap-align: start;
+    overflow: hidden;
+    transition: transform var(--dur-normal) var(--ease-soft), border-color var(--dur-normal) ease, box-shadow var(--dur-normal) ease;
+  }
+  @media (hover: hover) {
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: rgb(233 223 201 / 0.45);
+      box-shadow: 0 16px 30px -18px rgb(0 0 0 / 0.55);
+    }
+  }
+  .card__mark {
+    top: -0.1em;
+    right: 0.2em;
+    font-size: 6rem;
+  }
+  .card blockquote {
+    position: relative;
+    margin: 0;
+  }
+  .card p {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: rgb(250 248 242 / 0.9);
+  }
+  .card figcaption {
+    font-size: 0.875rem;
+    color: rgb(250 248 242 / 0.7);
+  }
+  .card strong {
+    color: var(--color-ivory);
+  }
+  /* Review text: three lines, then "Read more" (only offered when the text is actually cut off) */
+  :global(.js) .card__text {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  :global(.js) .card.is-open .card__text {
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+  .card__more {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin: 0.2rem 0 0;
+    padding: 0 0.25rem 0 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--color-sand);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .card__more[hidden] {
+    display: none;
+  }
+  .card figcaption {
+    display: grid;
+    gap: 0.2rem;
+  }
+  /* Elements below are created by google-reviews.ts at runtime, so they carry no scoping attribute */
+  .card__author :global(a) {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid rgb(250 248 242 / 0.3);
+  }
+  .card__author :global(a:hover) {
+    border-bottom-color: currentColor;
+  }
+  .card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.6rem;
+    font-size: 0.8125rem;
+    color: rgb(250 248 242 / 0.66);
+  }
+  .card__meta[hidden] {
+    display: none;
+  }
+  .card__meta :global(.card__stars) {
+    letter-spacing: 0.08em;
+    font-size: 0.95rem;
+    color: var(--color-sand);
+  }
+  .card__meta :global(.card__stars .off) {
+    opacity: 0.28;
+  }
+
+  /* Loading skeletons: same footprint as a card, with a soft light sweeping across */
+  .card--skeleton {
+    gap: 0.8rem;
+    min-height: 210px;
+    align-content: start;
+  }
+  .sk {
+    position: relative;
+    display: block;
+    height: 0.85rem;
+    overflow: hidden;
+    border-radius: 6px;
+    background: rgb(250 248 242 / 0.12);
+  }
+  .sk::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translate3d(-100%, 0, 0);
+    background: linear-gradient(90deg, transparent, rgb(250 248 242 / 0.2), transparent);
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  .sk--mark {
+    width: 2.2rem;
+    height: 1.6rem;
+    margin-bottom: 0.3rem;
+  }
+  .sk--short {
+    width: 62%;
+  }
+  .sk--name {
+    width: 38%;
+    margin-top: 0.6rem;
+  }
+  @keyframes shimmer {
+    to {
+      transform: translate3d(100%, 0, 0);
+    }
+  }
+
+  .slider__foot {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+  .slider__ctrl {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .slider__ctrl[hidden] {
+    display: none;
+  }
+  .slider__dots {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  /* 24px tap target, 8px visible dot that stretches into a pill when active */
+  .slider__dots :global(.dot) {
+    position: relative;
+    width: 28px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+  .slider__dots :global(.dot)::after {
+    content: '';
+    position: absolute;
+    inset: 18px 10px;
+    border-radius: 999px;
+    background: rgb(250 248 242 / 0.35);
+    transition: background-color var(--dur-normal) ease, inset var(--dur-normal) var(--ease-soft);
+  }
+  .slider__dots :global(.dot[aria-current='true'])::after {
+    inset: 18px 4px;
+    background: var(--color-sand);
+  }
+  .round--pause :global(.i-play) {
+    display: none;
+  }
+  .round--pause[aria-pressed='true'] :global(.i-play) {
+    display: block;
+  }
+  .round--pause[aria-pressed='true'] :global(.i-pause) {
+    display: none;
+  }
+  .round {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgb(250 248 242 / 0.28);
+    background: rgb(250 248 242 / 0.06);
+    color: var(--color-ivory);
+    cursor: pointer;
+    transition:
+      transform var(--dur-fast) var(--ease-soft),
+      background-color var(--dur-normal) ease;
+  }
+  .round:hover {
+    background: rgb(250 248 242 / 0.16);
+  }
+  .round:active {
+    transform: scale(0.94);
+  }
+
+  @media (min-width: 640px) {
+    .slider__foot {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+  }
+  @media (min-width: 768px) {
+    .top {
+      grid-template-columns: 1fr auto;
+      align-items: end;
+    }
+    .feature {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 2rem;
+      padding: 2.25rem 2.25rem 2rem;
+    }
+    .feature__link {
+      width: auto;
+      padding: 0 0 0.2rem;
+      border-top: 0;
+    }
+    .card {
+      flex-basis: calc((100% - 14px * (var(--k) - 1)) / var(--k));
+    }
+  }
+</style>

@@ -1,0 +1,11 @@
+{
+  "workspaces": {
+    "your-clinic-slug": {
+      "industry": "physiotherapy",
+      "displayName": "Your Clinic",
+      "terminology": { "staff": { "singular": "Therapist", "plural": "Therapists" } },
+      "modules": { "disable": ["reviews"] }
+    },
+    "another-slug": { "industry": "salon" }
+  }
+}

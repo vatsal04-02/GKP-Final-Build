@@ -1,0 +1,101 @@
+/* Design tokens (CSS variables; Tailwind points at them). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Geeta Krishna Physiotherapy Centre theme. Token names are kept from the original design system so every component keeps working:
+   "blue" is the BRAND colour (now deep forest green: active states, links, focus) and "accent" is the orange reserved for primary
+   actions and highlights. Light is the default; dark stays available. Contrast checked against WCAG AA (see IMPLEMENTATION_PLAN.md). */
+:root, [data-theme='light'] {
+  --bg: 248 245 236;       /* #F8F5EC warm off-white */
+  --bg-2: 237 229 209;     /* #EDE5D1 soft cream (sidebar) */
+  --surface: 255 255 255;  /* #FFFFFF */
+  --surface-2: 250 247 240;
+  --field: 255 255 255;    /* inputs: white on the cream page */
+  --elevated: 255 255 255;
+  --line: 229 224 213;     /* #E5E0D5 */
+  --line-2: 211 203 186;
+  --fg: 38 52 49;          /* #263431 */
+  --fg-2: 95 106 101;      /* #5F6A65 (darker than #78817C so it passes AA on cream) */
+  --muted: 102 113 108;    /* #66716C */
+  --blue: 18 77 69;        /* #124D45 dark teal */
+  --blue-bright: 13 64 56; /* #0D4038 deep forest green */
+  --blue-soft: 13 64 56;
+  --accent: 244 81 11;     /* #F4510B orange: highlights */
+  --accent-strong: 201 63 8; /* #C93F08 orange for button fills (white text = 5.0:1) */
+  --sage: 220 233 226;     /* #DCE9E2 */
+  --ok: 22 133 74;
+  --warn: 180 105 6;
+  --bad: 200 38 38;
+  --shadow-card: 0 1px 2px rgb(13 64 56 / 0.05), 0 4px 14px -6px rgb(13 64 56 / 0.10);
+  --shadow-pop: 0 18px 48px -14px rgb(13 64 56 / 0.28), 0 0 0 1px rgb(var(--line));
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  --bg: 7 26 23;
+  --bg-2: 10 33 29;
+  --surface: 13 42 37;
+  --surface-2: 17 51 45;
+  --field: 10 33 29;
+  --elevated: 21 58 51;
+  --line: 32 72 64;
+  --line-2: 44 92 82;
+  --fg: 244 241 232;
+  --fg-2: 170 188 181;
+  --muted: 128 148 140;
+  --blue: 61 150 130;
+  --blue-bright: 98 186 164;
+  --blue-soft: 160 218 200;
+  --accent: 244 81 11;
+  --accent-strong: 201 63 8;
+  --sage: 32 72 64;
+  --ok: 52 190 112;
+  --warn: 245 158 11;
+  --bad: 240 90 90;
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.02) inset, 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(var(--line));
+  color-scheme: dark;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-bg text-fg antialiased; font-feature-settings: 'cv11', 'ss01', 'ss03'; }
+  h1, .font-display { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; }
+  ::selection { background: rgb(var(--blue) / 0.35); }
+  *:focus-visible { outline: 2px solid rgb(var(--blue-bright)); outline-offset: 2px; border-radius: 6px; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--line-2)); border-radius: 999px; border: 3px solid rgb(var(--bg)); }
+  ::-webkit-scrollbar-track { background: transparent; }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-line bg-surface shadow-card transition-colors duration-200; }
+  .card-hover { @apply hover:border-line-2 hover:bg-surface-2; }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .label { @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted; }
+  .glow-blue { box-shadow: 0 0 0 1px rgb(var(--blue) / 0.28), 0 6px 20px -8px rgb(var(--blue) / 0.35); }
+  .ai-tint { background: linear-gradient(180deg, rgb(var(--blue) / 0.10), rgb(var(--blue) / 0.04)); border-color: rgb(var(--blue) / 0.28); }
+  .skeleton { background: linear-gradient(90deg, rgb(var(--surface-2)) 0%, rgb(var(--elevated)) 40%, rgb(var(--surface-2)) 80%); background-size: 800px 100%; @apply animate-shimmer rounded-md; }
+  .btn-primary { background-color: rgb(var(--accent-strong)); }
+  .bg-grid { background-image: radial-gradient(rgb(var(--line)) 1px, transparent 1px); background-size: 22px 22px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---- Printing: A4 documents (prescription, invoice) and the register ---- */
+.paper { background: #fff; color: #111; }
+@media screen { .paper { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 14mm 15mm; box-shadow: var(--shadow-card); border: 1px solid rgb(var(--line)); } }
+@page { size: A4; margin: 10mm; }
+@media print {
+  html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .paper { width: auto; padding: 0; margin: 0; border: 0; box-shadow: none; }
+  .no-print { display: none !important; }
+  .keep { break-inside: avoid; page-break-inside: avoid; }
+  * { animation: none !important; transition: none !important; }
+}
+
+/* Dashboard motion: calm, transform/opacity only. The reduced-motion rule above switches all of it off. */
+@keyframes fhq-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fhq-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.fhq-rise { animation: fhq-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+.fhq-grow { transform-origin: bottom; animation: fhq-grow 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }

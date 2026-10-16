@@ -1,0 +1,11 @@
+# build context is the repository root
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+flowhq/dist
+flowhq/config
+flowhq/tests/e2e/screenshots
+flowhq/test-results
+**/*.PRIVATE.json
+.git

@@ -1,0 +1,581 @@
+---
+import Depth from './Depth.astro';
+import ClinicImage from './ClinicImage.astro';
+import Placeholder from './Placeholder.astro';
+import Icon from './Icon.astro';
+import { gallery, galleryPending } from '../data/site';
+import { getPhoto } from '../lib/photos';
+
+// Wide photographs go into the large viewer (in the order listed in site.ts); small or missing ones keep their
+// own row underneath at native size, so a low-resolution file is never stretched across the whole banner.
+const WIDE_PX = 1000;
+const isWide = (slot: string) => (getPhoto(slot)?.width ?? 0) >= WIDE_PX;
+const wide = gallery.filter((g) => isWide(g.slot));
+const small = gallery.filter((g) => !isWide(g.slot));
+
+// Each small photograph arrives from a slightly different direction, in reading order
+const from = [undefined, 'right', 'left'] as const;
+const pending = galleryPending.join(', ').replace(/, ([^,]*)$/, ' and $1');
+---
+
+<section id="clinic" class="section curve surface-sand" data-section data-ambient aria-labelledby="clinic-title">
+  <Depth tone="sand" glow drift={false} />
+
+  <div class="container-site relative">
+    <header class="head reveal">
+      <div class="head__title">
+        <p class="eyebrow">05 / Clinic experience</p>
+        <h2 id="clinic-title" class="h2">A closer look at the clinic.</h2>
+      </div>
+      <p class="lead head__lead">A look inside Geeta Krishna Physiotherapy in Viram Khand, Gomti Nagar.</p>
+    </header>
+
+    <!-- One wide banner: a swipeable viewer for the large photographs, then the smaller treatment photos -->
+    <div class="banner on-dark reveal" data-reveal="fade" data-gallery>
+      <span class="banner__dots" aria-hidden="true"></span>
+      <svg class="banner__arcs" viewBox="0 0 400 400" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
+          <circle cx="400" cy="400" r="170"></circle>
+          <circle cx="400" cy="400" r="260"></circle>
+          <circle cx="400" cy="400" r="350" stroke-dasharray="2 8"></circle>
+        </g>
+      </svg>
+
+      <div class="banner__top">
+        <div class="banner__copy">
+          <p class="banner__label">Inside the clinic</p>
+          <p class="banner__line">Where your <em>treatment</em> happens.</p>
+        </div>
+
+        {
+          wide.length > 1 && (
+            <div class="ctrl" data-gal-ctrl hidden>
+              <p class="ctrl__count" aria-live="polite" aria-atomic="true">
+                <span class="ctrl__now" data-gal-now>1</span>
+                <span aria-hidden="true"> / </span>
+                <span class="sr-only"> of </span>
+                {wide.length}
+              </p>
+              <button type="button" class="round" data-gal-prev aria-label="Previous photo" aria-controls="gallery-track">
+                <Icon name="chevron-left" size={20} />
+              </button>
+              <button type="button" class="round" data-gal-next aria-label="Next photo" aria-controls="gallery-track">
+                <Icon name="chevron-right" size={20} />
+              </button>
+            </div>
+          )
+        }
+      </div>
+
+      {
+        wide.length > 0 && (
+          <div class="viewer">
+            <div
+              class="viewer__track"
+              id="gallery-track"
+              data-gal-track
+              tabindex="0"
+              role="group"
+              aria-roledescription="carousel"
+              aria-label="Photographs of the clinic"
+            >
+              {wide.map((g, i) => (
+                <figure
+                  class:list={['slide', { 'is-active': i === 0 }]}
+                  role="group"
+                  aria-roledescription="slide"
+                  aria-label={`${i + 1} of ${wide.length}`}
+                  data-gal-slide
+                >
+                  <ClinicImage photo={g.slot} alt={g.alt} sizes="(min-width:1280px) 1100px, (min-width:640px) 90vw, 100vw" priority={false}>
+                    <Placeholder label="Photograph" icon="camera" tone="pine" tag="[TBD - clinic photo]" />
+                  </ClinicImage>
+                  <figcaption class="slide__cap glass">{g.label}</figcaption>
+                </figure>
+              ))}
+            </div>
+
+            {wide.length > 1 && (
+              <ul class="thumbs" data-gal-thumbs hidden>
+                {wide.map((g, i) => (
+                  <li>
+                    <button
+                      type="button"
+                      class="thumb"
+                      data-gal-thumb
+                      aria-label={`Show photo ${i + 1} of ${wide.length}: ${g.label}`}
+                      aria-current={i === 0 ? 'true' : undefined}
+                    >
+                      <ClinicImage photo={g.slot} alt="" sizes="150px" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      }
+
+      {
+        (small.length > 0 || galleryPending.length > 0) && (
+          <div class:list={['more', { 'more--lone': small.length === 0 }]}>
+            <div class="more__copy">
+              {small.length > 0 && <p class="banner__label">Treatment sessions</p>}
+              {
+                galleryPending.length > 0 && (
+                  <p class="banner__soon">
+                    <Icon name="camera" size={15} />
+                    <span>More clinic photos coming soon — {pending}.</span>
+                  </p>
+                )
+              }
+            </div>
+
+            {small.length > 0 && (
+              <ul class="reel">
+                {small.map((g, i) => (
+                  <li class="tile reveal reveal-scale" data-reveal={from[i]} style={`--i:${i}; --stagger:110ms`}>
+                    <figure>
+                      <div class="tile__media">
+                        <ClinicImage photo={g.slot} alt={g.alt} sizes="(min-width:1024px) 280px, (min-width:640px) 30vw, 260px">
+                          <Placeholder label="Photograph" icon="camera" tone="pine" tag="[TBD - clinic photo]" />
+                        </ClinicImage>
+                      </div>
+                      <figcaption class="tile__cap glass">{g.label}</figcaption>
+                    </figure>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .relative {
+    position: relative;
+  }
+  .head {
+    display: grid;
+    gap: 0.9rem;
+    margin-bottom: clamp(24px, 3.5vw, 40px);
+  }
+  .head__title {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  /* ---- Banner ---- */
+  .banner {
+    --pad: clamp(1.4rem, 1rem + 2.4vw, 2.6rem);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(1.1rem, 0.8rem + 1.2vw, 1.7rem);
+    padding: var(--pad);
+    overflow: hidden;
+    border-radius: 26px;
+    color: var(--color-ivory);
+    background:
+      radial-gradient(70% 90% at 100% 0%, rgb(45 156 146 / 0.3), transparent 62%),
+      radial-gradient(60% 80% at 0% 100%, rgb(233 223 201 / 0.06), transparent 60%),
+      linear-gradient(160deg, #14574f 0%, var(--color-pine) 55%, #082e2a 100%);
+    box-shadow: 0 34px 60px -38px rgb(12 59 54 / 0.7);
+    isolation: isolate;
+  }
+  .banner__dots {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image: radial-gradient(circle, rgb(250 248 242 / 0.5) 1px, transparent 1.4px);
+    background-size: 22px 22px;
+    opacity: 0.16;
+    -webkit-mask-image: radial-gradient(ellipse 70% 80% at 85% 20%, #000 0%, transparent 100%);
+    mask-image: radial-gradient(ellipse 70% 80% at 85% 20%, #000 0%, transparent 100%);
+  }
+  .banner__arcs {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    width: min(60%, 520px);
+    aspect-ratio: 1;
+    color: rgb(233 223 201 / 0.14);
+  }
+  .banner__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+  }
+  .banner__copy {
+    display: grid;
+    gap: 0.9rem;
+    align-content: center;
+    justify-items: start;
+  }
+  .banner__label {
+    margin: 0;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgb(233 223 201 / 0.78);
+  }
+  .banner__line {
+    margin: 0;
+    max-width: 18ch;
+    font: 400 clamp(1.75rem, 1.2rem + 2.2vw, 2.6rem) / 1.1 var(--font-serif);
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+  .banner__line em {
+    font-style: italic;
+    color: var(--color-sand);
+  }
+  .banner__soon {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0.5rem 0.85rem;
+    border: 1px dashed rgb(233 223 201 / 0.5);
+    border-radius: 14px;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: rgb(233 223 201 / 0.9);
+  }
+  .banner__soon :global(.icon) {
+    flex: none;
+    margin-top: 0.08rem;
+  }
+
+  /* ---- Viewer controls (counter + arrows); revealed by JS ---- */
+  .ctrl {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .ctrl[hidden] {
+    display: none;
+  }
+  .ctrl__count {
+    margin: 0 0.35rem 0 0;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+    color: rgb(233 223 201 / 0.78);
+  }
+  .ctrl__now {
+    color: var(--color-ivory);
+  }
+  .round {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgb(250 248 242 / 0.28);
+    background: rgb(250 248 242 / 0.06);
+    color: var(--color-ivory);
+    cursor: pointer;
+    transition:
+      transform var(--dur-fast) var(--ease-soft),
+      background-color var(--dur-normal) ease,
+      opacity var(--dur-normal) ease;
+  }
+  .round:hover {
+    background: rgb(250 248 242 / 0.16);
+  }
+  .round:active {
+    transform: scale(0.94);
+  }
+  /* aria-disabled (not disabled) so keyboard focus is never dropped when the end of the row is reached */
+  .round[aria-disabled='true'] {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .round[aria-disabled='true']:hover {
+    background: rgb(250 248 242 / 0.06);
+  }
+
+  /* ---- Viewer: a native scroll-snap row, so swiping, arrows, thumbnails and the keyboard all share one mechanism ---- */
+  .viewer {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
+  .viewer__track {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    border-radius: 18px;
+    border: 1px solid rgb(250 248 242 / 0.2);
+    background: var(--color-pine);
+    box-shadow: 0 26px 44px -26px rgb(0 0 0 / 0.75);
+  }
+  .viewer__track::-webkit-scrollbar {
+    display: none;
+  }
+  .slide {
+    position: relative;
+    flex: 0 0 100%;
+    min-width: 0;
+    margin: 0;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .slide :global(picture) {
+    display: block;
+    height: 100%;
+  }
+  .slide :global(.clinic-img) {
+    display: block;
+  }
+  .slide__cap {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 3;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-pine);
+    transition:
+      opacity 450ms ease-out,
+      transform 450ms ease-out;
+  }
+  /* Only the photograph in view carries its caption; it slips in as the photo settles */
+  :global(.js) .slide:not(.is-active) .slide__cap {
+    opacity: 0;
+    transform: translate3d(-10px, 0, 0);
+  }
+
+  /* ---- Thumbnails ---- */
+  .thumbs {
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    padding: 4px 3px 2px;
+    list-style: none;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .thumbs[hidden] {
+    display: none;
+  }
+  .thumbs::-webkit-scrollbar {
+    display: none;
+  }
+  .thumbs li {
+    flex: 1 1 0;
+    min-width: 64px;
+    max-width: 280px;
+  }
+  .thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    padding: 0;
+    overflow: hidden;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    background: var(--color-pine);
+    cursor: pointer;
+    opacity: 0.6;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      opacity 250ms ease,
+      transform 250ms var(--ease-soft),
+      border-color 250ms ease;
+  }
+  .thumb :global(picture) {
+    display: block;
+    height: 100%;
+  }
+  .thumb :global(.clinic-img) {
+    display: block;
+  }
+  .thumb:hover {
+    opacity: 0.92;
+    transform: translateY(-2px);
+  }
+  .thumb[aria-current='true'] {
+    opacity: 1;
+    border-color: var(--color-sand);
+  }
+
+  /* ---- Smaller photographs, shown at their own size ---- */
+  .more {
+    display: grid;
+    gap: 1.1rem;
+    padding-top: clamp(1.1rem, 0.8rem + 1.2vw, 1.7rem);
+    border-top: 1px solid rgb(250 248 242 / 0.14);
+  }
+  .more__copy {
+    display: grid;
+    gap: 0.9rem;
+    align-content: center;
+    justify-items: start;
+  }
+  .reel {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: min(74%, 260px);
+    gap: 12px;
+    margin: 0;
+    padding: 2px 2px 6px;
+    list-style: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .reel::-webkit-scrollbar {
+    display: none;
+  }
+  .tile {
+    position: relative;
+    scroll-snap-align: start;
+  }
+  .tile figure {
+    margin: 0;
+  }
+  .tile__media {
+    position: relative;
+    aspect-ratio: 249 / 222;
+    overflow: hidden;
+    border-radius: 18px;
+    border: 1px solid rgb(250 248 242 / 0.2);
+    background: var(--color-pine);
+    box-shadow: 0 22px 36px -24px rgb(0 0 0 / 0.7);
+    isolation: isolate;
+  }
+  .tile__media :global(.clinic-img) {
+    display: block;
+    transition: transform 900ms var(--ease-soft);
+  }
+  .tile:hover .tile__media :global(.clinic-img) {
+    transform: scale(1.02);
+  }
+  /* Captions arrive just after their photograph, sliding in from the side */
+  .tile__cap {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 3;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-pine);
+    transition:
+      opacity 600ms ease-out,
+      transform 600ms ease-out;
+    transition-delay: calc(var(--i, 0) * 110ms + 380ms);
+  }
+  :global(.js) .tile:not(.in-view) .tile__cap {
+    opacity: 0;
+    transform: translate3d(-10px, 0, 0);
+  }
+  /* Placeholder tiles (only if a photo file is missing) keep the icon + tag, no stray label */
+  .tile :global(.ph__label) {
+    display: none;
+  }
+
+  /* On phones the photograph runs edge to edge inside the banner, which gives it the full width */
+  @media (max-width: 639px) {
+    .viewer__track {
+      margin-inline: calc(var(--pad) * -1);
+      border-radius: 0;
+      border-inline: 0;
+    }
+    /* A comfortable tap target; the photo crops to fit */
+    .thumb {
+      aspect-ratio: auto;
+      height: 46px;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .slide {
+      aspect-ratio: 2 / 1;
+    }
+    .viewer__track {
+      border-radius: 22px;
+    }
+    .slide__cap {
+      left: 14px;
+      bottom: 14px;
+      font-size: 0.8125rem;
+    }
+    .reel {
+      grid-auto-flow: row;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-auto-columns: auto;
+      overflow: visible;
+      padding: 0;
+    }
+    .tile__media {
+      border-radius: 22px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .head {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      align-items: end;
+      gap: 32px;
+    }
+    .head__title {
+      grid-column: 1 / span 6;
+    }
+    .head__lead {
+      grid-column: 8 / span 5;
+    }
+    .slide {
+      aspect-ratio: 2.2 / 1;
+    }
+    /* Thumbnails become miniatures of the real frames, spanning the width of the viewer */
+    .thumb {
+      aspect-ratio: 2.2 / 1;
+    }
+    .more {
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 2.2fr);
+      align-items: center;
+      gap: clamp(1.5rem, 3vw, 3rem);
+    }
+    .more--lone {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* A gentle stagger across the row gives it a filmstrip rhythm */
+    .reel {
+      align-items: start;
+    }
+    .tile:nth-child(2) {
+      margin-top: 22px;
+    }
+    .tile__cap {
+      left: 12px;
+      bottom: 12px;
+      font-size: 0.8125rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .thumb:hover {
+      transform: none;
+    }
+  }
+</style>

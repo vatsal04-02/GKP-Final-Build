@@ -1,0 +1,130 @@
+---
+import DarkFx from './DarkFx.astro';
+import Icon from './Icon.astro';
+import { clinic, hours, links } from '../data/site';
+---
+
+<section id="contact" class="cta curve on-dark" data-section data-ambient data-hide-sticky aria-labelledby="contact-title">
+  <div class="bg" aria-hidden="true">
+    <svg class="rings" data-ringshift viewBox="0 0 900 900" focusable="false" aria-hidden="true">
+      <g fill="none" stroke="#E9DFC9" stroke-opacity=".14">
+        <circle cx="450" cy="450" r="140"></circle>
+        <circle cx="450" cy="450" r="230" stroke-dasharray="3 10"></circle>
+        <circle cx="450" cy="450" r="320"></circle>
+        <circle cx="450" cy="450" r="410" stroke-dasharray="1 9"></circle>
+      </g>
+    </svg>
+  </div>
+  <DarkFx flip />
+
+  <div class="container-site">
+    <div class="panel glass-dark reveal">
+      <p class="eyebrow">Get in touch</p>
+      <h2 id="contact-title" class="h2">Still deciding?</h2>
+      <p class="lead">Tell us what you’re experiencing and we’ll help you take the next step.</p>
+
+      <div class="buttons">
+        <a class="btn btn-primary btn-glow" href={links.whatsapp} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location="contact-cta">
+          <Icon name="message-circle" size={20} />
+          WhatsApp the Clinic
+          <Icon name="arrow-right" size={18} class="icon-arrow" />
+        </a>
+        <a class="btn btn-glass" href={links.tel} data-track="phone_click" data-location="contact-cta">
+          <Icon name="phone" size={18} />
+          Call the Clinic
+        </a>
+      </div>
+
+
+      <p class="fine">
+        <a href={links.tel} data-track="phone_click" data-location="contact-cta-number">{clinic.phone.display}</a>
+        <span aria-hidden="true">·</span>
+        {hours.days} {hours.sessions.join(' & ')} · {hours.closed}
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta {
+    --surface: #0f766e; /* top colour of the band — the dome above it uses the same */
+    position: relative;
+    padding-block: clamp(64px, 4.5vw + 34px, 96px);
+    padding-top: calc(clamp(64px, 4.5vw + 34px, 96px) + var(--curve));
+    background-image: linear-gradient(180deg, #0f766e 0%, #0c5a53 45%, var(--color-pine) 100%);
+    color: var(--color-ivory);
+  }
+  .bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .rings {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: min(1000px, 160vw);
+    margin: calc(min(1000px, 160vw) / -2) 0 0 calc(min(1000px, 160vw) / -2);
+  }
+  .panel {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 1rem;
+    max-width: 880px;
+    margin-inline: auto;
+    padding: clamp(1.75rem, 1rem + 2.6vw, 3rem) clamp(1.25rem, 0.5rem + 3vw, 3rem);
+    border-radius: 32px;
+    text-align: center;
+  }
+  .panel .eyebrow::after {
+    content: '';
+    width: 28px;
+    height: 1.5px;
+    background: currentColor;
+    opacity: 0.7;
+  }
+  .panel .lead {
+    max-width: 32rem;
+  }
+
+  .buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 480px;
+    margin-top: 0.75rem;
+  }
+  .fine {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: rgb(250 248 242 / 0.72);
+  }
+  .fine a {
+    font-weight: 700;
+    color: var(--color-ivory);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .fine span {
+    margin-inline: 0.25rem;
+  }
+
+  /* Narrowest phones (≤359px): keep the 18.7px button labels, give them the room instead */
+  @media (max-width: 359px) {
+    .panel {
+      padding-inline: 1rem;
+    }
+  }
+
+  @media (min-width: 560px) {
+    .buttons {
+      flex-direction: row;
+      justify-content: center;
+      max-width: none;
+      width: auto;
+    }
+  }
+</style>

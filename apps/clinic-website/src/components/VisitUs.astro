@@ -1,0 +1,279 @@
+---
+import Depth from './Depth.astro';
+import DarkFx from './DarkFx.astro';
+import Icon from './Icon.astro';
+import { clinic, hours, links } from '../data/site';
+const { address } = clinic;
+---
+
+<section id="visit" class="section curve surface-pine on-dark" data-section data-ambient data-hide-sticky aria-labelledby="visit-title">
+  <Depth tone="dark" mirror drift={false} />
+  <DarkFx />
+
+  <div class="container-site grid">
+    <div class="info reveal" data-reveal="left">
+      <p class="eyebrow">09 / Visit us</p>
+      <h2 id="visit-title" class="h2">In your neighbourhood, not across town.</h2>
+
+      <address class="addr">
+        <p class="addr__name">{clinic.name}</p>
+        <p>{address.street}</p>
+        <p>{address.area}</p>
+        <p>{address.city}, {address.region} {address.postalCode}</p>
+        <p class="addr__phone">
+          <Icon name="phone" size={16} />
+          <a href={links.tel} data-track="phone_click" data-location="visit">{clinic.phone.display}</a>
+        </p>
+      </address>
+
+      <div class="hours glass-dark">
+        <p class="hours__title"><Icon name="clock" size={15} /> Hours</p>
+        <dl>
+          <div><dt>{hours.days}</dt><dd>{hours.sessions[0]}</dd></div>
+          <div><dt>{hours.days}</dt><dd>{hours.sessions[1]}</dd></div>
+          <div class="is-closed"><dt>Sunday</dt><dd>Closed</dd></div>
+        </dl>
+      </div>
+
+      <div class="actions">
+        <a class="btn btn-primary" href={links.directions} target="_blank" rel="noopener noreferrer" data-track="directions_click" data-location="visit">
+          <Icon name="navigation" size={18} />
+          Get Directions
+          <Icon name="arrow-right" size={18} class="icon-arrow" />
+        </a>
+        <a class="btn btn-glass" href={links.tel} data-track="phone_click" data-location="visit">
+          <Icon name="phone" size={18} /> Call
+        </a>
+        <a class="btn btn-glass" href={links.whatsapp} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location="visit">
+          <Icon name="message-circle" size={18} /> WhatsApp
+        </a>
+      </div>
+    </div>
+
+    <div class="map reveal" data-reveal="right" style="--i:1">
+      <div class="map__stage" data-map>
+        <!-- Real Google Map. Lazy-loaded; a tint layer keeps it in the palette. -->
+        <iframe
+          class="map__frame"
+          title={`Map showing ${clinic.name}, Viram Khand, Gomti Nagar, Lucknow`}
+          src={links.embed}
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          allowfullscreen
+        ></iframe>
+        <span class="map__tint" aria-hidden="true"></span>
+
+        <!-- Keeps a page scroll from being swallowed by the map; one tap/click hands it over -->
+        <button type="button" class="map__guard" data-map-guard aria-label="Activate the map to pan and zoom">
+          <span class="map__hint glass"><Icon name="map-pin" size={15} /> Tap to explore the map</span>
+        </button>
+
+        <a class="map__open btn btn-glass btn-sm" href={links.directions} target="_blank" rel="noopener noreferrer" aria-label={`Open ${clinic.name} in Google Maps (opens in a new tab)`} data-track="directions_click" data-location="visit-map">
+          <Icon name="map" size={18} />
+          Open in Google Maps
+          <Icon name="arrow-up-right" size={16} class="icon-arrow" />
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .grid {
+    position: relative;
+    display: grid;
+    gap: clamp(32px, 5vw, 56px);
+    align-items: stretch;
+  }
+  .info {
+    display: grid;
+    gap: 1.6rem;
+    align-content: start;
+  }
+
+  .addr {
+    font-style: normal;
+    display: grid;
+    gap: 0.15rem;
+    font-size: 1.0625rem;
+    color: rgb(250 248 242 / 0.82);
+  }
+  .addr p {
+    margin: 0;
+  }
+  .addr__name {
+    margin-bottom: 0.4rem !important;
+    font: 400 1.5rem/1.2 var(--font-serif);
+    color: var(--color-ivory);
+  }
+  .addr__phone {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.7rem !important;
+    font-weight: 700;
+  }
+  .addr__phone a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--color-ivory);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    text-decoration-color: rgb(250 248 242 / 0.4);
+  }
+
+  .hours {
+    padding: 1.1rem 1.25rem 1.2rem;
+    border-radius: 20px;
+  }
+  .hours__title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 0.6rem;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-sand);
+  }
+  .hours dl {
+    margin: 0;
+  }
+  .hours dl div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    font-size: 0.875rem; /* 14px: day | time stays two columns on a phone */
+    border-top: 1px solid rgb(250 248 242 / 0.1);
+  }
+  .hours dt {
+    color: rgb(250 248 242 / 0.7);
+  }
+  .hours dd {
+    margin: 0;
+    font-weight: 700;
+  }
+  .hours .is-closed dd {
+    color: var(--color-sand);
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .actions .btn:first-child {
+    grid-column: 1 / -1;
+  }
+
+  /* Map */
+  .map {
+    min-height: 340px;
+  }
+  .map__stage {
+    position: relative;
+    display: block;
+    height: 100%;
+    min-height: 340px;
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid rgb(250 248 242 / 0.16);
+    box-shadow: 0 30px 60px -34px rgb(0 0 0 / 0.6);
+    background: #0a332f;
+    isolation: isolate;
+  }
+  .map__frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+  /* Plain translucent teal wash over the map: it sits in the palette and keeps the red pin readable.
+     (A blend mode, or a CSS filter on the iframe, made scrolling past the map 4–20% slower.) */
+  .map__tint {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: rgb(20 130 120 / 0.34);
+    pointer-events: none;
+  }
+  .map__guard {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    align-items: start;
+    justify-items: start;
+    padding: 14px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .map__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--color-pine);
+    transition: opacity var(--dur-normal) ease;
+  }
+  .map__hint :global(.icon) {
+    color: var(--color-teal);
+  }
+  .map__guard:hover .map__hint {
+    opacity: 0.85;
+  }
+  .map__stage[data-active='true'] .map__guard {
+    display: none;
+  }
+  .map__open {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 16px;
+    z-index: 3;
+    width: fit-content;
+    margin-inline: auto;
+    background: rgb(12 59 54 / 0.78);
+    transition: background-color var(--dur-normal) ease, border-color var(--dur-normal) ease;
+  }
+  .map__open:hover {
+    background: rgb(12 59 54 / 0.92);
+    border-color: rgb(250 248 242 / 0.5);
+  }
+
+  @media (min-width: 640px) {
+    .actions {
+      grid-template-columns: auto auto auto;
+      justify-content: start;
+    }
+    .actions .btn:first-child {
+      grid-column: auto;
+    }
+  }
+  @media (min-width: 960px) {
+    .grid {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 32px;
+    }
+    .info {
+      grid-column: 1 / span 5;
+    }
+    .map {
+      grid-column: 7 / span 6;
+      min-height: 440px;
+    }
+  }
+</style>

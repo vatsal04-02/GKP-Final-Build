@@ -1,0 +1,204 @@
+{
+  "input_nodes": 323,
+  "output_nodes": 419,
+  "steps": [
+    {
+      "step": "01-config",
+      "title": "Configuration, secrets, guards, exposure, identity",
+      "nodes_before": 327,
+      "nodes_after": 340
+    },
+    {
+      "step": "02-ai",
+      "title": "External AI gate and privacy filter",
+      "nodes_before": 340,
+      "nodes_after": 342
+    },
+    {
+      "step": "03-w12",
+      "title": "W12: uncertain state, send ledger (idempotency), callback data, template policy",
+      "nodes_before": 342,
+      "nodes_after": 354
+    },
+    {
+      "step": "04-callers",
+      "title": "W3/W5/W6: approved templates, idempotency keys, honest sent flag and logs",
+      "nodes_before": 354,
+      "nodes_after": 363
+    },
+    {
+      "step": "05-w2-status",
+      "title": "W2: delivery receipts update the send ledger and the Messages status",
+      "nodes_before": 363,
+      "nodes_after": 377
+    },
+    {
+      "step": "06-phones",
+      "title": "E.164 phone numbers (international)",
+      "nodes_before": 377,
+      "nodes_after": 377
+    },
+    {
+      "step": "07-w1",
+      "title": "W1: respond after storing, validation, consent, real staff alert",
+      "nodes_before": 377,
+      "nodes_after": 387
+    },
+    {
+      "step": "08-w4",
+      "title": "W4: raw-body HMAC, replay window, respond after the outcome, real confirmation",
+      "nodes_before": 387,
+      "nodes_after": 400
+    },
+    {
+      "step": "09-consent",
+      "title": "Consent gate in W12; consent recorded for inbound WhatsApp leads",
+      "nodes_before": 400,
+      "nodes_after": 404
+    },
+    {
+      "step": "10-email",
+      "title": "E-mail gateway: staff alert e-mail, optional patient acknowledgement",
+      "nodes_before": 404,
+      "nodes_after": 409
+    },
+    {
+      "step": "11-reconcile-notes",
+      "title": "W14 reconcile job, dead test node removed, operator notes rewritten",
+      "nodes_before": 409,
+      "nodes_after": 419
+    },
+    {
+      "step": "12-endpoints",
+      "title": "Meta and AI provider base URLs are configuration",
+      "nodes_before": 419,
+      "nodes_after": 419
+    }
+  ],
+  "changes": [
+    {
+      "step": "01",
+      "change": "removed \"W4 – Webhook\" (POST /webhook/cal-w4-test): unauthenticated, connected to nothing, an unauthenticated public path with no purpose"
+    },
+    {
+      "step": "01",
+      "change": "\"W13 – Ask Model\": removed allowUnauthorizedCerts (TLS certificates are always verified)"
+    },
+    {
+      "step": "01",
+      "change": "W12 – Config: w12_uncertain_counts_as_sent=false (an unconfirmed Meta call is never reported as sent)"
+    },
+    {
+      "step": "01",
+      "change": "Config nodes now read FLOWHQ_GRIST_URL, FLOWHQ_REGISTRY_DOC_ID, FLOWHQ_TEST_PHONE, FLOWHQ_CAL_WEBHOOK_SECRET, FLOWHQ_META_VERIFY_TOKEN, FLOWHQ_TELEGRAM_CHAT_ID, FLOWHQ_WA_SEND_MODE/ALLOWLIST/GRAPH_VERSION, FLOWHQ_AI_MODEL/EXTERNAL_ENABLED/MAX_REPLIES_PER_HOUR from the environment; no literal secret or identifier remains"
+    },
+    {
+      "step": "01",
+      "change": "W2 – Signature Config: meta_app_secret from FLOWHQ_META_APP_SECRET (signature mode stays \"enforce\"; there is deliberately no environment switch to turn it off)"
+    },
+    {
+      "step": "01",
+      "change": "W12 – Test input: removed a real Grist doc id, a WhatsApp phone-number id and a real test phone number (placeholders now)"
+    },
+    {
+      "step": "01",
+      "change": "quiet hours: DISABLE_QUIET_HOURS_FOR_TEST switched back to false in 7 nodes (W12 Prepare request, W13 Build Context, W13 Plan Ready, W7/W8 Decide send, W9 Owner message, W10 Check): no patient message between 21:00 and 08:00 IST"
+    },
+    {
+      "step": "01",
+      "change": "W11 – Format alert: skips the Telegram call when FLOWHQ_TELEGRAM_CHAT_ID is not set"
+    },
+    {
+      "step": "01",
+      "change": "added Config Guard nodes (W1, W2, W2 verify, W2 signature, W3, W4, W5, W6, W7, W8, W9, W10, W12, W13): missing/placeholder settings stop the run with a message naming the variable"
+    },
+    {
+      "step": "01",
+      "change": "97 credential references renamed to stable ids/names: FlowHQ Grist API, FlowHQ W1 Webhook Auth, FlowHQ WhatsApp Cloud API, FlowHQ AI Provider, FlowHQ Telegram Alerts (scripts/create-credentials.js creates them from the environment)"
+    },
+    {
+      "step": "01",
+      "change": "export identity: id FhqClinicProd001 (cannot overwrite the live workflow on import), inactive, timezone Asia/Kolkata, success executions not stored (patient data), failed executions stored, 15-minute timeout"
+    },
+    {
+      "step": "02",
+      "change": "W13 – Build Context: the AI route is closed unless FLOWHQ_AI_EXTERNAL_ENABLED=true (default off); a closed gate is the same quiet skip as ai_mode=off, nothing is sent to any provider"
+    },
+    {
+      "step": "02",
+      "change": "W13 – Provider Request/Answer: patient name, phone, e-mail and long digit runs are masked before the request leaves (clinic rules, knowledge base and dates are untouched); a request whose shape is unexpected, or that still holds the phone digits, is not sent"
+    },
+    {
+      "step": "02",
+      "change": "W9: new \"W9 – External AI?\" gate; when external AI is not enabled the metrics are never sent to the provider and the report is written from the numbers alone"
+    },
+    {
+      "step": "03",
+      "change": "W12 – Prepare request / Read reply: \"uncertain\" is a state of its own (sent=false, uncertain=true), no longer counted as sent and never re-sent automatically"
+    },
+    {
+      "step": "03",
+      "change": "W12 – Prepare request: idempotency key required (idem_key, or booking_uid / inbox_row_id / message_row_id / week); Meta receives biz_opaque_callback_data=\"fhq:<key>\"; hello_world refused unless FLOWHQ_WA_ALLOW_HELLO_WORLD=true; template language from FLOWHQ_WA_TEMPLATE_LANGUAGE"
+    },
+    {
+      "step": "03",
+      "change": "W12 send ledger: new nodes Ledger lookup/decide/Stopped by ledger?/claim/verify/winner/Won claim?/Row to release?/release/result/update/restore. Claim BEFORE calling Meta; duplicates and ledger outages return without calling Meta; Return result now carries uncertain, duplicate and idem_key"
+    },
+    {
+      "step": "04",
+      "change": "W3 Build Message: hello_world -> new_lead_staff_alert; W5: hello_world -> reminder_24h / reminder_2h (and the literal Grist URL -> W5 – Config); W6: hello_world -> followup_day2 (needs booking_link); idem_key on every message"
+    },
+    {
+      "step": "04",
+      "change": "W13 – Plan Ready: idem_key W13:<kind>:<inbound message row> on every send item"
+    },
+    {
+      "step": "04",
+      "change": "W3/W5/W6 \"Sent?\" now means handled (sent, uncertain or duplicate): the flag is set, so an uncertain send is never retried; Run_Log is honest (ok / skipped / failed with the reason); rejected or invalid sends are logged (new nodes \"Failed send to log?\", \"Prepare failed log\", \"Write failed log\")"
+    },
+    {
+      "step": "05",
+      "change": "W2: delivery receipts (sent/delivered/read/failed) are parsed into status_events and update Send_Ledger (by callback data fhq:<key>, else WA_Message_ID) and Messages.Status; statuses only move forward; a failed delivery is logged in Run_Log (13 new nodes, second branch after the message branch)"
+    },
+    {
+      "step": "06",
+      "change": "18 Code nodes: the +91-only phone function is replaced by an E.164 normaliser (international numbers accepted; default country FLOWHQ_DEFAULT_COUNTRY_CODE, India if unset)"
+    },
+    {
+      "step": "07",
+      "change": "W1: webhook now answers via Respond to Webhook AFTER storing (200 ok/duplicate, 400 invalid with reason, 404 unknown clinic; honeypot 200); consent + optional e-mail captured on the lead; the staff-alert stub is replaced by Alert settings -> plan (send guard) -> W12 (new_lead_staff_alert, idempotency key) -> honest Run_Log"
+    },
+    {
+      "step": "08",
+      "change": "W4 – Verify & parse: HMAC over the raw body (Raw Body option), 401 without alert for signature problems, replay window (createdAt); W4 – Resolve clinic carries wa_phone_number_id; leads created by a booking carry consent"
+    },
+    {
+      "step": "08",
+      "change": "W4: answers via Respond to Webhook after the outcome (401 / 422 / 404 / 200; Grist failure = 500); the confirmation stub is replaced by Confirm item -> W12 (booking_confirmation, key W4:booking_confirmation:<uid>:<start>) -> Confirm_Sent + honest Run_Log"
+    },
+    {
+      "step": "09",
+      "change": "W12: consent gate (Consent needed? / Lead consent / Consent decide / Consent stop?): a business-initiated template to a patient is sent only when LEADS.Consent_WhatsApp is true and Opted_Out is not (TEST_MODE sends and free-text replies in the 24 h window are exempt)"
+    },
+    {
+      "step": "09",
+      "change": "W2 – Build New Lead: a lead created by an inbound WhatsApp message carries Consent_WhatsApp=true / Consent_Source=whatsapp-inbound (FLOWHQ_W2_IMPLIED_CONSENT=false turns this off)"
+    },
+    {
+      "step": "10",
+      "change": "W1: e-mail gateway: Email plan -> Has emails? -> Split emails -> Send email (SMTP credential \"FlowHQ SMTP\") -> Email result -> Run_Log; staff e-mail via FLOWHQ_ALERT_EMAIL_TO, optional acknowledgement via FLOWHQ_EMAIL_PATIENT_ACK (new lead + Consent_Email + not TEST_MODE + not quiet hours)"
+    },
+    {
+      "step": "11",
+      "change": "removed \"W2 – Test Cases\" (reachable by no trigger; it fed W2 – Config and so would have bypassed the signature check)"
+    },
+    {
+      "step": "11",
+      "change": "W14 – send-ledger reconcile (new section, every 15 minutes): stale \"sending\" -> \"uncertain\", old \"uncertain\" -> \"unconfirmed\", each logged in Run_Log; never re-sends"
+    },
+    {
+      "step": "12",
+      "change": "W12 Meta base URL = FLOWHQ_WA_GRAPH_BASE_URL, W13/W9 AI base URL = FLOWHQ_AI_BASE_URL (defaults unchanged; https required except localhost mocks; refused by the config guards otherwise)"
+    }
+  ]
+}

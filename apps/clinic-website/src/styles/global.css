@@ -1,0 +1,820 @@
+/* ==========================================================================
+   Geeta Krishna Physiotherapy — design system
+   Tokens, glass surfaces, buttons and the motion system (design.md §2–§37).
+   ========================================================================== */
+
+@import '@fontsource/dm-serif-display/latin-400.css';
+@import '@fontsource/dm-serif-display/latin-400-italic.css';
+@import '@fontsource-variable/manrope/wght.css';
+@import 'tailwindcss';
+
+/* Devanagari serif italic, subset to the hero's Hindi line only (13 KB instead of 100 KB). If that line ever changes,
+   regenerate it:  python3 -m fontTools.subset node_modules/@fontsource/tiro-devanagari-hindi/files/tiro-devanagari-hindi-devanagari-400-italic.woff2 \
+     --text="<the new line>" --layout-features='*' --flavor=woff2 --output-file=src/assets/fonts/tiro-devanagari-hindi-hero-italic.woff2 */
+@font-face {
+  font-family: 'Tiro Devanagari Hindi';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/tiro-devanagari-hindi-hero-italic.woff2') format('woff2');
+}
+
+/* ---------- Tokens ---------- */
+
+@theme static {
+  --color-teal: #0f766e; /* Deep Teal   — brand accent */
+  --color-sand: #e9dfc9; /* Warm Sand   — soft sections */
+  --color-cta: #ea580c; /* CTA Orange  — actions only */
+  --color-ivory: #faf8f2; /* Warm White  — main background */
+  --color-ink: #1f2a2a; /* Dark Slate  — main text */
+  --color-pine: #0c3b36; /* Deep Pine   — dark sections */
+
+  --font-serif: 'DM Serif Display', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+:root {
+  /* Motion tokens (design.md §30) */
+  --dur-fast: 170ms;
+  --dur-normal: 260ms;
+  --dur-reveal: 700ms;
+  --dur-editorial: 850ms;
+
+  --header-h: 76px;
+  --section-pad: clamp(64px, 4.5vw + 34px, 100px);
+  --curve: 28px; /* depth of the curved edge between sections */
+  --teal-light: color-mix(in srgb, #0f766e 55%, white); /* tint of brand teal for dark surfaces */
+  --focus-ring: #0f766e;
+  /* A whisper of sand over ivory: lets neighbouring light sections alternate without a hard colour change */
+  --sand-tint: color-mix(in srgb, #e9dfc9 46%, #faf8f2);
+  color-scheme: light;
+}
+
+/* ---------- Base ---------- */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-family: var(--font-sans);
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ivory);
+    color: var(--color-ink);
+    font-size: 1rem;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: clip;
+  }
+
+  html.menu-open {
+    overflow: hidden;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  img,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+
+  ::selection {
+    background: var(--color-teal);
+    color: var(--color-ivory);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 3px;
+    border-radius: 6px;
+    /* tabbing to something near the edge scrolls it clear of the fixed header (and of the mobile bar below) */
+    scroll-margin-top: calc(var(--header-h) + 8px);
+    scroll-margin-bottom: 24px;
+  }
+
+  .on-dark :focus-visible {
+    --focus-ring: var(--color-sand);
+  }
+}
+
+/* ---------- Scrollbar ---------- */
+
+html {
+  scrollbar-color: var(--color-teal) var(--color-ivory);
+  scrollbar-width: thin;
+}
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-ivory);
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid var(--color-ivory);
+    border-radius: 999px;
+    background: var(--color-teal);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-pine);
+  }
+}
+
+/* ---------- Layout helpers ---------- */
+
+.container-site {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+@media (min-width: 640px) {
+  .container-site {
+    padding-inline: 24px;
+  }
+}
+@media (min-width: 1024px) {
+  .container-site {
+    padding-inline: 32px;
+  }
+}
+
+/* 64–80px mobile, up to ~100px desktop — tightened per the refinement brief */
+.section {
+  position: relative;
+  padding-block: var(--section-pad);
+}
+.section-tight {
+  padding-block: clamp(44px, 4vw + 24px, 72px);
+}
+
+/* Surfaces expose their colour as --surface so a curved edge can reuse it. */
+.surface-ivory {
+  --surface: var(--color-ivory);
+  background: var(--surface);
+}
+.surface-sand {
+  --surface: var(--color-sand);
+  background: var(--surface);
+}
+.surface-tint {
+  --surface: var(--sand-tint);
+  background: var(--surface);
+}
+.surface-pine {
+  --surface: var(--color-pine);
+  background: var(--surface);
+  color: var(--color-ivory);
+}
+
+/* Curved dividers. A .curve section rises over the bottom padding of the one above and its top edge
+   is a soft dome, so light and dark bands never meet in a hard cut.
+   The dome is a painted pseudo-element: nothing is ever clipped to a rounded rectangle (doing that
+   to a whole section made scrolling drop frames — see README "Performance"). */
+@media (min-width: 768px) {
+  :root {
+    --curve: 44px;
+  }
+}
+.curve {
+  position: relative;
+  margin-top: calc(var(--curve) * -1);
+  /* paint the body of the section below the dome zone; the dome itself comes from ::before */
+  background-color: transparent;
+  background-image: linear-gradient(var(--surface), var(--surface));
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 100% calc(100% - var(--curve) + 1px);
+}
+.curve::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--curve);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background: var(--surface);
+  pointer-events: none;
+}
+.section.curve {
+  padding-top: calc(var(--section-pad) + var(--curve));
+}
+/* Anchor links (and the nav) land with the section clear of the fixed header, so headings never hide under it */
+section[id] {
+  scroll-margin-top: var(--header-h);
+}
+/* Ambient layers clip themselves, so sections never need overflow clipping. */
+.bg,
+.fx {
+  overflow: clip;
+}
+.curve > .bg,
+.curve > .fx,
+.curve > .depth {
+  /* follow the dome so texture never shows in the transparent corners or leaves a seam.
+     Safe to round here: these are leaf layers with no content or glass inside them. */
+  border-top-left-radius: 50% var(--curve);
+  border-top-right-radius: 50% var(--curve);
+}
+
+/* ---------- Typography ---------- */
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-teal);
+}
+@media (min-width: 640px) {
+  .eyebrow {
+    letter-spacing: 0.18em;
+  }
+}
+.eyebrow::before {
+  content: '';
+  flex: none;
+  width: 20px;
+  height: 1.5px;
+  background: currentColor;
+  opacity: 0.7;
+}
+.on-dark .eyebrow {
+  color: var(--color-sand);
+}
+
+/* Fluid type. Phones follow clamp(34px, 9vw, 72px) for the hero and clamp(28px, 7vw, 56px) for section
+   headings; the min() hands over to the long-standing desktop scale as soon as that is the smaller of the
+   two (~430px), so tablet and desktop headings are exactly what they were. */
+.display {
+  font-size: min(clamp(34px, 9vw, 72px), clamp(2.25rem, 1.3rem + 3.2vw, 3.625rem)); /* hero only; desktop 36 → 58 */
+  line-height: 1.06;
+  letter-spacing: -0.016em;
+}
+.h2 {
+  font-size: min(clamp(28px, 7vw, 56px), clamp(1.875rem, 1.2rem + 1.9vw, 2.875rem)); /* desktop 30 → 46 */
+  line-height: 1.12;
+}
+.h3 {
+  font-size: clamp(1.3125rem, 1.1rem + 0.6vw, 1.75rem); /* 21 → 28 */
+  line-height: 1.2;
+}
+:root {
+  --lead-fs: clamp(1rem, 0.95rem + 0.2vw, 1.125rem); /* 16 → 18 */
+}
+.lead {
+  font-size: var(--lead-fs);
+  line-height: 1.65;
+  color: color-mix(in srgb, var(--color-ink) 78%, transparent);
+}
+.on-dark .lead {
+  color: rgb(250 248 242 / 0.74);
+}
+/* Body copy on phones: 15–16px */
+@media (max-width: 767px) {
+  :focus-visible {
+    scroll-margin-bottom: 90px;
+  }
+  body {
+    font-size: clamp(0.9375rem, 0.88rem + 0.3vw, 1rem);
+    /* room under the page for the fixed call / WhatsApp bar so it never covers the footer */
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+  :root {
+    --lead-fs: clamp(0.9375rem, 0.88rem + 0.4vw, 1rem);
+  }
+}
+.small {
+  font-size: 0.875rem;
+}
+
+.accent-italic {
+  font-style: italic;
+  color: var(--color-teal);
+}
+.on-dark .accent-italic {
+  color: var(--color-sand);
+}
+
+/* Visible marker for details the clinic still has to confirm */
+.tbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.7rem;
+  border: 1px dashed currentColor;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.5;
+  opacity: 0.78;
+}
+
+/* ---------- Buttons (design.md §26) ---------- */
+
+.btn {
+  --btn-bg: transparent;
+  --btn-fg: currentColor;
+  --btn-border: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: 52px;
+  padding: 0 1.6rem;
+  border: 1.5px solid var(--btn-border);
+  border-radius: 12px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font: 700 1.0625rem/1 var(--font-sans);
+  letter-spacing: 0.005em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 200ms ease,
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease;
+}
+.btn .icon-arrow {
+  transition: transform 200ms ease;
+}
+.btn:hover {
+  transform: translate3d(0, -1px, 0);
+}
+.btn:hover .icon-arrow {
+  transform: translateX(4px);
+}
+/* Press: the button visibly sinks (a quick 4% squeeze), and the orange one darkens, so a tap always registers */
+.btn:active {
+  transform: translate3d(0, 1px, 0) scale(0.96);
+  transition-duration: 80ms;
+}
+.btn-primary:active {
+  --btn-bg: #cf4a0a;
+  box-shadow: 0 3px 8px -4px rgb(234 88 12 / 0.7);
+}
+.btn-glass:active,
+.btn-outline:active {
+  --btn-bg: rgb(12 59 54 / 0.2);
+}
+
+/* The two main WhatsApp CTAs get a soft glow behind them. It belongs to the button (so it lifts and
+   settles with it), appears on hover/focus, and never pulses. Touch devices have no hover, so it
+   rests at a faint level there instead. */
+.btn-glow {
+  position: relative;
+  isolation: isolate;
+}
+.btn-glow::before {
+  content: '';
+  position: absolute;
+  inset: -12px -26px;
+  z-index: -1;
+  border-radius: 30px;
+  background: radial-gradient(closest-side, rgb(234 88 12 / 0.3), transparent);
+  opacity: 0;
+  transform: translate3d(0, 5px, 0) scale(0.9);
+  transition:
+    opacity var(--dur-normal) ease,
+    transform var(--dur-normal) var(--ease-soft);
+  pointer-events: none;
+}
+.btn-glow:hover::before,
+.btn-glow:focus-visible::before {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+@media (hover: none) {
+  .btn-glow::before {
+    opacity: 0.45;
+    transform: none;
+  }
+}
+/* Phones stack full-width buttons right up to the gutters, so keep the glow inside them */
+@media (max-width: 639px) {
+  .btn-glow::before {
+    inset: -10px -8px;
+  }
+}
+
+/* White on CTA orange is 3.55:1 — it passes WCAG AA only as "large text", so primary labels are
+   bold and >= 14pt (18.7px). Keep this size if you retheme the button. */
+.btn-primary {
+  position: relative;
+  --btn-bg: var(--color-cta);
+  --btn-fg: #fff;
+  font-size: 1.17rem;
+  box-shadow: 0 10px 22px -10px rgb(234 88 12 / 0.6);
+}
+/* "Brighten on hover" is a white veil whose opacity fades in (opacity only; no colour animation) */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  background: rgb(255 255 255 / 0.1);
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.btn-primary:hover::after,
+.btn-primary:focus-visible::after {
+  opacity: 1;
+}
+.btn-primary:hover {
+  box-shadow: 0 20px 34px -10px rgb(234 88 12 / 0.75);
+}
+.btn-secondary {
+  --btn-bg: var(--color-teal);
+  --btn-fg: #fff;
+}
+.btn-secondary:hover {
+  --btn-bg: #0d665f;
+}
+.btn-outline {
+  --btn-fg: var(--color-teal);
+  --btn-border: var(--color-teal);
+}
+.btn-outline:hover {
+  --btn-bg: rgb(15 118 110 / 0.08);
+}
+/* Glass outline for dark sections */
+.btn-glass {
+  --btn-fg: var(--color-ivory);
+  --btn-border: rgb(250 248 242 / 0.28);
+  --btn-bg: rgb(250 248 242 / 0.08);
+}
+.btn-glass:hover {
+  --btn-bg: rgb(250 248 242 / 0.14);
+  --btn-border: rgb(250 248 242 / 0.5);
+}
+.btn-sm {
+  min-height: 46px;
+  padding: 0 1.1rem;
+  font-size: 0.9375rem;
+}
+.btn-primary.btn-sm {
+  font-size: 1.17rem;
+}
+.btn-block {
+  width: 100%;
+}
+@media (max-width: 480px) {
+  /* labels stay at their contrast-safe size; a long one wraps rather than running past the edge */
+  .btn-block {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
+    padding-block: 0.6rem;
+    padding-inline: 1rem;
+  }
+}
+
+/* Narrowest phones (≤359px, e.g. 320px): primary labels must stay ≥18.7px for contrast, so give them
+   room by trimming padding and dropping the decorative arrow instead of letting buttons overflow. */
+@media (max-width: 359px) {
+  .btn {
+    gap: 0.5rem;
+    padding-inline: 0.9rem;
+  }
+  .btn .icon-arrow {
+    display: none;
+  }
+}
+
+/* Text link with sliding arrow */
+.link-arrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: var(--color-teal);
+  text-decoration: none;
+  border-bottom: 1.5px solid transparent;
+  transition: border-color var(--dur-normal) ease;
+}
+.link-arrow .icon {
+  transition: transform var(--dur-normal) var(--ease-soft);
+}
+.link-arrow:hover {
+  border-color: currentColor;
+}
+.link-arrow:hover .icon {
+  transform: translate(3px, -1px);
+}
+.on-dark .link-arrow {
+  color: var(--color-sand);
+}
+
+/* ---------- Glass surfaces ---------- */
+/* Real photography / pine / teal sit behind these. Blur is reserved for a handful of
+   surfaces at a time and drops on small screens to protect scroll performance. */
+
+.glass {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.74), rgb(255 255 255 / 0.4));
+  border: 1px solid rgb(255 255 255 / 0.78);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 14px 34px -14px rgb(12 59 54 / 0.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+}
+/* Large panels on dark bands sit over flat gradients, so a real blur adds nothing visible — but a
+   big backdrop-filter is the single most expensive thing on this page while scrolling (measured:
+   ~16% of frames dropped). They keep the glass look (translucent gradient, hairline, inner
+   highlight) and skip the blur. Real blur stays on the header, hero cards and small photo chips. */
+.glass-dark {
+  background: linear-gradient(135deg, rgb(250 248 242 / 0.15), rgb(250 248 242 / 0.06));
+  border: 1px solid rgb(250 248 242 / 0.18);
+  box-shadow:
+    inset 0 1px 0 rgb(250 248 242 / 0.16),
+    0 18px 40px -18px rgb(0 0 0 / 0.5);
+}
+@media (max-width: 639px) {
+  .glass {
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    backdrop-filter: blur(12px) saturate(1.4);
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: rgb(250 248 242 / 0.94);
+  }
+}
+
+/* ---------- Ambient decoration (circles + fine dots only — design.md §28) ---------- */
+
+.orb {
+  position: absolute;
+  width: var(--s, 420px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  /* static on purpose: a soft radial gradient stands in for blur(), and not animating it keeps
+     the layer out of the compositor's per-frame work */
+  background: radial-gradient(circle at 50% 50%, var(--c, rgb(15 118 110 / 0.2)), transparent 68%);
+}
+.dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--dot, rgb(12 59 54 / 0.16)) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+}
+.on-dark .dots {
+  --dot: rgb(250 248 242 / 0.16);
+}
+
+/* Looping animations only run while their section is on screen (JS toggles .is-live) */
+.js [data-ambient]:not(.is-live) .drift {
+  animation-play-state: paused;
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -9px, 0);
+  }
+}
+@keyframes marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* Film grain: one tiny pre-rendered noise tile, static, no blend modes (cheap to composite) */
+.grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
+}
+
+/* ---------- Scroll-driven depth (native CSS, compositor-only, no scroll listener) ----------
+   Decorative layers (<Depth drift>) drift a few pixels at different rates as their section scrolls
+   through the viewport. Only background layers move — never text, buttons or content. Browsers
+   without scroll-driven animations keep the layers still; reduced-motion users never get this block.
+   Each drifting layer is a composited surface behind the content, so use it sparingly (README → Performance). */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @keyframes depth-shift {
+      from {
+        transform: translate3d(0, calc(var(--amp, 8px) * var(--dir, 1) * -1), 0);
+      }
+      to {
+        transform: translate3d(0, calc(var(--amp, 8px) * var(--dir, 1)), 0);
+      }
+    }
+    /* Longhands on purpose: the CSS minifier folds `animation` + `animation-timeline` into a single
+       shorthand, and Chromium rejects a timeline function inside that shorthand (silently dropping the
+       whole rule). An incomplete set of longhands can't be merged. */
+    [data-depth] {
+      animation-name: depth-shift;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: view();
+    }
+  }
+}
+
+/* ---------- Entrances ---------- */
+
+/* Hero stagger — pure CSS so CTAs never depend on JavaScript (design.md §10) */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.rise {
+  animation: rise 700ms ease both;
+  animation-delay: var(--d, 0ms);
+}
+
+/* Scroll reveal — only hidden when JS is running, and always revealed by the observer.
+   Variants set the direction the element arrives from; "group" lets a container trigger while its
+   children run their own sequence (see the doctors, reviews and timeline sections). */
+.js .reveal {
+  opacity: 0;
+  transform: translate3d(var(--rx, 0px), var(--ry, 24px), 0) scale(var(--rs, 1));
+  transition:
+    opacity var(--dur-reveal) ease,
+    transform var(--dur-reveal) ease;
+  transition-delay: calc(var(--i, 0) * var(--stagger, 80ms));
+}
+/* Sideways entrances only where there is spare room beside the content (sections are not clipped, so a
+   28px shove on a phone would widen the page). Narrower screens use the default upward reveal. */
+@media (min-width: 1100px) {
+  .js .reveal[data-reveal='left'] {
+    --rx: -28px;
+    --ry: 0px;
+  }
+  .js .reveal[data-reveal='right'] {
+    --rx: 28px;
+    --ry: 0px;
+  }
+}
+.js .reveal[data-reveal='fade'] {
+  --ry: 0px;
+}
+.js .reveal[data-reveal='group'] {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+.js .reveal-scale {
+  --rs: 1.01;
+}
+.js .reveal.in-view {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- Transition moments (one-shot, so nothing keeps animating while you scroll) ----------
+   Two section boundaries get a quiet visual hand-off, each played once as the section arrives
+   (the ambient observer adds .is-live). Both are inert without JavaScript. */
+
+/* "Why" band: a soft glow drifts across behind the content */
+.d-sweep {
+  opacity: 0;
+}
+.js .is-live .d-sweep {
+  animation: sweep-pass 2600ms var(--ease-inout) 1 both;
+}
+@keyframes sweep-pass {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+  30%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(185%, 0, 0);
+  }
+}
+
+/* Contact band: the concentric rings settle into place behind the panel */
+.js [data-ringshift] {
+  transform: translate3d(-5%, 4%, 0);
+}
+.js .is-live [data-ringshift] {
+  transform: translate3d(3%, -2%, 0);
+  transition: transform 2600ms var(--ease-soft);
+}
+
+/* ---------- Misc ---------- */
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: var(--color-pine);
+  color: var(--color-ivory);
+  font-weight: 700;
+  transform: translateY(-160%);
+  transition: transform var(--dur-normal) var(--ease-soft);
+}
+.skip-link:focus {
+  transform: none;
+}
+
+.icon {
+  flex: none;
+}
+
+/* ---------- Reduced motion (design.md §37) ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .js .reveal,
+  .js .reveal[data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Hover and press feedback keeps its colour changes but stops moving */
+  .btn:hover,
+  .btn:active,
+  .btn:hover .icon-arrow,
+  .card:hover,
+  .card:hover .card__icon,
+  .card:hover .card__arrow,
+  .doc:hover {
+    transform: none !important;
+    translate: none !important;
+  }
+}

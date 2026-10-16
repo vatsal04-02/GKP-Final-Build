@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "note": "Grist objects the production workflow needs IN ADDITION to grist/schema.md. Applied per clinic document by scripts/migrate-grist.js (dry run by default). Table LEADS is the live name of the Leads table. Column ids are exact.",
+  "newTables": {
+    "Send_Ledger": {
+      "purpose": "One row per WhatsApp message the system may send (idempotency key). Written by W12 BEFORE Meta is called; settled by W12 and by W2 delivery statuses. Contains no phone number and no message text.",
+      "columns": [
+        {
+          "id": "Idem_Key",
+          "type": "Text",
+          "note": "stable key of the logical message, e.g. W5:reminder_24h:<Booking_UID>"
+        },
+        {
+          "id": "Status",
+          "type": "Choice",
+          "choices": [
+            "sending",
+            "accepted",
+            "uncertain",
+            "rejected",
+            "duplicate",
+            "delivered",
+            "read",
+            "failed",
+            "unconfirmed"
+          ]
+        },
+        {
+          "id": "Source",
+          "type": "Text"
+        },
+        {
+          "id": "Audience",
+          "type": "Text"
+        },
+        {
+          "id": "Template",
+          "type": "Text"
+        },
+        {
+          "id": "WA_Message_ID",
+          "type": "Text"
+        },
+        {
+          "id": "Error",
+          "type": "Text"
+        },
+        {
+          "id": "Error_Code",
+          "type": "Int"
+        },
+        {
+          "id": "Created_At",
+          "type": "DateTime"
+        },
+        {
+          "id": "Updated_At",
+          "type": "DateTime"
+        }
+      ]
+    }
+  },
+  "newColumns": {
+    "LEADS": [
+      {
+        "id": "Email",
+        "type": "Text",
+        "note": "optional, from the website form"
+      },
+      {
+        "id": "Email_Opted_Out",
+        "type": "Bool"
+      },
+      {
+        "id": "Consent_WhatsApp",
+        "type": "Bool",
+        "note": "true = the person agreed to be contacted on WhatsApp (form checkbox, patient-initiated chat, or a booking)"
+      },
+      {
+        "id": "Consent_Email",
+        "type": "Bool"
+      },
+      {
+        "id": "Consent_Source",
+        "type": "Text",
+        "note": "website-form | whatsapp-inbound | cal.com-booking | staff | legacy"
+      },
+      {
+        "id": "Consent_At",
+        "type": "DateTime"
+      },
+      {
+        "id": "Consent_Version",
+        "type": "Text",
+        "note": "version label of the consent text the person saw"
+      }
+    ]
+  },
+  "existing": {
+    "note": "the columns of grist/schema.md that the workflow reads or writes (LEADS is the live name of Leads). scripts/migrate-grist.js --check and scripts/preflight.js --online report what is missing; they never create these.",
+    "LEADS": [
+      "Lead_id",
+      "Created_At",
+      "Name",
+      "Phone",
+      "Source",
+      "Page_URL",
+      "UTM_Campaign",
+      "Enquiry",
+      "AI_Summary",
+      "Status",
+      "Next_Action_At",
+      "First_Response_At",
+      "Opted_Out",
+      "Escalated",
+      "Followup_Sent",
+      "Lead_Stage"
+    ],
+    "Appointments": [
+      "Booking_UID",
+      "Lead",
+      "Service",
+      "Physio",
+      "Start",
+      "End",
+      "Status",
+      "R24_Sent",
+      "R2_Sent",
+      "Rebook_Sent",
+      "Review_Sent",
+      "Outcome_Sent",
+      "Confirm_Sent"
+    ],
+    "Run_Log": [
+      "Workflow",
+      "Record",
+      "Outcome",
+      "Error",
+      "At"
+    ],
+    "Settings": [
+      "Key",
+      "Value"
+    ],
+    "Conversations": [
+      "Lead",
+      "Phone",
+      "Last_Inbound_At",
+      "Unread",
+      "Automation_Paused",
+      "Needs_Human",
+      "Last_Intent"
+    ],
+    "Messages": [
+      "Conversation",
+      "Direction",
+      "Body",
+      "Template",
+      "Sent_By",
+      "WA_Message_ID",
+      "Status",
+      "Send",
+      "Created_At"
+    ],
+    "Knowledge": [
+      "Title",
+      "Category",
+      "Content",
+      "Active"
+    ]
+  }
+}

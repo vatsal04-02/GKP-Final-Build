@@ -1,0 +1,90 @@
+---
+import { ticker } from '../data/site';
+
+// One half of the loop must be wider than any viewport, so the list is repeated within each half.
+const half = Array.from({ length: 4 }).flatMap(() => ticker);
+---
+
+<section id="glance" class="ticker curve surface-ivory" data-ambient aria-label="Conditions the clinic helps with">
+  <p class="sr-only">Conditions include {ticker.join(', ')}.</p>
+  <div class="ticker__viewport" aria-hidden="true">
+    <ul class="ticker__track drift">
+      {[0, 1].map(() => half.map((item) => <li>{item}</li>))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .ticker {
+    padding: calc(var(--curve) + 12px) 0 calc(var(--curve) + 8px); /* room for the dome of the next section */
+  }
+  .ticker__viewport {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  }
+  /* Two identical halves; sliding by exactly one half loops seamlessly. Transform only. */
+  .ticker__track {
+    display: flex;
+    width: max-content;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    animation: marquee 80s linear infinite;
+    will-change: transform;
+  }
+  .ticker:hover .ticker__track {
+    animation-play-state: paused;
+  }
+  .ticker__track li {
+    display: flex;
+    align-items: center;
+    font: italic 400 1.375rem/1 var(--font-serif);
+    color: color-mix(in srgb, var(--color-ink) 86%, transparent);
+    white-space: nowrap;
+  }
+  .ticker__track li::after {
+    content: '•';
+    margin-inline: 1.4rem;
+    font-style: normal;
+    font-size: 1rem;
+    color: var(--color-teal);
+  }
+
+  @media (max-width: 767px) {
+    .ticker__track li {
+      font-size: 15px;
+    }
+    .ticker__track li::after {
+      margin-inline: 1rem;
+      font-size: 0.8125rem;
+    }
+  }
+  @media (min-width: 768px) {
+    .ticker__track li {
+      font-size: 1.625rem;
+    }
+  }
+
+  /* No motion: show the list once, wrapped and centred */
+  @media (prefers-reduced-motion: reduce) {
+    .ticker__viewport {
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+    .ticker__track {
+      width: auto;
+      flex-wrap: wrap;
+      justify-content: center;
+      row-gap: 0.4rem;
+      padding-inline: 20px;
+      animation: none;
+    }
+    .ticker__track li:nth-child(n + 7) {
+      display: none;
+    }
+    .ticker__track li:nth-child(6)::after {
+      content: none;
+    }
+  }
+</style>

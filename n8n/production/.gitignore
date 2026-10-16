@@ -1,0 +1,11 @@
+# intermediate files written by apply-production-hardening.js
+.work/
+*.local.json
+data/
+data-staging/
+secrets/
+.env
+.env.staging
+*.local.json
+credentials.import.*
+backups/

@@ -1,0 +1,551 @@
+{
+  "name": "W3 - Speed-to-lead",
+  "nodes": [
+    {
+      "id": "79bd3509-24db-4fde-8973-336cdb0e8636",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        -460
+      ],
+      "parameters": {
+        "content": "## W3 - Speed-to-lead\nEvery 10 minutes, for every ACTIVE clinic that is OPEN right now: finds leads still on Status = New that have waited 30+ minutes\nand are not Escalated, runs the send guard, and (once WhatsApp is connected) alerts the clinic OWNER and ticks Escalated.\n\n**Today the send is a STUB.** \"Send escalation (stub)\" builds the message and sends nothing, and Escalated is not set,\nso nothing is lost when WhatsApp goes live. Open an execution and look at that node's output to see what would be sent.\n\n**Clinic hours** come from the clinic's Settings rows open_time (e.g. 09:00), close_time (e.g. 19:00) and working_days (e.g. Mon-Sat).\nMissing or unreadable = 08:00-21:00 every day. **Recipient** = Settings owner_phone; with TEST_MODE on (or the row missing) it goes to TEST_PHONE.\n\n**Limits (Config node):** waits 30 min; ignores leads older than 48 h (old backlog); at most 10 alerts per clinic per run, oldest first.\n\n**Set up once:** pick the *Grist API* credential in every Grist (HTTP Request) node, set registry_doc_id in Config\n(grist_base_url has no trailing slash), then Activate. Set Settings > Error workflow > W11.\n**When WhatsApp is ready:** replace \"Send escalation (stub)\" with the real send (output sent: true on success).",
+        "height": 400,
+        "width": 700
+      }
+    },
+    {
+      "id": "8d7c886e-40d5-4fa9-8410-8ff9647762b2",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "198a4286-e6c0-4a24-8e01-14365ee55313",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "24ec26fc-3fed-4513-9978-f9a4f740d274",
+              "name": "grist_base_url",
+              "value": "http://grist:8484",
+              "type": "string"
+            },
+            {
+              "id": "ccb1ddcd-e686-4b72-ae03-ede9a9efa176",
+              "name": "registry_doc_id",
+              "value": "REPLACE_WITH_AGENCY_REGISTRY_DOC_ID",
+              "type": "string"
+            },
+            {
+              "id": "9b7002d1-2e15-48ec-aeb5-774d6e514773",
+              "name": "new_for_minutes",
+              "value": 30,
+              "type": "number"
+            },
+            {
+              "id": "82a81059-18eb-4b01-a70e-ef1ba8d59f71",
+              "name": "max_age_hours",
+              "value": 48,
+              "type": "number"
+            },
+            {
+              "id": "345eb7a7-6345-47ae-b5da-5e2ed96ebdbe",
+              "name": "max_alerts_per_run",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      }
+    },
+    {
+      "id": "563d4377-fe7b-4891-8678-56bdd8d35296",
+      "name": "Clinics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.registry_doc_id }}/tables/Clinics/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Active: [true] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7f679432-56d6-48e1-892d-a57d356def6a",
+      "name": "Split clinics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const cfg = $('Config').first().json;\n  const base = String(cfg.grist_base_url || '').replace(/\\/+$/, '');\n  const clinics = ($input.first().json.records || []).filter(\n    (r) => r.fields && r.fields.Active === true && String(r.fields.Grist_Doc_ID || '').trim()\n  );\n  return clinics.map((r) => ({\n    json: {\n      grist_base_url: base,\n      doc_id: String(r.fields.Grist_Doc_ID).trim(),\n      clinic_slug: String(r.fields.Clinic_Slug || ''),\n      registry_clinic_name: String(r.fields.Clinic_Name || ''),\n    },\n    pairedItem: { item: 0 },\n  }));\n"
+      }
+    },
+    {
+      "id": "9b1dfcbc-c74d-40c6-9ff0-85eaf55e7290",
+      "name": "Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Settings/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f4c86e06-2fc5-454f-80c3-91fd7035a552",
+      "name": "Add settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Pasted from n8n/snippets/clinic-hours.js - keep identical.\nconst DAY_INDEX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };\n\nfunction parseClock(text) {\n  const m = String(text === null || text === undefined ? '' : text).trim().match(/^(\\d{1,2})(?:[:.](\\d{2}))?\\s*(a\\.?m\\.?|p\\.?m\\.?)?$/i);\n  if (!m) return null;\n  let h = parseInt(m[1], 10);\n  const min = m[2] ? parseInt(m[2], 10) : 0;\n  const meridiem = m[3] ? m[3][0].toLowerCase() : '';\n  if (min > 59) return null;\n  if (meridiem) {\n    if (h < 1 || h > 12) return null;\n    h = (h % 12) + (meridiem === 'p' ? 12 : 0);\n  } else if (h > 24 || (h === 24 && min > 0)) {\n    return null;\n  }\n  return h * 60 + min;   // minutes after midnight\n}\n\nfunction parseDays(text) {\n  const s = String(text === null || text === undefined ? '' : text).toLowerCase().replace(/[–—]/g, '-').replace(/\\s+to\\s+/g, '-').replace(/\\s+(and|&)\\s+/g, ',').trim();\n  if (!s) return null;\n  if (/^(daily|every ?day|all days|7 ?days?)$/.test(s)) return [0, 1, 2, 3, 4, 5, 6];\n  const dayOf = (t) => {\n    const x = t.trim();\n    return /^(sun|mon|tue|wed|thu|fri|sat)[a-z]*\\.?$/.test(x) ? DAY_INDEX[x.slice(0, 3)] : undefined;\n  };\n  const days = new Set();\n  for (const token of s.split(/[,;/]+/)) {\n    if (!token.trim()) continue;\n    if (token.includes('-')) {\n      const [a, b] = token.split('-').map(dayOf);\n      if (a === undefined || b === undefined) return null;\n      for (let d = a; ; d = (d + 1) % 7) { days.add(d); if (d === b) break; }\n    } else {\n      const d = dayOf(token);\n      if (d === undefined) return null;\n      days.add(d);\n    }\n  }\n  return days.size ? [...days].sort() : null;   // 0 = Sunday\n}\n\nfunction isOpenNow(i) {\n  if (!Number.isFinite(i.now_ms)) return { open: false, source: 'default' };\n  let open = parseClock(i.open_time);\n  let close = parseClock(i.close_time);\n  let days = parseDays(i.working_days);\n  let source = 'settings';\n  if (open === null || close === null || close <= open) { open = 8 * 60; close = 21 * 60; source = 'default'; }\n  if (days === null) { days = [0, 1, 2, 3, 4, 5, 6]; source = 'default'; }\n  const t = new Date(i.now_ms + 5.5 * 3600 * 1000);   // IST wall-clock via UTC getters\n  const minutes = t.getUTCHours() * 60 + t.getUTCMinutes();\n  return { open: days.includes(t.getUTCDay()) && minutes >= open && minutes < close, source };\n}\n\n  const clinics = $('Split clinics').all();\n  return $input.all().map((item, i) => {\n    const s = {};\n    for (const r of item.json.records || []) {\n      const f = r.fields || {};\n      if (f.Key) s[String(f.Key).trim()] = f.Value;\n    }\n    const hours = isOpenNow({ open_time: s.open_time, close_time: s.close_time, working_days: s.working_days, now_ms: Date.now() });\n    return {\n      json: {\n        ...clinics[i].json,\n        clinic_name: String(s.clinic_name || clinics[i].json.registry_clinic_name || ''),\n        owner_phone: s.owner_phone,\n        test_mode: s.TEST_MODE,         // raw text; a missing row means TEST_MODE is ON (see send-guard.js)\n        test_phone: s.TEST_PHONE,\n        open_now: hours.open,\n        hours_source: hours.source,      // 'default' = open_time / close_time / working_days missing or unreadable\n      },\n      pairedItem: { item: i },\n    };\n  });\n"
+      }
+    },
+    {
+      "id": "96c6d902-f31c-4137-8aa6-b64180bb1c5d",
+      "name": "Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Status: [\"New\"] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "079eef88-c051-4b14-865c-fc2c9ac8a665",
+      "name": "Find due",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const cfg = $('Config').first().json;\n  const nowMs = Date.now();\n  const minAge = Number(cfg.new_for_minutes);           // waiting at least this long ...\n  const maxAge = Number(cfg.max_age_hours) * 60;        // ... but not an old backlog\n  const cap = Number(cfg.max_alerts_per_run);           // per clinic per run, oldest first\n  const clinics = $('Add settings').all();\n  const out = [];\n\n  $input.all().forEach((item, i) => {\n    const base = clinics[i].json;\n    if (!base.open_now) return;                         // outside clinic hours: leave everything for the next run\n\n    const due = (item.json.records || [])\n      .filter((r) => {\n        const f = r.fields || {};\n        if (f.Status !== 'New' || f.Escalated || typeof f.Created_At !== 'number') return false;\n        const minutes = (nowMs - f.Created_At * 1000) / 60000;\n        return minutes >= minAge && minutes <= maxAge;\n      })\n      .sort((a, b) => a.fields.Created_At - b.fields.Created_At)\n      .slice(0, cap);\n\n    for (const r of due) {\n      const f = r.fields;\n      out.push({\n        json: {\n          ...base,\n          lead_row_id: r.id,\n          lead_id: f.Lead_ID || `row ${r.id}`,\n          lead_name: String(f.Name || ''),\n          lead_phone: String(f.Phone || ''),\n          source: String(f.Source || ''),\n          enquiry: String(f.Enquiry || '').replace(/\\s+/g, ' ').trim().slice(0, 200),\n          waiting_minutes: Math.floor((nowMs - f.Created_At * 1000) / 60000),\n          escalated: !!f.Escalated,\n        },\n        pairedItem: { item: i },\n      });\n    }\n  });\n  return out;\n"
+      }
+    },
+    {
+      "id": "1f5bbb47-10ff-486d-8639-d3b3c74d0d75",
+      "name": "Decide send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js and n8n/snippets/send-guard.js - keep identical.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  let digits = String(raw).replace(/\\D/g, '');          // keep digits only\n  if (digits.startsWith('0091')) digits = digits.slice(4);\n  else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);\n  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);\n  const valid = /^[6-9]\\d{9}$/.test(digits);            // Indian mobiles start 6-9\n  return { phone: valid ? `+91${digits}` : null, valid };\n}\n\nfunction isTestMode(value) {\n  const v = String(value === null || value === undefined ? '' : value).trim().toLowerCase();\n  return !['false', '0', 'no', 'off'].includes(v);   // anything else, including a missing row, means ON (fail safe)\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nfunction decideSend(i) {\n  const testMode = isTestMode(i.test_mode);\n  const skip = (reason) => ({ send: false, to: null, reason, test_mode: testMode });\n\n  if (i.flag_value) return skip('already sent');\n  if (i.opted_out) return skip('opted out');\n  if (i.kind !== 'transactional' && i.automation_paused) return skip('automation paused');\n  if (inQuietHours(i.now_ms)) return skip('quiet hours');\n\n  const to = testMode ? i.test_phone : i.patient_phone;\n  if (!to) return skip(testMode ? 'test mode on but TEST_PHONE is missing or invalid' : 'no valid patient phone');\n  return { send: true, to, reason: testMode ? 'test mode: sent to TEST_PHONE' : 'ok', test_mode: testMode };\n}\n\n  const { phone: owner_phone } = normalizeIndianPhone($json.owner_phone);\n  const { phone: test_phone } = normalizeIndianPhone($json.test_phone);\n  const decision = decideSend({\n    kind: 'transactional',\n    flag_value: $json.escalated ? 1 : null,    // the Escalated toggle is this alert's \"sent\" flag (rule 4)\n    opted_out: false,\n    automation_paused: false,\n    patient_phone: owner_phone,                // \"patient_phone\" is just the guard's name for the recipient\n    test_mode: $json.test_mode,\n    test_phone,\n    now_ms: Date.now(),\n  });\n  return { json: { ...$json, decision, send: decision.send } };\n"
+      }
+    },
+    {
+      "id": "841d2b06-a179-4a36-b940-5a60587b96b0",
+      "name": "Send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c9cff1b0-152f-4535-aff3-5fac096f237b",
+              "leftValue": "={{ $json.send }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9c7e49b1-a134-4ce9-b55d-454904ed0d17",
+      "name": "Send escalation (stub)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -20
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const who = $json.lead_name || 'no name';\n  const quote = $json.enquiry ? ` - \"${$json.enquiry}\"` : '';\n  return {\n    json: {\n      ...$json,\n      template: 'new_lead_staff_alert',\n      template_params: {\n        clinic_name: $json.clinic_name, lead_name: who, lead_phone: $json.lead_phone, source: $json.source,\n        waiting_minutes: $json.waiting_minutes, enquiry: $json.enquiry,\n      },\n      message_text: `Lead waiting ${$json.waiting_minutes} min with no response (${$json.clinic_name}): ${who}, ${$json.lead_phone}${quote}. ${$json.lead_id}.`,\n      sent: false,\n      stub: true,\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "b3c99238-37d1-4673-bf7c-912fef0fe414",
+      "name": "Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e8abb11e-273c-4441-bd53-8c4041334f32",
+              "leftValue": "={{ $json.sent }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a21ac2c5-cb31-45a6-a240-e022c2f617e1",
+      "name": "Prepare sent log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -20
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const now = Math.floor(Date.now() / 1000);\n  return {\n    json: {\n      ...$json,\n      patch: { records: [{ id: $json.lead_row_id, fields: { Escalated: true } }] },\n      log: { Workflow: 'W3-speed-to-lead', Record: `${$json.lead_id} (escalated)`, Outcome: 'ok', Error: '', At: now },\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "f9facc9f-16a6-42c0-be49-0626ba36eb1c",
+      "name": "Set Escalated",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        -40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Prepare sent log').item.json.grist_base_url }}/api/docs/{{ $('Prepare sent log').item.json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare sent log').item.json.patch) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "16e0c591-dd8e-49be-baca-0d7411f9e983",
+      "name": "Write Run_Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        -40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare sent log').item.json.grist_base_url }}/api/docs/{{ $('Prepare sent log').item.json.doc_id }}/tables/Run_Log/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $('Prepare sent log').item.json.log }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinics": {
+      "main": [
+        [
+          {
+            "node": "Split clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split clinics": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Add settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add settings": {
+      "main": [
+        [
+          {
+            "node": "Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leads": {
+      "main": [
+        [
+          {
+            "node": "Find due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find due": {
+      "main": [
+        [
+          {
+            "node": "Decide send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide send": {
+      "main": [
+        [
+          {
+            "node": "Send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send?": {
+      "main": [
+        [
+          {
+            "node": "Send escalation (stub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send escalation (stub)": {
+      "main": [
+        [
+          {
+            "node": "Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sent?": {
+      "main": [
+        [
+          {
+            "node": "Prepare sent log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare sent log": {
+      "main": [
+        [
+          {
+            "node": "Set Escalated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Escalated": {
+      "main": [
+        [
+          {
+            "node": "Write Run_Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

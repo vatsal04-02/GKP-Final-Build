@@ -1,0 +1,63 @@
+# FREE local version: runs n8n + Grist on your laptop and publishes them on your own
+# domain through a Cloudflare Tunnel (no server, no open ports, free HTTPS).
+#
+# Usage:  docker compose -f docker-compose.local.yml up -d
+# Needs in .env: N8N_DOMAIN, GRIST_DOMAIN, secrets, Google login, CLOUDFLARE_TUNNEL_TOKEN
+# In the Cloudflare dashboard (Zero Trust > Networks > Tunnels > your tunnel > Public hostnames):
+#   n8n.<domain>  ->  http://n8n:5678
+#   crm.<domain>  ->  http://grist:8484
+#
+# Limit: everything stops when the laptop sleeps or goes offline. Fine for building and demos,
+# NOT for a live clinic (reminders would be missed). Move to an always-on server before go-live.
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - n8n
+      - grist
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=${N8N_DOMAIN}
+      - N8N_PROTOCOL=https
+      - N8N_PORT=5678
+      - WEBHOOK_URL=https://${N8N_DOMAIN}/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - TZ=Asia/Kolkata
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  grist:
+    image: gristlabs/grist:${GRIST_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - APP_HOME_URL=https://${GRIST_DOMAIN}
+      - GRIST_SESSION_SECRET=${GRIST_SESSION_SECRET}
+      - GRIST_DEFAULT_EMAIL=${GRIST_ADMIN_EMAIL}
+      - GRIST_SINGLE_ORG=${GRIST_TEAM_NAME}
+      - GRIST_FORCE_LOGIN=true
+      # gvisor often isn't available in Docker Desktop. If formulas show errors on your
+      # laptop, set GRIST_SANDBOX_FLAVOR=unsandboxed in .env (demo data only; use gvisor on a server).
+      - GRIST_SANDBOX_FLAVOR=${GRIST_SANDBOX_FLAVOR:-gvisor}
+      - GRIST_OIDC_IDP_ISSUER=https://accounts.google.com
+      - GRIST_OIDC_IDP_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GRIST_OIDC_IDP_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GRIST_OIDC_IDP_SCOPES=openid email profile
+    volumes:
+      - grist_data:/persist
+
+volumes:
+  n8n_data:
+  grist_data:

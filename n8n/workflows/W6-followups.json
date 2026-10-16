@@ -1,0 +1,750 @@
+{
+  "name": "W6 - Follow-ups",
+  "nodes": [
+    {
+      "id": "16d53e0c-8aca-44b6-ba6f-a33cd10f43ed",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        -520
+      ],
+      "parameters": {
+        "content": "## W6 - Follow-ups (daily 10:00 India time)\nFor every ACTIVE clinic in the Agency Registry:\n1. **No-show rebook** - appointments marked No-show yesterday or the day before, Rebook_Sent empty, patient has no new booking -> \"we missed you\" message (one per patient).\n2. **Day-2 follow-up** - leads still New / Contacted, created 2-6 days ago, Followup_Sent off, nothing booked -> one \"would you like to book?\" message.\n3. **Mark Lost** - leads still New / Contacted 7+ days after they came in, nothing booked, no future Next_Action_At -> Status = Lost, Lost_Reason = No response.\n   This one is a REAL change today (it is not a message). Set mark_lost to false in Config to switch it off.\n\n**Messages are a STUB today.** \"Send message (stub)\" builds them and sends nothing; no flag is set, so nothing is lost when WhatsApp goes live.\nThe send guard runs first: skips opted-out patients, conversations with Automation_Paused (follow-ups count as marketing), quiet hours;\nTEST_MODE (or the row missing) sends to TEST_PHONE. The booking link comes from Settings > booking_link.\n\n**Config:** lookback 2 days for no-shows, follow-up after 2 days, Lost after 7 days, max 30 follow-ups and 50 Lost per clinic per run.\n**Set up once:** pick the *Grist API* credential in every Grist (HTTP Request) node, set registry_doc_id, Settings > Error workflow > W11, Activate.\n**When WhatsApp is ready:** replace \"Send message (stub)\" with the real send (output sent: true on success).",
+        "height": 460,
+        "width": 760
+      }
+    },
+    {
+      "id": "334a3d16-2862-4893-822c-fcb559927990",
+      "name": "Daily 10:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a9d13684-9bd8-4840-81d7-835a2c851271",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "15d67324-2d69-472b-a4af-51b298886257",
+              "name": "grist_base_url",
+              "value": "http://grist:8484",
+              "type": "string"
+            },
+            {
+              "id": "48d67462-d955-40c3-9872-f5babbf7f096",
+              "name": "registry_doc_id",
+              "value": "REPLACE_WITH_AGENCY_REGISTRY_DOC_ID",
+              "type": "string"
+            },
+            {
+              "id": "7793d227-4fc4-4db8-afd9-40a0b8869713",
+              "name": "noshow_lookback_days",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "231a9ae0-df21-4019-9215-ba7f28d48c08",
+              "name": "followup_after_days",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "e48da688-ec11-4710-b14e-af498a99f9bf",
+              "name": "lost_after_days",
+              "value": 7,
+              "type": "number"
+            },
+            {
+              "id": "608a01bd-7548-453a-9619-0f36bf50482b",
+              "name": "max_followups_per_run",
+              "value": 30,
+              "type": "number"
+            },
+            {
+              "id": "9dc144dd-be75-449e-b2db-81f1a3f5e335",
+              "name": "max_lost_per_run",
+              "value": 50,
+              "type": "number"
+            },
+            {
+              "id": "ae98793e-26f3-4009-9a01-00b3b99882bb",
+              "name": "mark_lost",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      }
+    },
+    {
+      "id": "d22f79fb-128d-4e70-ae96-c075e5dc42aa",
+      "name": "Clinics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.registry_doc_id }}/tables/Clinics/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Active: [true] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d297a1a2-1bca-4fcc-abee-aa0173c904d0",
+      "name": "Split clinics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const cfg = $('Config').first().json;\n  const base = String(cfg.grist_base_url || '').replace(/\\/+$/, '');\n  const clinics = ($input.first().json.records || []).filter(\n    (r) => r.fields && r.fields.Active === true && String(r.fields.Grist_Doc_ID || '').trim()\n  );\n  return clinics.map((r) => ({\n    json: {\n      grist_base_url: base,\n      doc_id: String(r.fields.Grist_Doc_ID).trim(),\n      clinic_slug: String(r.fields.Clinic_Slug || ''),\n      registry_clinic_name: String(r.fields.Clinic_Name || ''),\n    },\n    pairedItem: { item: 0 },\n  }));\n"
+      }
+    },
+    {
+      "id": "47a79d59-0176-4a73-90b6-4a060e7d9222",
+      "name": "Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Settings/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5f019199-c649-4916-84fc-9787abe15ecd",
+      "name": "Add settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const clinics = $('Split clinics').all();\n  return $input.all().map((item, i) => {\n    const s = {};\n    for (const r of item.json.records || []) {\n      const f = r.fields || {};\n      if (f.Key) s[String(f.Key).trim()] = f.Value;\n    }\n    return {\n      json: {\n        ...clinics[i].json,\n        clinic_name: String(s.clinic_name || clinics[i].json.registry_clinic_name || ''),\n        booking_link: String(s.booking_link || '').trim(),\n        test_mode: s.TEST_MODE,          // raw text; a missing row means TEST_MODE is ON (see send-guard.js)\n        test_phone: s.TEST_PHONE,\n      },\n      pairedItem: { item: i },\n    };\n  });\n"
+      }
+    },
+    {
+      "id": "3d26e472-e2e4-442d-86ef-1fa52efe88f1",
+      "name": "Appointments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Appointments/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Status: [\"No-show\", \"Booked\"] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a12d06a1-bf89-4343-9453-94689192684d",
+      "name": "Add appointments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const clinics = $('Add settings').all();\n  return $input.all().map((item, i) => ({ json: { ...clinics[i].json, appointments: item.json.records || [] }, pairedItem: { item: i } }));\n"
+      }
+    },
+    {
+      "id": "edc872f8-19b9-44c3-b46c-ea5312bbf84d",
+      "name": "Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2d1c9540-1636-4fa0-a32d-498626912a98",
+      "name": "Add leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const clinics = $('Add appointments').all();\n  return $input.all().map((item, i) => ({ json: { ...clinics[i].json, leads: item.json.records || [] }, pairedItem: { item: i } }));\n"
+      }
+    },
+    {
+      "id": "a11c7680-94d0-45d0-afe3-c29764bbcc1e",
+      "name": "Conversations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Conversations/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8846cae1-5aea-430b-a90d-2f1e2c2bc548",
+      "name": "Plan follow-ups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const cfg = $('Config').first().json;\n  const nowMs = Date.now();\n  const DAY = 86400000;\n  const IST = 5.5 * 3600 * 1000;\n  const dayNo = (sec) => Math.floor((sec * 1000 + IST) / DAY);   // India calendar day number\n  const today = dayNo(nowMs / 1000);\n  const daysAgo = (sec) => today - dayNo(sec);                  // whole India calendar days ago (0 = today)\n  const lookback = Number(cfg.noshow_lookback_days);\n  const followupAfter = Number(cfg.followup_after_days);\n  const lostAfter = Number(cfg.lost_after_days);\n  const maxFollowups = Number(cfg.max_followups_per_run);\n  const maxLost = Number(cfg.max_lost_per_run);\n  const OPEN = ['New', 'Contacted'];                            // not booked, not lost, not converted\n  const clinics = $('Add leads').all();\n  const out = [];\n\n  $input.all().forEach((conv, i) => {\n    const { appointments, leads: leadRows, ...ctx } = clinics[i].json;\n    const leads = {};\n    for (const r of leadRows) leads[String(r.id)] = r.fields || {};\n    const paused = new Set();\n    for (const r of conv.json.records || []) {\n      const f = r.fields || {};\n      if (f.Automation_Paused === true && f.Lead) paused.add(String(f.Lead));\n    }\n    const futureBooked = new Set();                             // leads that already have an upcoming appointment\n    for (const a of appointments) {\n      const f = a.fields || {};\n      if (f.Status === 'Booked' && f.Lead && typeof f.Start === 'number' && f.Start * 1000 >= nowMs) futureBooked.add(String(f.Lead));\n    }\n    const person = (id) => {\n      const f = leads[id];\n      return {\n        lead_row_id: Number(id),\n        lead_id: f.Lead_ID || `row ${id}`,\n        lead_name: String(f.Name || ''),\n        lead_phone: String(f.Phone || ''),\n        opted_out: f.Opted_Out === true,\n        automation_paused: paused.has(id),\n      };\n    };\n    const push = (json) => out.push({ json: { ...ctx, ...json }, pairedItem: { item: i } });\n\n    // 1. No-show rebook: the newest no-show per patient from the last `lookback` days (not today), Rebook_Sent empty.\n    const noShow = {};\n    for (const a of appointments) {\n      const f = a.fields || {};\n      if (f.Status !== 'No-show' || f.Rebook_Sent || !f.Lead || typeof f.Start !== 'number') continue;\n      const d = daysAgo(f.Start);\n      if (d < 1 || d > lookback) continue;\n      const id = String(f.Lead);\n      if (!noShow[id] || f.Start > noShow[id].fields.Start) noShow[id] = a;\n    }\n    for (const [id, a] of Object.entries(noShow)) {\n      if (!leads[id] || futureBooked.has(id)) continue;          // already rebooked: nothing to chase\n      push({\n        kind: 'rebook', template: 'noshow_rebook', ...person(id),\n        flag_table: 'Appointments', flag_row_id: a.id, flag_column: 'Rebook_Sent', flag_value: a.fields.Rebook_Sent || null,\n        booking_uid: a.fields.Booking_UID || `row ${a.id}`, service: String(a.fields.Service || ''), appt_start: a.fields.Start,\n      });\n    }\n\n    // 2. One follow-up: open leads created `followupAfter` to `lostAfter - 1` days ago, Followup_Sent off, nothing booked.\n    const isOpen = (r) => {\n      const f = r.fields || {};\n      return OPEN.includes(f.Status) && typeof f.Created_At === 'number' && !futureBooked.has(String(r.id));\n    };\n    const age = (r) => daysAgo(r.fields.Created_At);\n    const oldestFirst = (a, b) => a.fields.Created_At - b.fields.Created_At;\n    leadRows\n      .filter((r) => isOpen(r) && !r.fields.Followup_Sent && age(r) >= followupAfter && age(r) < lostAfter)\n      .sort(oldestFirst)\n      .slice(0, maxFollowups)\n      .forEach((r) => push({\n        kind: 'followup', template: 'followup_day2', ...person(String(r.id)),\n        flag_table: 'Leads', flag_row_id: r.id, flag_column: 'Followup_Sent', flag_value: r.fields.Followup_Sent ? 1 : null,\n      }));\n\n    // 3. Mark Lost: open leads `lostAfter`+ days old, unless staff have a call-back planned (Next_Action_At in the future).\n    if (cfg.mark_lost !== false) {\n      leadRows\n        .filter((r) => isOpen(r) && age(r) >= lostAfter && !(typeof r.fields.Next_Action_At === 'number' && r.fields.Next_Action_At * 1000 > nowMs))\n        .sort(oldestFirst)\n        .slice(0, maxLost)\n        .forEach((r) => push({ kind: 'lost', ...person(String(r.id)) }));\n    }\n  });\n  return out;\n"
+      }
+    },
+    {
+      "id": "9468a2a0-9b33-4d12-aa62-42ad0e6be909",
+      "name": "Needs send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3fdab0bb-7fe5-4abe-a70d-d26be195c9ce",
+              "leftValue": "={{ $json.kind !== 'lost' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c4783208-3f75-4159-b2c4-f367810775a1",
+      "name": "Decide send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js and n8n/snippets/send-guard.js - keep identical.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  let digits = String(raw).replace(/\\D/g, '');          // keep digits only\n  if (digits.startsWith('0091')) digits = digits.slice(4);\n  else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);\n  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);\n  const valid = /^[6-9]\\d{9}$/.test(digits);            // Indian mobiles start 6-9\n  return { phone: valid ? `+91${digits}` : null, valid };\n}\n\nfunction isTestMode(value) {\n  const v = String(value === null || value === undefined ? '' : value).trim().toLowerCase();\n  return !['false', '0', 'no', 'off'].includes(v);   // anything else, including a missing row, means ON (fail safe)\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nfunction decideSend(i) {\n  const testMode = isTestMode(i.test_mode);\n  const skip = (reason) => ({ send: false, to: null, reason, test_mode: testMode });\n\n  if (i.flag_value) return skip('already sent');\n  if (i.opted_out) return skip('opted out');\n  if (i.kind !== 'transactional' && i.automation_paused) return skip('automation paused');\n  if (inQuietHours(i.now_ms)) return skip('quiet hours');\n\n  const to = testMode ? i.test_phone : i.patient_phone;\n  if (!to) return skip(testMode ? 'test mode on but TEST_PHONE is missing or invalid' : 'no valid patient phone');\n  return { send: true, to, reason: testMode ? 'test mode: sent to TEST_PHONE' : 'ok', test_mode: testMode };\n}\n\n  const { phone: patient_phone } = normalizeIndianPhone($json.lead_phone);\n  const { phone: test_phone } = normalizeIndianPhone($json.test_phone);\n  const decision = decideSend({\n    kind: 'marketing',                 // follow-ups: Automation_Paused stops them (guide, section 6)\n    flag_value: $json.flag_value,\n    opted_out: $json.opted_out,\n    automation_paused: $json.automation_paused,\n    patient_phone,\n    test_mode: $json.test_mode,\n    test_phone,\n    now_ms: Date.now(),\n  });\n  return { json: { ...$json, decision, send: decision.send } };\n"
+      }
+    },
+    {
+      "id": "cff8b746-fb82-4788-995d-3edfdb1f8d4a",
+      "name": "Send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3080,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "18f3a706-97ff-41f1-be19-50a4da3f9ed2",
+              "leftValue": "={{ $json.send }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "377d75d6-b85f-45bf-83b3-161b93a0e268",
+      "name": "Send message (stub)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        -120
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\n  const name = $json.lead_name || 'there';\n  const clinic = $json.clinic_name;\n  const link = $json.booking_link ? ` Book a time here: ${$json.booking_link}` : '';\n  let template_params;\n  let message_text;\n  if ($json.kind === 'rebook') {\n    const t = new Date($json.appt_start * 1000 + 5.5 * 3600 * 1000);   // IST wall-clock via UTC getters\n    const date = `${String(t.getUTCDate()).padStart(2, '0')} ${MONTHS[t.getUTCMonth()]}`;\n    const service = $json.service || 'appointment';\n    template_params = { name, clinic_name: clinic, service, date, booking_link: $json.booking_link };\n    message_text = `Hi ${name}, we missed you at your ${service} at ${clinic} on ${date}.${link}`;\n  } else {\n    template_params = { name, clinic_name: clinic, booking_link: $json.booking_link };\n    message_text = `Hi ${name}, thanks for contacting ${clinic}. Would you like to book your visit?${link}`;\n  }\n  return { json: { ...$json, template_params, message_text, sent: false, stub: true } };\n"
+      }
+    },
+    {
+      "id": "41f76faf-58f1-445b-9db5-eff4b14ec22a",
+      "name": "Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3520,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0823a8c0-7bee-4758-9f44-d19ba1c95247",
+              "leftValue": "={{ $json.sent }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7e1996d1-a65c-4483-be1b-41cfb0628298",
+      "name": "Prepare writes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        60
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const now = Math.floor(Date.now() / 1000);\n  const log = (record) => ({ Workflow: 'W6-followups', Record: record, Outcome: 'ok', Error: '', At: now });\n  if ($json.kind === 'lost') {\n    return {\n      json: {\n        ...$json,\n        patch_table: 'Leads',\n        patch: { records: [{ id: $json.lead_row_id, fields: { Status: 'Lost', Lost_Reason: 'No response' } }] },\n        log: log(`${$json.lead_id} (lost: no response)`),\n      },\n    };\n  }\n  // after a real send: tick the flag on the row the message was about (rule 4: right after the send)\n  const value = $json.flag_column === 'Rebook_Sent' ? now : true;   // Rebook_Sent is a DateTime, Followup_Sent a Toggle\n  const record = $json.kind === 'rebook' ? `${$json.booking_uid} (rebook) ${$json.lead_id}` : `${$json.lead_id} (followup)`;\n  return {\n    json: {\n      ...$json,\n      patch_table: $json.flag_table,\n      patch: { records: [{ id: $json.flag_row_id, fields: { [$json.flag_column]: value } }] },\n      log: log(record),\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "58a1bae9-05aa-4385-a5ba-ec768e43cc94",
+      "name": "Apply patch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3960,
+        60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/{{ $json.patch_table }}/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.patch) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "4b420265-a015-4e10-815b-5afe600177e1",
+      "name": "Write Run_Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare writes').item.json.grist_base_url }}/api/docs/{{ $('Prepare writes').item.json.doc_id }}/tables/Run_Log/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $('Prepare writes').item.json.log }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Daily 10:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinics": {
+      "main": [
+        [
+          {
+            "node": "Split clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split clinics": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Add settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add settings": {
+      "main": [
+        [
+          {
+            "node": "Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appointments": {
+      "main": [
+        [
+          {
+            "node": "Add appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add appointments": {
+      "main": [
+        [
+          {
+            "node": "Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leads": {
+      "main": [
+        [
+          {
+            "node": "Add leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add leads": {
+      "main": [
+        [
+          {
+            "node": "Conversations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversations": {
+      "main": [
+        [
+          {
+            "node": "Plan follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Needs send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide send": {
+      "main": [
+        [
+          {
+            "node": "Send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message (stub)": {
+      "main": [
+        [
+          {
+            "node": "Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare writes": {
+      "main": [
+        [
+          {
+            "node": "Apply patch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply patch": {
+      "main": [
+        [
+          {
+            "node": "Write Run_Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs send?": {
+      "main": [
+        [
+          {
+            "node": "Decide send",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare writes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send?": {
+      "main": [
+        [
+          {
+            "node": "Send message (stub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sent?": {
+      "main": [
+        [
+          {
+            "node": "Prepare writes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "pinData": {},
+  "tags": []
+}

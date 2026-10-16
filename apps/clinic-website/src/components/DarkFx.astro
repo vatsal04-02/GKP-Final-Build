@@ -1,0 +1,51 @@
+---
+/**
+ * Texture for dark sections: two soft gradient orbs (teal + warm orange at 20% opacity) and a
+ * static film-grain layer. Radial gradients stand in for blur(), so there's no filter cost,
+ * and the orbs only animate while their section is on screen.
+ */
+interface Props {
+  /** Which corners the orbs sit in. */
+  flip?: boolean;
+}
+const { flip = false } = Astro.props;
+---
+
+<div class:list={['fx', { 'fx--flip': flip }]} aria-hidden="true">
+  <span class="orb fx-teal"></span>
+  <span class="orb fx-warm"></span>
+  <span class="grain"></span>
+</div>
+
+<style>
+  .fx {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .fx-teal,
+  .fx-warm {
+    --s: min(720px, 90vw);
+    opacity: 0.2;
+  }
+  .fx-teal {
+    --c: color-mix(in srgb, #0f766e 70%, white);
+    left: -14%;
+    top: -4%;
+    --dur: 42s;
+  }
+  .fx-warm {
+    --c: #ea580c;
+    right: -16%;
+    bottom: -30%;
+    --dur: 50s;
+  }
+  .fx--flip .fx-teal {
+    left: auto;
+    right: -14%;
+  }
+  .fx--flip .fx-warm {
+    right: auto;
+    left: -16%;
+  }
+</style>

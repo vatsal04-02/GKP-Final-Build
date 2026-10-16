@@ -1,0 +1,21 @@
+# secrets and local configuration: never commit
+.env
+.env.*
+!.env.example
+!*.env.example
+*.local.json
+credentials.import.*
+secrets/
+# private originals / backups (they contain live values)
+backup/
+backups/
+*.grist
+# generated / local artifacts
+node_modules/
+dist/
+.astro/
+.vercel/
+test-results/
+*.log
+.DS_Store
+.work/

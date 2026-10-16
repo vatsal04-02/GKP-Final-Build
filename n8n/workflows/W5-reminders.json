@@ -1,0 +1,621 @@
+{
+  "name": "W5 - Appointment reminders",
+  "nodes": [
+    {
+      "id": "45854ab3-ca49-492a-886b-b59a920e51a9",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        -460
+      ],
+      "parameters": {
+        "content": "## W5 - Appointment reminders (24h and 2h)\nEvery 15 minutes, for every ACTIVE clinic in the Agency Registry: finds Booked appointments that are due a reminder,\nruns the send guard, and (once WhatsApp is connected) sends and ticks R24_Sent / R2_Sent.\n\n**Today the send is a STUB.** \"Send reminder (stub)\" builds the message and sends nothing, and no sent flag is set,\nso nothing is lost when WhatsApp goes live. Open an execution and look at that node's output to see what would be sent.\n\n**Send guard** (n8n/snippets/send-guard.js): skips if already sent, patient opted out, quiet hours 21:00-08:00 IST.\n**TEST_MODE** (clinic Settings row): sends go to TEST_PHONE instead of the patient. A missing TEST_MODE row counts as ON.\n\n**Windows** (Config node): 24h reminder when the appointment is 20-24 hours away; 2h reminder when it is 45-120 minutes away.\n\n**Set up once:** pick the *Grist API* credential in every Grist (HTTP Request) node, set registry_doc_id in Config\n(grist_base_url has no trailing slash),\nthen Activate. Needs the W11 error workflow set under Settings > Error workflow.\n**When WhatsApp is ready:** replace \"Send reminder (stub)\" with the real send (output sent: true on success).",
+        "height": 400,
+        "width": 680
+      }
+    },
+    {
+      "id": "6eda259f-c3fb-4bc9-b171-c8e67b9c34bd",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "43164a15-6a65-451e-8a7b-f159611e7ea5",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1e1dcca-f572-4cec-a7b3-178a52c4d9f8",
+              "name": "grist_base_url",
+              "value": "http://grist:8484",
+              "type": "string"
+            },
+            {
+              "id": "63fbe2e4-cfb1-4cb9-b61d-b1b802240c8d",
+              "name": "registry_doc_id",
+              "value": "REPLACE_WITH_AGENCY_REGISTRY_DOC_ID",
+              "type": "string"
+            },
+            {
+              "id": "b7b07836-31bf-4f8c-ac94-9641032c5b08",
+              "name": "r24_min_hours",
+              "value": 20,
+              "type": "number"
+            },
+            {
+              "id": "f4421c6e-d412-4837-94d7-b85e32d55071",
+              "name": "r24_max_hours",
+              "value": 24,
+              "type": "number"
+            },
+            {
+              "id": "3d439059-3a89-4e3e-813e-8314fe5cff89",
+              "name": "r2_min_minutes",
+              "value": 45,
+              "type": "number"
+            },
+            {
+              "id": "fbb544fd-2020-40ac-ab73-dfa36a085f7e",
+              "name": "r2_max_minutes",
+              "value": 120,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      }
+    },
+    {
+      "id": "12739ff3-b16e-42e9-9796-f94139a73af1",
+      "name": "Clinics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.registry_doc_id }}/tables/Clinics/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Active: [true] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "42fa415a-4b9f-48d4-998e-c5bce9554c61",
+      "name": "Split clinics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const cfg = $('Config').first().json;\n  const base = String(cfg.grist_base_url || '').replace(/\\/+$/, '');\n  const clinics = ($input.first().json.records || []).filter(\n    (r) => r.fields && r.fields.Active === true && String(r.fields.Grist_Doc_ID || '').trim()\n  );\n  return clinics.map((r) => ({\n    json: {\n      grist_base_url: base,\n      doc_id: String(r.fields.Grist_Doc_ID).trim(),\n      clinic_slug: String(r.fields.Clinic_Slug || ''),\n      registry_clinic_name: String(r.fields.Clinic_Name || ''),\n    },\n    pairedItem: { item: 0 },\n  }));\n"
+      }
+    },
+    {
+      "id": "a70b58da-d8a9-4df4-a061-8ae6d6eb4623",
+      "name": "Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Settings/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "87dd9f58-3912-488c-a512-ea780c395afe",
+      "name": "Add settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const clinics = $('Split clinics').all();\n  return $input.all().map((item, i) => {\n    const s = {};\n    for (const r of item.json.records || []) {\n      const f = r.fields || {};\n      if (f.Key) s[String(f.Key).trim()] = f.Value;\n    }\n    return {\n      json: {\n        ...clinics[i].json,\n        clinic_name: String(s.clinic_name || clinics[i].json.registry_clinic_name || ''),\n        test_mode: s.TEST_MODE,       // raw text; a missing row means TEST_MODE is ON (see send-guard.js)\n        test_phone: s.TEST_PHONE,\n      },\n      pairedItem: { item: i },\n    };\n  });\n"
+      }
+    },
+    {
+      "id": "7622a3f7-e44f-497b-8357-a84df3f92280",
+      "name": "Appointments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Appointments/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Status: [\"Booked\"] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ca91ce76-4d92-41af-a742-e7e8c4ba6b57",
+      "name": "Add appointments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const clinics = $('Add settings').all();\n  return $input.all().map((item, i) => ({\n    json: { ...clinics[i].json, appointments: item.json.records || [] },\n    pairedItem: { item: i },\n  }));\n"
+      }
+    },
+    {
+      "id": "2e28ec53-9238-4838-853b-113d51162c46",
+      "name": "Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "14d69279-31c8-4feb-86f1-ff0357e4cfdd",
+      "name": "Find due",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const cfg = $('Config').first().json;\n  const nowMs = Date.now();\n  const r24 = [Number(cfg.r24_min_hours) * 60, Number(cfg.r24_max_hours) * 60];   // minutes before the start\n  const r2 = [Number(cfg.r2_min_minutes), Number(cfg.r2_max_minutes)];\n  const clinics = $('Add appointments').all();\n  const out = [];\n\n  $input.all().forEach((item, i) => {\n    const { appointments, ...base } = clinics[i].json;\n    const leads = {};\n    for (const r of item.json.records || []) leads[r.id] = r.fields || {};\n\n    for (const a of appointments) {\n      const f = a.fields || {};\n      if (f.Status !== 'Booked' || !f.Start) continue;\n      const minutes = (f.Start * 1000 - nowMs) / 60000;   // minutes until the appointment starts\n      let kind = null;\n      if (minutes > r2[0] && minutes <= r2[1]) kind = 'r2';\n      else if (minutes > r24[0] && minutes <= r24[1]) kind = 'r24';\n      if (!kind) continue;\n\n      const flag_column = kind === 'r24' ? 'R24_Sent' : 'R2_Sent';\n      if (f[flag_column]) continue;                       // already sent (rule 4: check the flag first)\n      const lead = leads[f.Lead];\n      if (!lead) continue;\n\n      out.push({\n        json: {\n          ...base,\n          kind,\n          template: kind === 'r24' ? 'reminder_24h' : 'reminder_2h',\n          flag_column,\n          flag_value: f[flag_column] || null,\n          appt_row_id: a.id,\n          booking_uid: f.Booking_UID || '',\n          service: f.Service || '',\n          physio: f.Physio || '',\n          start: f.Start,\n          patient_name: lead.Name || '',\n          patient_phone: lead.Phone || '',\n          opted_out: lead.Opted_Out === true,\n        },\n        pairedItem: { item: i },\n      });\n    }\n  });\n  return out;\n"
+      }
+    },
+    {
+      "id": "8cdab4c6-e15d-4f7e-aa0c-73e78d2a15a8",
+      "name": "Decide send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js and n8n/snippets/send-guard.js - keep identical.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  let digits = String(raw).replace(/\\D/g, '');          // keep digits only\n  if (digits.startsWith('0091')) digits = digits.slice(4);\n  else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);\n  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);\n  const valid = /^[6-9]\\d{9}$/.test(digits);            // Indian mobiles start 6-9\n  return { phone: valid ? `+91${digits}` : null, valid };\n}\n\nfunction isTestMode(value) {\n  const v = String(value === null || value === undefined ? '' : value).trim().toLowerCase();\n  return !['false', '0', 'no', 'off'].includes(v);   // anything else, including a missing row, means ON (fail safe)\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nfunction decideSend(i) {\n  const testMode = isTestMode(i.test_mode);\n  const skip = (reason) => ({ send: false, to: null, reason, test_mode: testMode });\n\n  if (i.flag_value) return skip('already sent');\n  if (i.opted_out) return skip('opted out');\n  if (i.kind !== 'transactional' && i.automation_paused) return skip('automation paused');\n  if (inQuietHours(i.now_ms)) return skip('quiet hours');\n\n  const to = testMode ? i.test_phone : i.patient_phone;\n  if (!to) return skip(testMode ? 'test mode on but TEST_PHONE is missing or invalid' : 'no valid patient phone');\n  return { send: true, to, reason: testMode ? 'test mode: sent to TEST_PHONE' : 'ok', test_mode: testMode };\n}\n\n  const { phone: patient_phone } = normalizeIndianPhone($json.patient_phone);\n  const { phone: test_phone } = normalizeIndianPhone($json.test_phone);\n  const decision = decideSend({\n    kind: 'transactional',            // reminders still go when Automation_Paused is on\n    flag_value: $json.flag_value,\n    opted_out: $json.opted_out,\n    automation_paused: false,\n    patient_phone,\n    test_mode: $json.test_mode,\n    test_phone,\n    now_ms: Date.now(),\n  });\n  return { json: { ...$json, decision, send: decision.send } };\n"
+      }
+    },
+    {
+      "id": "483e7f92-4c58-44e9-862e-40383e1c2383",
+      "name": "Send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "91a0779f-380e-4adc-a5ef-697c156db4de",
+              "leftValue": "={{ $json.send }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3ec95e50-89b8-4ebb-b079-82c0668d8fdb",
+      "name": "Send reminder (stub)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -20
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\n  const t = new Date($json.start * 1000 + 5.5 * 3600 * 1000);   // IST wall-clock via UTC getters\n  const date = `${String(t.getUTCDate()).padStart(2, '0')} ${MONTHS[t.getUTCMonth()]}`;\n  const h = t.getUTCHours();\n  const time = `${h % 12 || 12}:${String(t.getUTCMinutes()).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;\n  const name = $json.patient_name || 'there';\n  const service = $json.service || 'appointment';\n  return {\n    json: {\n      ...$json,\n      template_params: { name, clinic_name: $json.clinic_name, date, time, service, physio: $json.physio },\n      message_text: `Hi ${name}, a reminder: your ${service} at ${$json.clinic_name} is on ${date} at ${time}.`,\n      sent: false,\n      stub: true,\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "f168c1aa-6512-4953-9416-d8c933328406",
+      "name": "Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "867f2727-73ea-4bc3-af0e-b87995895c52",
+              "leftValue": "={{ $json.sent }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "73275033-6ea7-47b7-a0cf-26f608539517",
+      "name": "Prepare sent log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        -20
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const now = Math.floor(Date.now() / 1000);\n  return {\n    json: {\n      ...$json,\n      patch: { records: [{ id: $json.appt_row_id, fields: { [$json.flag_column]: now } }] },   // R24_Sent / R2_Sent\n      log: { Workflow: 'W5-reminders', Record: `${$json.booking_uid} (${$json.kind})`, Outcome: 'ok', Error: '', At: now },\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "e23db1a1-3aa7-4185-8f4a-d579f53a2c79",
+      "name": "Set sent flag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        -40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Prepare sent log').item.json.grist_base_url }}/api/docs/{{ $('Prepare sent log').item.json.doc_id }}/tables/Appointments/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare sent log').item.json.patch) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "70426fd9-35c9-44ca-9024-b4e30c5327bc",
+      "name": "Write Run_Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        -40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare sent log').item.json.grist_base_url }}/api/docs/{{ $('Prepare sent log').item.json.doc_id }}/tables/Run_Log/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $('Prepare sent log').item.json.log }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinics": {
+      "main": [
+        [
+          {
+            "node": "Split clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split clinics": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Add settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add settings": {
+      "main": [
+        [
+          {
+            "node": "Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appointments": {
+      "main": [
+        [
+          {
+            "node": "Add appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add appointments": {
+      "main": [
+        [
+          {
+            "node": "Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leads": {
+      "main": [
+        [
+          {
+            "node": "Find due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find due": {
+      "main": [
+        [
+          {
+            "node": "Decide send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide send": {
+      "main": [
+        [
+          {
+            "node": "Send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send?": {
+      "main": [
+        [
+          {
+            "node": "Send reminder (stub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send reminder (stub)": {
+      "main": [
+        [
+          {
+            "node": "Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sent?": {
+      "main": [
+        [
+          {
+            "node": "Prepare sent log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare sent log": {
+      "main": [
+        [
+          {
+            "node": "Set sent flag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set sent flag": {
+      "main": [
+        [
+          {
+            "node": "Write Run_Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

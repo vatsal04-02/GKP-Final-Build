@@ -1,0 +1,431 @@
+---
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import ClinicImage from './ClinicImage.astro';
+import Icon from './Icon.astro';
+import { getPhoto } from '../lib/photos';
+import { doctorBookMessage, doctors, doctorsPhoto, whatsappLink } from '../data/site';
+
+// Drop public/doctor-intro.mp4 in and the player appears at the next build; without the file nothing is rendered.
+const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4'));
+---
+
+<section id="doctors" class="section curve surface-ivory" data-section data-ambient aria-labelledby="doctors-title">
+  <div class="bg" aria-hidden="true">
+    <span class="orb" style="--s:520px; --c:rgb(233 223 201 / 1); left:-180px; top:8%; --dur:44s"></span>
+  </div>
+
+  <div class="container-site relative">
+    <div class="layout">
+    <header class="head reveal">
+      <p class="eyebrow">04 / Doctors</p>
+      <h2 id="doctors-title" class="h2">Meet the doctors behind your recovery.</h2>
+      <p class="lead">Dr. Sandeep Tiwari and Dr. Mahesh Tiwari lead Geeta Krishna Physiotherapy, both qualified MPT (PT).</p>
+      {
+        getPhoto(doctorsPhoto.slot) && (
+          <figure class="pair">
+            <div class="pair__frame">
+              <ClinicImage photo={doctorsPhoto.slot} alt={doctorsPhoto.alt} sizes="(min-width:1024px) 300px, 80vw" />
+            </div>
+            <figcaption class="pair__cap">
+              <span class="tbd">{doctorsPhoto.caption}</span>
+            </figcaption>
+          </figure>
+        )
+      }
+    </header>
+
+    <div class="cards">
+      {
+        doctors.map((d, i) => (
+          <article class="doc reveal" data-reveal="group" style={`--i:${i}`} aria-labelledby={`doc-${i}-name`}>
+            <figure class:list={['doc__photo', { 'doc__photo--mono': !getPhoto(d.slot) }]}>
+              <div class="doc__media">
+                <div class="doc__scale">
+                  <ClinicImage photo={d.slot} alt={`Portrait of ${d.name}, ${d.role} at Geeta Krishna Physiotherapy`} sizes="(min-width:1024px) 520px, (min-width:640px) 50vw, 100vw">
+                    <!-- No portrait supplied yet: a monogram on deep pine, replaced automatically by src/assets/clinic/{d.slot}.* -->
+                    <div class="mono" aria-hidden="true">
+                      <span class="mono__dots"></span>
+                      <span class="mono__ring"><span class="mono__circle">{d.initials}</span></span>
+                    </div>
+                  </ClinicImage>
+                </div>
+              </div>
+              <figcaption class="doc__id">
+                <span class="pill">{d.qualification}</span>
+                <span class="role">{d.role}</span>
+              </figcaption>
+            </figure>
+
+            <div class="doc__info">
+              <h3 id={`doc-${i}-name`} class="h3 doc__name">{d.name}</h3>
+              <dl class="doc__facts">
+                <div>
+                  <dt>Specialisation</dt>
+                  <dd><span class="tbd">{d.specialisation}</span></dd>
+                </div>
+                <div>
+                  <dt>About</dt>
+                  <dd><span class="tbd">{d.bio}</span></dd>
+                </div>
+              </dl>
+              <a
+                class="btn btn-primary ask"
+                href={whatsappLink(doctorBookMessage(d.name))}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Book with ${d.name} on WhatsApp`}
+                data-track="whatsapp_click"
+                data-location={`doctor-${i + 1}`}
+              >
+                <Icon name="message-circle" size={19} />
+                Book with {d.short}
+                <Icon name="arrow-right" size={18} class="icon-arrow" />
+              </a>
+            </div>
+          </article>
+        ))
+      }
+    </div>
+
+    {
+      hasIntroVideo && (
+        <figure class="intro reveal">
+          <video class="intro__video" controls preload="none" playsinline aria-label="An introduction from the doctors at Geeta Krishna Physiotherapy">
+            <source src="/doctor-intro.mp4" type="video/mp4" />
+            Your browser can’t play this video.
+          </video>
+        </figure>
+      )
+    }
+    </div>
+  </div>
+</section>
+
+<style>
+  .bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .relative {
+    position: relative;
+  }
+  .layout {
+    display: grid;
+    gap: clamp(24px, 4vw, 40px);
+  }
+  .head {
+    display: grid;
+    gap: 0.8rem;
+    align-content: start;
+    max-width: 38rem;
+  }
+
+  /* Joint photograph (native size is small, so it is kept modest) */
+  .pair {
+    position: relative;
+    margin: 0.4rem 0 0;
+    width: min(100%, 300px);
+  }
+  .pair__frame {
+    position: relative;
+    aspect-ratio: 249 / 222;
+    overflow: hidden;
+    border-radius: 20px;
+    box-shadow: 0 24px 40px -28px rgb(12 59 54 / 0.55);
+    background: var(--color-sand);
+  }
+  .pair__frame :global(.clinic-img) {
+    display: block;
+  }
+  .pair__cap {
+    position: relative;
+    margin-top: 0.9rem;
+  }
+  .pair__cap :global(.tbd) {
+    font-size: 0.75rem;
+  }
+
+  .cards {
+    display: grid;
+    gap: 36px;
+  }
+  .doc {
+    --r: 24px;
+    --d: calc(var(--i, 0) * 140ms);
+    display: grid;
+    gap: 1.1rem;
+    align-content: start;
+  }
+  /* beats the reveal group's `transition: none` so the hover lift is eased */
+  :global(.js) .doc.reveal[data-reveal='group'] {
+    transition: translate 250ms ease;
+  }
+  /* Desktop hover: the whole card lifts 2px (the individual `translate` property, so it never
+     fights the reveal's `transform`) */
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .doc:hover {
+      translate: 0 -5px;
+    }
+  }
+
+  /* The photograph is the hero of this section */
+  .doc__photo {
+    position: relative;
+    margin: 0;
+    height: clamp(320px, 92vw, 420px);
+    border-radius: var(--r);
+    isolation: isolate;
+  }
+  /* The shadow lives on its own layer so the portrait's wipe (clip-path) can't cut it off */
+  .doc__photo::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--r);
+    box-shadow: 0 28px 44px -30px rgb(12 59 54 / 0.5);
+    transition: opacity 900ms ease-out;
+    transition-delay: calc(var(--d) + 250ms);
+    pointer-events: none;
+  }
+  /* The lifted shadow is a second layer that fades in, so hovering only ever animates opacity + transform */
+  .doc__photo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--r);
+    box-shadow: 0 40px 60px -26px rgb(12 59 54 / 0.7);
+    opacity: 0;
+    transition: opacity 320ms ease;
+    pointer-events: none;
+  }
+  .doc:hover .doc__photo::after {
+    opacity: 1;
+  }
+  .doc__media {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: var(--r);
+    background: var(--color-pine);
+    clip-path: inset(0 0 0 0 round var(--r));
+    transition: clip-path 950ms var(--ease-soft);
+    transition-delay: var(--d);
+  }
+  /* The photograph settles a touch slower than its wipe, so the two layers never move in lockstep */
+  .doc__scale {
+    position: absolute;
+    inset: 0;
+    transition: transform 1500ms var(--ease-soft);
+    transition-delay: var(--d);
+  }
+  .doc__photo :global(.clinic-img) {
+    transition: transform 900ms var(--ease-soft);
+  }
+  .doc:hover .doc__photo :global(.clinic-img) {
+    transform: scale(1.02);
+  }
+  /* Monogram portrait (until a real photograph is supplied) */
+  .mono {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding-bottom: 2.2rem;
+    background:
+      radial-gradient(90% 70% at 80% 0%, rgb(45 156 146 / 0.3), transparent 62%),
+      linear-gradient(165deg, #14574f 0%, var(--color-pine) 58%, #082e2a 100%);
+  }
+  .mono__dots {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgb(250 248 242 / 0.5) 1px, transparent 1.4px);
+    background-size: 22px 22px;
+    opacity: 0.18;
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, #000 20%, transparent 90%);
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, #000 20%, transparent 90%);
+  }
+  .mono__ring {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: clamp(150px, 46%, 188px);
+    aspect-ratio: 1;
+    border: 1px dashed rgb(233 223 201 / 0.4);
+    border-radius: 50%;
+  }
+  .mono__circle {
+    display: grid;
+    place-items: center;
+    width: 78%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1px solid rgb(233 223 201 / 0.55);
+    background: radial-gradient(circle at 30% 25%, #1c6f66, #0f4a44);
+    box-shadow: inset 0 1px 0 rgb(250 248 242 / 0.18), 0 18px 34px -16px rgb(0 0 0 / 0.55);
+    font: 400 clamp(2.6rem, 2rem + 2vw, 3.6rem) / 1 var(--font-serif);
+    letter-spacing: 0.02em;
+    color: var(--color-ivory);
+  }
+  /* With the monogram the qualification plate sits centred beneath the circle */
+  .doc__photo--mono .doc__id {
+    left: 0;
+    right: 0;
+    bottom: 22px;
+    width: fit-content;
+    margin-inline: auto;
+  }
+
+  .doc__id {
+    position: absolute;
+    z-index: 3;
+    left: 14px;
+    bottom: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.4rem 0.85rem 0.4rem 0.4rem;
+    border-radius: 999px;
+    background: rgb(12 59 54 / 0.78);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    color: var(--color-ivory);
+    transition:
+      opacity 700ms ease-out,
+      transform 700ms ease-out;
+    transition-delay: calc(var(--d) + 620ms);
+  }
+  .pill {
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    background: var(--color-sand);
+    color: var(--color-pine);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+  }
+  .role {
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* Name and details follow the portrait by ~110ms and travel a shorter, quicker path */
+  .doc__info {
+    display: grid;
+    gap: 0.9rem;
+    transition:
+      opacity 700ms ease-out,
+      transform 700ms ease-out;
+    transition-delay: calc(var(--d) + 110ms);
+  }
+
+  /* Hidden states — only when JS is running; the observer adds .in-view once per entry */
+  :global(.js) .doc:not(.in-view) .doc__media {
+    clip-path: inset(0 0 100% 0 round var(--r));
+  }
+  :global(.js) .doc:not(.in-view) .doc__scale {
+    transform: scale(1.08);
+  }
+  :global(.js) .doc:not(.in-view) .doc__photo::before {
+    opacity: 0;
+  }
+  :global(.js) .doc:not(.in-view) .doc__id {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  :global(.js) .doc:not(.in-view) .doc__info {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+  .doc__facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+    margin: 0;
+    padding-block: 0.9rem;
+    border-block: 1px solid rgb(12 59 54 / 0.14);
+  }
+  .doc__facts div {
+    display: grid;
+    align-content: start;
+    gap: 0.3rem;
+  }
+  .doc__facts dt {
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--color-ink) 58%, transparent);
+  }
+  .doc__facts dd {
+    margin: 0;
+  }
+  .doc__facts :global(.tbd) {
+    font-size: 0.75rem;
+  }
+
+  .ask {
+    justify-self: start;
+    min-height: 48px;
+  }
+
+  /* Optional introduction video (only when public/doctor-intro.mp4 exists) */
+  .intro {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+  .intro__video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 24px;
+    background: var(--color-pine);
+    box-shadow: 0 28px 44px -30px rgb(12 59 54 / 0.5);
+  }
+
+  /* Portraits are tall head-and-shoulders crops: keep the face in frame inside the card's shape */
+  .doc__photo :global(.clinic-img) {
+    object-position: 50% 14%;
+  }
+
+  @media (min-width: 768px) {
+    .cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 28px;
+      align-items: start;
+    }
+    .doc__photo {
+      height: 400px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .layout {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 32px;
+      align-items: start;
+    }
+    .head {
+      grid-column: 1 / span 4;
+      padding-top: 0.5rem;
+    }
+    .cards {
+      grid-column: 5 / span 8;
+      gap: 28px;
+    }
+    .doc {
+      --r: 26px;
+    }
+    .doc__photo {
+      height: 460px;
+    }
+    /* Staggered editorial offset */
+    .doc:nth-child(2) {
+      margin-top: 48px;
+    }
+  }
+</style>

@@ -1,0 +1,148 @@
+---
+import '../styles/global.css';
+import manropeLatin from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
+import dmSerifLatin from '@fontsource/dm-serif-display/files/dm-serif-display-latin-400-normal.woff2?url';
+import { clinic, faqs, links, seo } from '../data/site';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = seo.title, description = seo.description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+const ogImage = new URL('og.png', Astro.site).href;
+const gaId = import.meta.env.PUBLIC_GA_ID;
+
+// Structured data: only supported types, only verified facts (PRD §34).
+// The review figure is the site's own ("467+" on the page); schema.org needs a plain number, so the plus is dropped.
+const reviewCount = clinic.rating.count.replace(/\D/g, '');
+const businessSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Physiotherapy',
+  '@id': `${canonical}#clinic`,
+  name: clinic.name,
+  url: canonical,
+  telephone: clinic.phone.display,
+  image: ogImage,
+  description,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: clinic.address.street,
+    addressLocality: clinic.address.city,
+    addressRegion: clinic.address.region,
+    postalCode: clinic.address.postalCode,
+    addressCountry: 'IN',
+  },
+  openingHours: ['Mo-Sa 09:00-13:00', 'Mo-Sa 16:00-20:00'],
+  openingHoursSpecification: [
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      opens: '09:00',
+      closes: '13:00',
+    },
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      opens: '16:00',
+      closes: '20:00',
+    },
+  ],
+  aggregateRating: {
+    '@type': 'AggregateRating',
+    ratingValue: clinic.rating.value,
+    reviewCount,
+  },
+  hasMap: links.directions,
+  employee: [
+    { '@type': 'Person', name: 'Dr. Sandeep Tiwari', jobTitle: 'Clinic Lead' },
+    { '@type': 'Person', name: 'Dr. Mahesh Tiwari', jobTitle: 'Clinic Lead' },
+  ],
+};
+
+// Questions still marked TBD are left out of structured data on purpose.
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs
+    .filter((f) => f.confirmed)
+    .map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
+};
+---
+
+<!doctype html>
+<html lang="en-IN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#0C3B36" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_IN" />
+    <meta property="og:site_name" content={clinic.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={`${clinic.name} — Gomti Nagar, Lucknow`} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- The Visit section's map embed comes from Google. Fonts are self-hosted (below), so there is nothing to preconnect to for them. -->
+    <link rel="preconnect" href="https://www.google.com" />
+
+    <link rel="preload" href={manropeLatin} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={dmSerifLatin} as="font" type="font/woff2" crossorigin />
+
+    <script is:inline>
+      document.documentElement.classList.add('js');
+    </script>
+
+    <script type="application/ld+json" set:html={JSON.stringify(businessSchema)} />
+    <script type="application/ld+json" set:html={JSON.stringify(faqSchema)} />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <slot />
+
+    <script>
+      import '../scripts/main';
+    </script>
+
+    {
+      gaId && (
+        <script is:inline define:vars={{ gaId }}>
+          window.dataLayer = window.dataLayer || [];
+          window.gtag = function () {
+            window.dataLayer.push(arguments);
+          };
+          window.gtag('js', new Date());
+          window.gtag('config', gaId, { anonymize_ip: true });
+          window.addEventListener('load', function () {
+            var load = function () {
+              var s = document.createElement('script');
+              s.async = true;
+              s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+              document.head.appendChild(s);
+            };
+            'requestIdleCallback' in window ? window.requestIdleCallback(load) : setTimeout(load, 1500);
+          });
+        </script>
+      )
+    }
+  </body>
+</html>

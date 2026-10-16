@@ -1,0 +1,13 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$N8N_DOMAIN} {
+	encode gzip
+	reverse_proxy n8n:5678
+}
+
+{$GRIST_DOMAIN} {
+	encode gzip
+	reverse_proxy grist:8484
+}

@@ -1,0 +1,627 @@
+{
+  "workflow": {
+    "name": "FlowHQ Clinic Automation (production candidate)",
+    "id": "FhqClinicProd001",
+    "nodes": 340,
+    "active": false
+  },
+  "results": [
+    {
+      "id": "S01",
+      "severity": "P3",
+      "area": "A structure",
+      "title": "Inventory",
+      "status": "OK",
+      "evidence": [
+        "340 nodes (310 executable + 30 sticky notes), 289 connection sources, active=false",
+        "sections: W1=20 W3=18 W4=24 W5=20 W6=22 W11=5 W12=17 W2=60 W13=45 W7=19 W8=21 W9=21 W10=18",
+        "triggers: {\"webhook\":4,\"scheduleTrigger\":8,\"errorTrigger\":1,\"executeWorkflowTrigger\":1,\"manualTrigger\":1}"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "S02",
+      "severity": "P1",
+      "area": "A structure",
+      "title": "Every Execute Workflow node targets a workflow that exists and has an Execute Workflow Trigger",
+      "status": "OK",
+      "evidence": [
+        "10 Execute Workflow nodes, 1 Execute Workflow Trigger node(s)",
+        "10 target \"$workflow.id\" (this same workflow, valid under any import id)"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "S03",
+      "severity": "P2",
+      "area": "A structure",
+      "title": "Unreachable nodes (no trigger can ever reach them)",
+      "status": "OPEN",
+      "evidence": [
+        "W2 – Test Cases"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "S04",
+      "severity": "P2",
+      "area": "A structure",
+      "title": "Triggers that lead nowhere (a registered webhook/schedule that does nothing)",
+      "status": "OK",
+      "evidence": [],
+      "fix": "Remove after confirming nothing calls it (W4 – Webhook /cal-w4-test)."
+    },
+    {
+      "id": "S05",
+      "severity": "P1",
+      "area": "A structure",
+      "title": "Duplicate webhook method+path",
+      "status": "OK",
+      "evidence": [
+        "POST /website-lead (W1 – Webhook)",
+        "POST /cal (W4 – Webhook1)",
+        "GET /whatsapp-inbound (W2 – Webhook Verify)",
+        "POST /whatsapp-inbound (W2 – Webhook Inbound)"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "S06",
+      "severity": "P0",
+      "area": "A structure",
+      "title": "Export is ACTIVE: importing it into a fresh n8n starts listening/sending before configuration is tested",
+      "status": "OK",
+      "evidence": [
+        "active=false"
+      ],
+      "fix": "Export with active=false; activate only after configuration, templates and tests."
+    },
+    {
+      "id": "S07",
+      "severity": "P1",
+      "area": "A structure",
+      "title": "Expressions/code that reference a node name that does not exist",
+      "status": "OK",
+      "evidence": [],
+      "fix": ""
+    },
+    {
+      "id": "S08",
+      "severity": "P1",
+      "area": "A structure",
+      "title": "Accidental circular execution (cycle not guarded by a batch loop)",
+      "status": "OK",
+      "evidence": [],
+      "fix": ""
+    },
+    {
+      "id": "S09",
+      "severity": "P2",
+      "area": "A structure",
+      "title": "Workflow settings: time zone, error handling and execution-data retention are not set in the file",
+      "status": "OK",
+      "evidence": [
+        "settings={\"executionOrder\":\"v1\",\"binaryMode\":\"separate\",\"timezone\":\"Asia/Kolkata\",\"saveDataSuccessExecution\":\"none\",\"saveDataErrorExecution\":\"all\",\"saveManualExecutions\":false,\"saveExecutionProgress\":false,\"executionTimeout\":900,\"timeSavedMode\":\"fixed\"}",
+        "every schedule (W3 10 min, W5 15 min, W6 10:00, W7/W8 hourly, W9 Mon 09:00, W10 1 min, W13 08:05) runs in the INSTANCE time zone unless the workflow sets one",
+        "successful executions (which contain patient phone numbers and message text) are kept per the instance default"
+      ],
+      "fix": "Set settings.timezone, saveDataSuccessExecution=none, executionTimeout."
+    },
+    {
+      "id": "S10",
+      "severity": "P1",
+      "area": "A structure",
+      "title": "Webhooks that answer 200 BEFORE any validation or storage (\"onReceived\")",
+      "status": "OPEN",
+      "evidence": [
+        "W1 – Webhook (POST /website-lead)",
+        "W4 – Webhook1 (POST /cal)"
+      ],
+      "fix": "Use \"Respond to Webhook\" after the real outcome is known."
+    },
+    {
+      "id": "S11",
+      "severity": "P1",
+      "area": "B-E public endpoints",
+      "title": "Public webhooks with no n8n authentication (must authenticate in the workflow itself)",
+      "status": "OPEN",
+      "evidence": [
+        "W4 – Webhook1 (POST /cal)",
+        "W2 – Webhook Verify (undefined /whatsapp-inbound)",
+        "W2 – Webhook Inbound (POST /whatsapp-inbound)"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "B01",
+      "severity": "P0",
+      "area": "B W1",
+      "title": "Staff alert is a STUB: the message is built, nothing is delivered, and the run is logged as done",
+      "status": "OPEN",
+      "evidence": [
+        "node \"W1 – Staff alert (stub)\" is a Code node with no send; it feeds \"W1 – Write Run_Log\""
+      ],
+      "fix": ""
+    },
+    {
+      "id": "B02",
+      "severity": "P0",
+      "area": "B W1",
+      "title": "Website enquiry is acknowledged (200) before it is validated or stored",
+      "status": "OPEN",
+      "evidence": [
+        "W1 – Webhook responseMode=onReceived; \"W1 – Create lead\" runs AFTER the response, so the website is told success even if storage fails"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "B03",
+      "severity": "P1",
+      "area": "B/T W1 email",
+      "title": "No email gateway anywhere (no Send Email / SMTP node)",
+      "status": "OPEN",
+      "evidence": [
+        "no email node in the workflow"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "B04",
+      "severity": "P1",
+      "area": "B/S W1 consent",
+      "title": "W1 does not capture consent (source, timestamp, status) for WhatsApp/email contact",
+      "status": "OPEN",
+      "evidence": [
+        "\"W1 – Prepare lead\" has no consent field; the CRM only has Leads.Opted_Out"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "C01",
+      "severity": "P0",
+      "area": "C W2",
+      "title": "Inbound WhatsApp POST is not authenticated: no X-Hub-Signature-256 check, so any caller can inject \"patient\" messages",
+      "status": "OK",
+      "evidence": [
+        "signature check in \"W2 – Verify Signature\"",
+        "Raw Body option: true"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "C02",
+      "severity": "P0",
+      "area": "C/O W2",
+      "title": "Meta verify token is a literal inside the workflow (Set node), so it is in every export, backup and screenshot",
+      "status": "OK",
+      "evidence": [
+        "W2 – Verify Config > meta_verify_token: 42 chars"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "C03",
+      "severity": "P1",
+      "area": "C/M W2",
+      "title": "Delivery receipts (statuses[]) are counted but never stored: \"accepted by Meta\" is never upgraded to delivered/read/failed",
+      "status": "OPEN",
+      "evidence": [
+        "\"W2 – Parse Meta Event\" returns statuses_seen only; no W2 node writes a delivered/read/failed status"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "C04",
+      "severity": "P3",
+      "area": "C W2",
+      "title": "Webhook handshake (GET) and message de-duplication are present",
+      "status": "OK",
+      "evidence": [
+        "GET verify path: true",
+        "duplicate check by WA_Message_ID: true",
+        "clinic is resolved from metadata.phone_number_id through the Agency Registry, never from a sender-supplied slug"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "D01",
+      "severity": "P0",
+      "area": "D/F/G W3 W5 W6",
+      "title": "Production messages use Meta's sample template 'hello_world' (patients would receive \"Hello World\")",
+      "status": "OPEN",
+      "evidence": [
+        "W3 – Build Message",
+        "W5 – Code in JavaScript",
+        "W6 – Build Message"
+      ],
+      "fix": "Use approved templates chosen by configuration; send nothing when none is configured."
+    },
+    {
+      "id": "D02",
+      "severity": "P1",
+      "area": "D/O W3",
+      "title": "A test phone number is stored as a literal in W3 – Config",
+      "status": "OK",
+      "evidence": [
+        "W3 – Config > test_phone: 35 chars"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "D03",
+      "severity": "P2",
+      "area": "D-G docs",
+      "title": "Sticky notes still say \"the send is a STUB\" although the sections already call W12 (misleading to the operator)",
+      "status": "OPEN",
+      "evidence": [
+        "Section W1",
+        "W1 – Notes",
+        "W3 – Notes",
+        "Section W4",
+        "W4 – Notes",
+        "W5 – Notes",
+        "W6 – Notes"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "D04",
+      "severity": "P1",
+      "area": "D/F/G W3 W5 W6",
+      "title": "Sent-flag is written AFTER the send, with no claim before it: two overlapping runs or a retry can send the same message twice",
+      "status": "OPEN",
+      "evidence": [
+        "W3: Build Message -> Call W12 -> Sent? -> flag (W7, W8 and W10 claim first)",
+        "W5: Build Message -> Call W12 -> Sent? -> flag (W7, W8 and W10 claim first)",
+        "W6: Build Message -> Call W12 -> Sent? -> flag (W7, W8 and W10 claim first)"
+      ],
+      "fix": "Central idempotency in W12 (claim a row keyed by the message before calling Meta)."
+    },
+    {
+      "id": "E01",
+      "severity": "P1",
+      "area": "E W4",
+      "title": "Obsolete unauthenticated test webhook /cal-w4-test is registered and connected to nothing",
+      "status": "OK",
+      "evidence": [],
+      "fix": ""
+    },
+    {
+      "id": "E02",
+      "severity": "P1",
+      "area": "E W4",
+      "title": "Cal.com HMAC is computed over JSON.stringify(parsed body), not the exact raw bytes",
+      "status": "OPEN",
+      "evidence": [
+        "\"W4 – Verify & parse\" signs a re-serialisation; \"W4 – Webhook1\" has no Raw Body option"
+      ],
+      "fix": "Enable Raw Body and verify the received bytes."
+    },
+    {
+      "id": "E03",
+      "severity": "P0",
+      "area": "E W4",
+      "title": "Cal.com webhook is answered 200 before the signature is checked (\"onReceived\"), so a forged or failed booking looks accepted",
+      "status": "OPEN",
+      "evidence": [
+        "\"W4 – Webhook1\" responseMode=onReceived; a bad signature only ends in a stop-and-error node after the 200"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "E04",
+      "severity": "P1",
+      "area": "E W4",
+      "title": "Booking confirmation is a STUB: no WhatsApp confirmation is ever sent",
+      "status": "OPEN",
+      "evidence": [
+        "\"W4 – Plan writes\" builds the confirmation with stub: true; W4 has no Call W12 node"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "E05",
+      "severity": "P2",
+      "area": "E W4",
+      "title": "No replay window (event time is not checked) and no explicit time-zone handling in W4",
+      "status": "OPEN",
+      "evidence": [
+        "\"W4 – Verify & parse\" does not look at the event time"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "F01",
+      "severity": "P3",
+      "area": "F W5",
+      "title": "W5 reminder: schedule every 15 min; sent flag set after send (see D04)",
+      "status": "OK",
+      "evidence": [
+        "W5 – Every 15 minutes",
+        "flags R24_Sent / R2_Sent"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "G01",
+      "severity": "P3",
+      "area": "G W6",
+      "title": "mark_lost is disabled (leads are never marked lost automatically)",
+      "status": "OK",
+      "evidence": [
+        "mark_lost=false"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "H01",
+      "severity": "P3",
+      "area": "H W7",
+      "title": "W7 claims Outcome_Sent before sending; honours Needs_Human / opt-out",
+      "status": "OK",
+      "evidence": [
+        "claim node present: true"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "I01",
+      "severity": "P3",
+      "area": "I W8",
+      "title": "Review requests are not filtered by mood and need an https review_link (no deceptive review gating)",
+      "status": "OK",
+      "evidence": [
+        "W8 – Plan: \"Deliberately NO filter on mood, outcome\"; review link must be https"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "K01",
+      "severity": "P3",
+      "area": "K W10",
+      "title": "W10 claims the staff reply row before sending and stops on opt-out / invalid phone / closed 24 h window",
+      "status": "OK",
+      "evidence": [
+        "claim node present: true"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "J01",
+      "severity": "P1",
+      "area": "J W9",
+      "title": "W9 sends the weekly metrics to an external AI provider (OpenRouter)",
+      "status": "OPEN",
+      "evidence": [
+        "W9 – Ask Model -> https://openrouter.ai/api/v1/chat/completions"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "L01",
+      "severity": "P2",
+      "area": "L W11",
+      "title": "W11 alert hides tokens/digits but the Telegram chat id is a literal in the Config node",
+      "status": "OK",
+      "evidence": [
+        "telegram_chat_id: 41 chars"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "L02",
+      "severity": "P3",
+      "area": "L W11",
+      "title": "W11 covers the whole workflow because it is one workflow with an Error Trigger (n8n runs a workflow that contains an Error Trigger as its own error workflow)",
+      "status": "OK",
+      "evidence": [
+        "Error Trigger present",
+        "Telegram retried 3 times",
+        "alerts are throttled and masked"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "M01",
+      "severity": "P0",
+      "area": "M W12",
+      "title": "A timeout / unclear Meta answer counts as SENT (w12_uncertain_counts_as_sent=true): the lead is marked contacted and staff are told it was sent",
+      "status": "OK",
+      "evidence": [
+        "w12_uncertain_counts_as_sent=false"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "M02",
+      "severity": "P2",
+      "area": "M W12",
+      "title": "Graph API version is a literal in the node (verify it is still supported before go-live)",
+      "status": "OK",
+      "evidence": [
+        "w12_graph_api_version=={{ $env.FLOWHQ_WA_GRAPH_VERSION || 'v23.0' }}"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "M03",
+      "severity": "P1",
+      "area": "M W12",
+      "title": "No central idempotency in W12: nothing stops the same message being sent twice by a retry or a parallel run",
+      "status": "OPEN",
+      "evidence": [
+        "no W12 node checks for an earlier send of the same message"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "M04",
+      "severity": "P3",
+      "area": "M W12",
+      "title": "Meta send: timeout 15 s, no automatic retry, errors do not throw (neverError), classified accepted / rejected / uncertain",
+      "status": "OK",
+      "evidence": [
+        "timeout=15000",
+        "retryOnFail=false"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "M05",
+      "severity": "P1",
+      "area": "M W12",
+      "title": "Uncertain sends cannot be reconciled: no callback data is sent with the message, and statuses are ignored (C03)",
+      "status": "OPEN",
+      "evidence": [
+        "no biz_opaque_callback_data in the send request"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "N01",
+      "severity": "P0",
+      "area": "N/P W13",
+      "title": "TLS certificate verification is switched OFF for the model request (allowUnauthorizedCerts=true): a man-in-the-middle could read patient text and API key",
+      "status": "OK",
+      "evidence": [
+        "W13 – Ask Model options.allowUnauthorizedCerts=true"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "N02",
+      "severity": "P0",
+      "area": "N W13",
+      "title": "Patient name, earlier AI summary, first enquiry, appointments and the last conversation messages are sent to an external AI provider without redaction",
+      "status": "OPEN",
+      "evidence": [
+        "aiFacts() puts \"PATIENT - name\", \"earlier summary\", \"first enquiry\" and RECENT CONVERSATION into the prompt",
+        "W13 – Provider Request sends it to openrouter.ai unchanged"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "N03",
+      "severity": "P1",
+      "area": "N W13",
+      "title": "AI reply rate limit is effectively off",
+      "status": "OK",
+      "evidence": [
+        "max_ai_replies_per_hour=={{ Number($env.FLOWHQ_AI_MAX_REPLIES_PER_HOUR || 6) }} (the repository master has 6)"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "N04",
+      "severity": "P1",
+      "area": "N W13",
+      "title": "No global switch that keeps external AI off until the clinic has approved provider, terms, retention and data fields",
+      "status": "OK",
+      "evidence": [
+        "ai_mode is per clinic (default off: good), but nothing stops a mis-set clinic row from sending patient text abroad"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "N05",
+      "severity": "P3",
+      "area": "N W13",
+      "title": "ai_mode defaults to off; replies are fact-checked against the Knowledge table; emergencies and complaints go to a person",
+      "status": "OK",
+      "evidence": [
+        "Settings.ai_mode off/draft/auto; W13 – Plan validates schema, prices, times, links and phone numbers"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "N06",
+      "severity": "P2",
+      "area": "N/O W13",
+      "title": "AI provider and model are literals",
+      "status": "OK",
+      "evidence": [
+        "openrouter_model: 51 chars"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "O01",
+      "severity": "P1",
+      "area": "O config",
+      "title": "Grist base URL is a literal in 0 Config nodes (internal Docker name: only valid where that hostname resolves)",
+      "status": "OK",
+      "evidence": [
+        "0 nodes, e.g. "
+      ],
+      "fix": ""
+    },
+    {
+      "id": "O02",
+      "severity": "P1",
+      "area": "O config",
+      "title": "Agency Registry document id is a literal in 0 Config nodes",
+      "status": "OK",
+      "evidence": [
+        "0 nodes (value not shown)"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "O03",
+      "severity": "P0",
+      "area": "O config",
+      "title": "Secrets stored as literals in Set nodes",
+      "status": "OK",
+      "evidence": [],
+      "fix": ""
+    },
+    {
+      "id": "O04",
+      "severity": "P2",
+      "area": "O config",
+      "title": "97 nodes reference credentials by id: ids do not transfer between n8n installations (re-bind them after import)",
+      "status": "OPEN",
+      "evidence": [
+        "1 x httpHeaderAuth \"FlowHQ W1 Webhook Auth\"",
+        "92 x httpHeaderAuth \"FlowHQ Grist API\"",
+        "1 x telegramApi \"FlowHQ Telegram Alerts\"",
+        "1 x httpHeaderAuth \"FlowHQ WhatsApp Cloud API\"",
+        "2 x httpHeaderAuth \"FlowHQ AI Provider\""
+      ],
+      "fix": ""
+    },
+    {
+      "id": "O05",
+      "severity": "P3",
+      "area": "O config",
+      "title": "Number of nodes that read configuration from environment variables",
+      "status": "OK",
+      "evidence": [
+        "15 nodes use $env"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "R01",
+      "severity": "P1",
+      "area": "R phones",
+      "title": "Phone numbers are forced into +91 (Indian mobile only): international numbers are rejected or mangled",
+      "status": "OPEN",
+      "evidence": [
+        "18 Code nodes carry the +91-only normaliser"
+      ],
+      "fix": ""
+    },
+    {
+      "id": "U01",
+      "severity": "P2",
+      "area": "U telephony",
+      "title": "Missed-call capture is NOT implemented in this workflow (no telephony webhook, no provider)",
+      "status": "OPEN",
+      "evidence": [
+        "no webhook path contains \"call\"; the website/WhatsApp flow must not be presented as missed-call capture"
+      ],
+      "fix": ""
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "headers": {
+    "content-type": "application/json",
+    "x-cal-signature-256": "no-secret-provided",
+    "x-cal-webhook-version": "2021-10-20"
+  },
+  "query": {},
+  "body": {
+    "triggerEvent": "BOOKING_CREATED",
+    "createdAt": "2026-10-04T15:01:59.398Z",
+    "payload": {
+      "bookerUrl": "https://cal.com",
+      "title": "30 min meeting between Dr Rao and Asha Rao",
+      "startTime": "2026-10-06T03:30:00.000Z",
+      "endTime": "2026-10-06T04:00:00.000Z",
+      "additionalNotes": "",
+      "type": "30min",
+      "eventTypeTitle": "30 min meeting",
+      "description": "",
+      "eventTypeId": 1,
+      "hideCalendarNotes": false,
+      "hideCalendarEventDetails": false,
+      "privateNoteEnabled": false,
+      "privateNoteMode": null,
+      "privateNoteTemplate": null,
+      "hideOrganizerEmail": false,
+      "schedulingType": null,
+      "seatsPerTimeSlot": null,
+      "seatsShowAttendees": true,
+      "seatsShowAvailabilityCount": true,
+      "customReplyToEmail": null,
+      "disableRescheduling": false,
+      "disableReschedulingScope": "HOST_AND_ATTENDEE",
+      "disableCancelling": false,
+      "disableCancellingScope": "HOST_AND_ATTENDEE",
+      "organizer": {
+        "id": 1001,
+        "name": "Dr Rao",
+        "email": "dr.rao@example.com",
+        "username": "dr-rao",
+        "timeZone": "Asia/Calcutta",
+        "language": {
+          "locale": "en"
+        },
+        "timeFormat": "h:mma",
+        "utcOffset": 330
+      },
+      "attendees": [
+        {
+          "name": "Asha Rao",
+          "email": "asha@example.com",
+          "timeZone": "Asia/Calcutta",
+          "language": {
+            "locale": "en"
+          },
+          "phoneNumber": null,
+          "bookingSeat": null,
+          "utcOffset": 330,
+          "firstName": "Asha",
+          "lastName": "Rao"
+        }
+      ],
+      "customInputs": {},
+      "responses": {
+        "name": {
+          "label": "your_name",
+          "value": "Asha Rao",
+          "isHidden": false
+        },
+        "email": {
+          "label": "email_address",
+          "value": "asha@example.com",
+          "isHidden": false
+        },
+        "attendeePhoneNumber": {
+          "label": "phone_number",
+          "isHidden": true
+        },
+        "location": {
+          "label": "location",
+          "value": {
+            "value": "integrations:daily",
+            "optionValue": ""
+          },
+          "isHidden": false
+        },
+        "title": {
+          "label": "what_is_this_meeting_about",
+          "isHidden": true
+        },
+        "notes": {
+          "label": "additional_notes",
+          "isHidden": false
+        },
+        "guests": {
+          "label": "additional_guests",
+          "value": [],
+          "isHidden": false
+        },
+        "rescheduleReason": {
+          "label": "reason_for_reschedule",
+          "isHidden": false
+        }
+      },
+      "userFieldsResponses": {},
+      "location": "integrations:daily",
+      "iCalUID": "sampleUid0000000000000A@Cal.com",
+      "iCalSequence": 0,
+      "requiresConfirmation": false,
+      "oneTimePassword": null,
+      "platformClientId": "",
+      "platformRescheduleUrl": "",
+      "platformCancelUrl": "",
+      "platformBookingUrl": "",
+      "uid": "sampleUid0000000000000A",
+      "organizationId": null,
+      "hashedLink": null,
+      "cancellationReason": null,
+      "rejectionReason": null,
+      "hideBranding": false,
+      "videoCallData": {
+        "type": "daily_video",
+        "id": "",
+        "password": "",
+        "url": "https://app.cal.com/video/sampleUid0000000000000A"
+      },
+      "appsStatus": [
+        {
+          "appName": "Google Calendar",
+          "type": "google_calendar",
+          "success": 1,
+          "failures": 0,
+          "errors": []
+        }
+      ],
+      "destinationCalendar": [
+        {
+          "id": 1,
+          "integration": "google_calendar",
+          "externalId": "dr.rao@example.com",
+          "primaryEmail": "dr.rao@example.com",
+          "userId": 1001,
+          "credentialId": 1
+        }
+      ],
+      "bookingId": 1,
+      "status": "ACCEPTED",
+      "eventTitle": "30 min meeting",
+      "eventDescription": "",
+      "price": 0,
+      "currency": "usd",
+      "length": 30,
+      "assignmentReason": [],
+      "metadata": {
+        "videoCallUrl": "https://app.cal.com/video/sampleUid0000000000000A"
+      },
+      "platformOAuthClientId": null
+    }
+  },
+  "_comment": "Structure copied from a real Cal.com BOOKING_CREATED webhook (x-cal-webhook-version 2021-10-20); identities replaced with fake ones. The phone question was HIDDEN on that booking, so responses.attendeePhoneNumber has no value and attendees[0].phoneNumber is null."
+}

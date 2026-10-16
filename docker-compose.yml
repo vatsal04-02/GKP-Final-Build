@@ -1,0 +1,94 @@
+# Clinic Autopilot — Option B stack (n8n + Grist behind Caddy)
+# Usage:  cp .env.example .env  ->  ./scripts/gen-secrets.sh  ->  docker compose up -d
+# Only Caddy is published to the internet. n8n and Grist sit on the private Docker network.
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - N8N_DOMAIN=${N8N_DOMAIN}
+      - GRIST_DOMAIN=${GRIST_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - n8n
+      - grist
+
+  n8n:
+    # Pin a specific version before going live, e.g. docker.n8n.io/n8nio/n8n:1.xx.x
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=${N8N_DOMAIN}
+      - N8N_PROTOCOL=https
+      - N8N_PORT=5678
+      - WEBHOOK_URL=https://${N8N_DOMAIN}/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - TZ=Asia/Kolkata
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336        # keep 14 days of run history
+      # --- FlowHQ workflow settings: read in the workflow as $env.FLOWHQ_*  (values come from .env)
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false  # required so Code/expression nodes can read $env.FLOWHQ_*; leave "true" if no workflow uses $env
+      - FLOWHQ_GRIST_URL=${FLOWHQ_GRIST_URL:-http://grist:8484}
+      - FLOWHQ_REGISTRY_DOC_ID=${FLOWHQ_REGISTRY_DOC_ID:-}
+      - FLOWHQ_DEFAULT_COUNTRY_CODE=${FLOWHQ_DEFAULT_COUNTRY_CODE:-91}
+      - FLOWHQ_WA_SEND_MODE=${FLOWHQ_WA_SEND_MODE:-allowlist}
+      - FLOWHQ_WA_ALLOWLIST=${FLOWHQ_WA_ALLOWLIST:-}
+      - FLOWHQ_WA_GRAPH_VERSION=${FLOWHQ_WA_GRAPH_VERSION:-v23.0}
+      - FLOWHQ_WA_TEMPLATE_LANGUAGE=${FLOWHQ_WA_TEMPLATE_LANGUAGE:-en}
+      - FLOWHQ_WA_ALLOW_HELLO_WORLD=${FLOWHQ_WA_ALLOW_HELLO_WORLD:-false}
+      - FLOWHQ_META_APP_SECRET=${FLOWHQ_META_APP_SECRET:-}
+      - FLOWHQ_META_VERIFY_TOKEN=${FLOWHQ_META_VERIFY_TOKEN:-}
+      - FLOWHQ_W2_IMPLIED_CONSENT=${FLOWHQ_W2_IMPLIED_CONSENT:-true}
+      - FLOWHQ_W1_REQUIRE_CONSENT=${FLOWHQ_W1_REQUIRE_CONSENT:-true}
+      - FLOWHQ_CAL_WEBHOOK_SECRET=${FLOWHQ_CAL_WEBHOOK_SECRET:-}
+      - FLOWHQ_CAL_MAX_AGE_HOURS=${FLOWHQ_CAL_MAX_AGE_HOURS:-24}
+      - FLOWHQ_TELEGRAM_CHAT_ID=${FLOWHQ_TELEGRAM_CHAT_ID:-}
+      - FLOWHQ_TEST_PHONE=${FLOWHQ_TEST_PHONE:-}
+      - FLOWHQ_ALERT_EMAIL_TO=${FLOWHQ_ALERT_EMAIL_TO:-}
+      - FLOWHQ_EMAIL_FROM=${FLOWHQ_EMAIL_FROM:-}
+      - FLOWHQ_EMAIL_PATIENT_ACK=${FLOWHQ_EMAIL_PATIENT_ACK:-false}
+      - FLOWHQ_AI_EXTERNAL_ENABLED=${FLOWHQ_AI_EXTERNAL_ENABLED:-false}
+      - FLOWHQ_AI_MODEL=${FLOWHQ_AI_MODEL:-openai/gpt-4o-mini}
+      - FLOWHQ_AI_MAX_REPLIES_PER_HOUR=${FLOWHQ_AI_MAX_REPLIES_PER_HOUR:-6}
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  grist:
+    # Pin a specific version before going live, e.g. gristlabs/grist:1.x.x
+    image: gristlabs/grist:${GRIST_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - APP_HOME_URL=https://${GRIST_DOMAIN}
+      - GRIST_SESSION_SECRET=${GRIST_SESSION_SECRET}
+      - GRIST_DEFAULT_EMAIL=${GRIST_ADMIN_EMAIL}
+      - GRIST_SINGLE_ORG=${GRIST_TEAM_NAME}
+      - GRIST_FORCE_LOGIN=true
+      - GRIST_SANDBOX_FLAVOR=${GRIST_SANDBOX_FLAVOR:-gvisor}
+      # Google sign-in (OIDC). Redirect URI to register in Google Cloud:
+      #   https://<GRIST_DOMAIN>/oauth2/callback
+      - GRIST_OIDC_IDP_ISSUER=https://accounts.google.com
+      - GRIST_OIDC_IDP_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GRIST_OIDC_IDP_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GRIST_OIDC_IDP_SCOPES=openid email profile
+    # If formulas fail to run with the gvisor sandbox on your host, uncomment:
+    # cap_add:
+    #   - SYS_PTRACE
+    volumes:
+      - grist_data:/persist
+
+volumes:
+  caddy_data:
+  caddy_config:
+  n8n_data:
+  grist_data:

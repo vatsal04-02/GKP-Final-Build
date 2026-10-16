@@ -1,0 +1,2152 @@
+{
+  "name": "W2 - WhatsApp inbound (standalone)",
+  "nodes": [
+    {
+      "name": "W2 – Webhook Verify",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "48f2da5f-adf7-460c-aa5f-0bfc64e8582f",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "whatsapp-inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7d83b437-41d7-4461-a377-07b13048784e"
+    },
+    {
+      "name": "W2 – Verify Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1a0c432-e281-4624-a62f-9d33e12eb186",
+              "name": "meta_verify_token",
+              "value": "PASTE_META_WEBHOOK_VERIFY_TOKEN",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "39a2266c-1cf7-4c18-af2a-daa5336226d7"
+    },
+    {
+      "name": "W2 – Check Verify Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Meta webhook verification (GET). Meta sends hub.mode, hub.verify_token and hub.challenge as query parameters.\n// The expected token comes from the \"W2 – Verify Config\" node (a placeholder you fill in); it is never written in this code\n// and it is NOT copied into this node's output.\nconst q = $json.query || {};\nconst pick = (k) => {\n  const v = q['hub.' + k] !== undefined ? q['hub.' + k] : (q.hub && q.hub[k]);   // n8n keeps \"hub.mode\" as one key; a nested hub{} is handled too\n  return Array.isArray(v) ? String(v[0]) : (v === undefined || v === null ? '' : String(v));\n};\nconst mode = pick('mode');\nconst sent = pick('verify_token');\nconst challenge = pick('challenge');\nconst want = String($json.meta_verify_token || '');\nconst PLACEHOLDER = 'PASTE_META_WEBHOOK_VERIFY_TOKEN';\nconst same = (a, b) => {                                  // compares every character, so the time taken does not reveal how much matched\n  if (a.length !== b.length) return false;\n  let diff = 0;\n  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);\n  return diff === 0;\n};\n\nlet ok = false;\nlet status = 403;\nlet reason = '';\nif (!want || want === PLACEHOLDER) reason = 'verify token is not configured (fill it in the \"W2 – Verify Config\" node)';\nelse if (mode !== 'subscribe') reason = 'hub.mode is not \"subscribe\"';\nelse if (!same(sent, want)) reason = 'verify token does not match';\nelse if (!/^[0-9A-Za-z_.~-]{1,128}$/.test(challenge)) { reason = 'hub.challenge is missing or malformed'; status = 400; }\nelse ok = true;\n\nreturn { json: { ok, status_code: ok ? 200 : status, challenge: ok ? challenge : '', reason } };\n"
+      },
+      "id": "647ef579-6e18-459b-a5f3-0fe52dfa8e0e"
+    },
+    {
+      "name": "W2 – Verify OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "520fa44d-58f6-4b44-a9f0-3b5310dd76ab",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "593910eb-0948-440a-ad9c-d1093f3c6acd"
+    },
+    {
+      "name": "W2 – Respond Challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.challenge }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "id": "86d9cd06-7781-44ca-aeb5-1e6b7144a635"
+    },
+    {
+      "name": "W2 – Respond Forbidden",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        176
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Verification failed",
+        "options": {
+          "responseCode": "={{ $json.status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "id": "28af04bb-2834-4382-a3ec-c5f2cf15078c"
+    },
+    {
+      "name": "W2 – Webhook Inbound",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        704
+      ],
+      "webhookId": "6b5a5544-ffb6-4ee0-a76f-45b896a87b1f",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d83febc8-25b6-4d99-a1cf-1f324f0bebcb"
+    },
+    {
+      "name": "W2 – Manual Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1056
+      ],
+      "parameters": {},
+      "id": "c1dc9fad-a84f-47b5-a47d-319929de15a1"
+    },
+    {
+      "name": "W2 – Test Cases",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        1056
+      ],
+      "parameters": {
+        "jsCode": "// Manual test data for W2. Click \"Execute workflow\" on \"W2 – Manual Test\": every case below goes through the normal path\n// (Config -> Parse -> clinic -> duplicate check -> lead -> conversation -> message -> Run_Log) WITHOUT Meta and without answering a webhook.\n// SAFE FAKE DATA ONLY: the 91900000001x numbers and the display number 15550000000 are made up. Never paste a real patient's number here.\n//\n// Before the first run create ONE test lead in the demo-clinic CRM:  Phone +919000000011,  Name \"W2 Test Existing\".\n// Afterwards delete the rows the tests created (leads, conversations, messages, Run_Log) by hand in Grist: W2 never deletes anything.\nconst DEMO_PHONE_NUMBER_ID = '123456789012345';   // WA_Phone_Number_ID of demo-clinic in the Agency Registry\nconst ONLY = '';              // a case name (e.g. 'new-patient') runs just that one; '' runs all of them\nconst PASTED_PAYLOAD = null;  // or paste ONE Meta POST body here (a JSON object) to run only that payload\nconst stamp = Date.now();     // makes the message ids unique for every run of this node (the duplicate case reuses one id on purpose)\nconst EXISTING = '919000000011';\nconst NEW_PATIENT = '919000000012';\n\nconst meta = (pid, name, from, message) => ({\n  object: 'whatsapp_business_account',\n  entry: [{ id: 'TEST_WABA_ID', changes: [{ field: 'messages', value: {\n    messaging_product: 'whatsapp',\n    metadata: { display_phone_number: '15550000000', phone_number_id: pid },\n    contacts: name === null ? [] : [{ profile: { name }, wa_id: from }],\n    messages: [message],\n  } }] }],\n});\nconst ts = String(Math.floor(stamp / 1000));\nconst text = (from, id, body) => ({ from, id, timestamp: ts, type: 'text', text: { body } });\n\nconst cases = [\n  { name: 'existing-patient', expect: 'existing lead: NO new lead; 1 new message; conversation updated (Unread +1); Run_Log ok',\n    body: meta(DEMO_PHONE_NUMBER_ID, 'W2 Test Existing', EXISTING, text(EXISTING, `wamid.W2TEST.${stamp}.existing`, 'Hello, I would like to ask about my knee.')) },\n  { name: 'new-patient', expect: 'NEW lead (Source WhatsApp, Status New, Lead_id L-YYYYMMDD-NNNN) + conversation + message; Run_Log ok; staff alert prepared (not sent)',\n    body: meta(DEMO_PHONE_NUMBER_ID, 'W2 Test New', NEW_PATIENT, text(NEW_PATIENT, `wamid.W2TEST.${stamp}.new`, 'Hi, do you treat back pain?')) },\n  { name: 'duplicate-message-first', expect: 'stored once',\n    body: meta(DEMO_PHONE_NUMBER_ID, 'W2 Test Existing', EXISTING, text(EXISTING, `wamid.W2TEST.${stamp}.dup`, 'Duplicate delivery test')) },\n  { name: 'duplicate-message-second', expect: 'SAME message id again: nothing created, Unread not increased, Run_Log skipped (duplicate WA_Message_ID)',\n    body: meta(DEMO_PHONE_NUMBER_ID, 'W2 Test Existing', EXISTING, text(EXISTING, `wamid.W2TEST.${stamp}.dup`, 'Duplicate delivery test')) },\n  { name: 'unknown-phone-number-id', expect: 'stops at \"W2 – Clinic Rejected\" (unknown phone_number_id); nothing written',\n    body: meta('000000000000000', 'W2 Test Existing', EXISTING, text(EXISTING, `wamid.W2TEST.${stamp}.unknown`, 'Unknown clinic test')) },\n  { name: 'invalid-payload', expect: 'Parse says kind = invalid; nothing else runs',\n    body: { hello: 'this is not a Meta webhook body' } },\n  { name: 'non-text-image', expect: 'no crash; Body = \"[WhatsApp image received]: photo of my knee\"; Enquiry untouched',\n    body: meta(DEMO_PHONE_NUMBER_ID, 'W2 Test Existing', EXISTING, { from: EXISTING, id: `wamid.W2TEST.${stamp}.image`, timestamp: ts, type: 'image', image: { id: 'TEST_MEDIA_ID', mime_type: 'image/jpeg', sha256: 'test', caption: 'photo of my knee' } }) },\n  { name: 'status-event', expect: 'a delivery receipt, not a patient message: ignored, nothing written',\n    body: { object: 'whatsapp_business_account', entry: [{ id: 'TEST_WABA_ID', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { display_phone_number: '15550000000', phone_number_id: DEMO_PHONE_NUMBER_ID }, statuses: [{ id: `wamid.W2TEST.${stamp}.status`, status: 'delivered', timestamp: ts, recipient_id: EXISTING }] } }] }] } },\n];\n\nconst wrap = (name, expect, body) => ({ json: { __w2_source: 'manual', test_case: name, test_expect: expect, headers: {}, params: {}, query: {}, body } });\nif (PASTED_PAYLOAD !== null) return [wrap('pasted-payload', 'whatever your payload should do', PASTED_PAYLOAD)];\nreturn cases.filter((c) => !ONLY || c.name === ONLY).map((c) => wrap(c.name, c.expect, c.body));\n"
+      },
+      "id": "2b54baf7-47e9-4896-ad55-60065dc7426b"
+    },
+    {
+      "name": "W2 – Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        880
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "15755f39-861e-4cea-a74a-22c7659cfb14",
+              "name": "grist_base_url",
+              "value": "http://grist:8484",
+              "type": "string"
+            },
+            {
+              "id": "05e21910-46b3-44eb-a118-ac8a7d90b9ad",
+              "name": "registry_doc_id",
+              "value": "REGISTRY_DOC_ID_PLACEHOLDER",
+              "type": "string"
+            },
+            {
+              "id": "4f2e6211-c320-4546-a93b-503400f1d7bd",
+              "name": "leads_table",
+              "value": "LEADS",
+              "type": "string"
+            },
+            {
+              "id": "0b45caeb-74a5-4520-a240-f116cb4021e8",
+              "name": "message_direction_in",
+              "value": "In",
+              "type": "string"
+            },
+            {
+              "id": "00066568-a086-4fb7-ad78-a4a8cc46360e",
+              "name": "message_status_in",
+              "value": "Received",
+              "type": "string"
+            },
+            {
+              "id": "1c31dfc5-1966-45c3-abd3-9cb22b8ade38",
+              "name": "unread_mode",
+              "value": "count",
+              "type": "string"
+            },
+            {
+              "id": "6ef335a0-d607-4c82-a339-e7790600ef12",
+              "name": "message_sent_by",
+              "value": "Patient",
+              "type": "string"
+            },
+            {
+              "id": "5ec4c41e-2305-4ed2-a18d-a17d5ccf57d7",
+              "name": "default_lead_name",
+              "value": "WhatsApp Lead",
+              "type": "string"
+            },
+            {
+              "id": "efa1c6a0-2915-46c9-af41-0ff162c54cc3",
+              "name": "ai_workflow_id",
+              "value": "PASTE_W13_WORKFLOW_ID",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "396f3e83-2c1b-43b5-af5d-f932883f16ed"
+    },
+    {
+      "name": "W2 – Parse Meta Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        880
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Reads the Meta WhatsApp Cloud API webhook body (entry[].changes[].value) and returns ONE envelope item:\n//   kind 'message' = at least one inbound patient message (in events[]) | 'status' = delivery receipts only |\n//   'ignored' = Meta-shaped but nothing to store | 'invalid' = not a Meta webhook body at all.\n// It never throws. headers / query / params are dropped here so they do not travel through the rest of the workflow.\nconst raw = $json.body;\nconst source = $json.__w2_source === 'manual' ? 'manual' : 'webhook';   // only the manual-test node can set this (it is a top-level key, not part of the body)\nconst cfg = {};\nfor (const [k, v] of Object.entries($json)) {\n  if (['headers', 'params', 'query', 'body', 'webhookUrl', 'executionMode'].includes(k) || k.startsWith('__w2')) continue;\n  cfg[k] = v;                                                              // Config values (and test_case / test_expect for the manual test)\n}\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst noControl = (v) => String(v === null || v === undefined ? '' : v).replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/g, '');\nconst line = (v, max) => noControl(v).replace(/\\s+/g, ' ').trim().slice(0, max);\nconst text = (v, max) => noControl(v).trim().slice(0, max);               // keeps line breaks\nconst nowSec = Math.floor(Date.now() / 1000);\nconst MAX_EVENTS = 100;\n\nconst events = [];\nconst rejected = [];\nlet statuses = 0;\n\nconst done = (kind, extra) => ({\n  json: {\n    ...cfg, source, kind, events, rejected, statuses_seen: statuses,\n    http_status: kind === 'invalid' ? 400 : 200,\n    response_body: JSON.stringify(kind === 'invalid' ? { status: 'invalid', error: extra } : { status: kind === 'message' ? 'received' : kind }),\n    reject_reason: kind === 'invalid' ? extra : rejected.join('; '),\n  },\n});\n\nif (!isObj(raw) || !Array.isArray(raw.entry)) return done('invalid', 'body is not a Meta webhook payload (entry[] is missing)');\n\nfor (const entry of raw.entry) {\n  if (!isObj(entry) || !Array.isArray(entry.changes)) continue;\n  for (const change of entry.changes) {\n    const v = isObj(change) ? change.value : null;\n    if (!isObj(v)) continue;\n    if (Array.isArray(v.statuses)) statuses += v.statuses.length;\n    if (!Array.isArray(v.messages) || !v.messages.length) continue;       // delivery receipts, template updates, ...: not patient messages\n    const pid = isObj(v.metadata) ? line(v.metadata.phone_number_id, 40) : '';\n    const contacts = Array.isArray(v.contacts) ? v.contacts.filter(isObj) : [];\n    for (const m of v.messages) {\n      if (events.length >= MAX_EVENTS) { rejected.push(`more than ${MAX_EVENTS} messages in one payload: the rest were ignored`); break; }\n      if (!isObj(m)) { rejected.push('a message entry is not an object'); continue; }\n      const id = line(m.id, 200);\n      const from = line(m.from, 30);\n      const problems = [];\n      if (!pid) problems.push('missing metadata.phone_number_id');\n      if (!id) problems.push('missing message id');\n      if (!from) problems.push('missing sender phone');\n      if (problems.length) { rejected.push(problems.join(', ')); continue; }\n\n      const type = line(m.type, 30).toLowerCase() || 'unknown';\n      const part = isObj(m[type]) ? m[type] : {};\n      let label = '';                                                       // what the patient actually wrote, when there is text\n      if (type === 'text') label = text(part.body, 2000);\n      else if (type === 'button') label = text(part.text || part.payload, 2000);\n      else if (type === 'interactive' && isObj(m.interactive)) {\n        const reply = isObj(m.interactive.button_reply) ? m.interactive.button_reply : (isObj(m.interactive.list_reply) ? m.interactive.list_reply : {});\n        label = text(reply.title, 2000);\n      }\n      const caption = type === 'text' ? '' : text(part.caption, 500);\n      const body_text = label || `[WhatsApp ${type} received]${caption ? `: ${caption}` : ''}`;\n\n      const ts = Number(m.timestamp);\n      const contact = contacts.find((c) => String(c.wa_id || '') === from) || (contacts.length === 1 ? contacts[0] : null);\n      events.push({\n        phone_number_id: pid,\n        from,\n        sender_name: contact && isObj(contact.profile) ? line(contact.profile.name, 100) : '',\n        wa_message_id: id,\n        msg_timestamp: Number.isFinite(ts) && ts > 0 ? Math.floor(ts) : nowSec,\n        msg_type: type,\n        body_text,\n        enquiry_text: label.slice(0, 1000),\n      });\n    }\n  }\n}\n\nif (events.length) return done('message');\nif (rejected.length) return done('ignored');\nreturn done(statuses ? 'status' : 'ignored');\n"
+      },
+      "id": "2fcd8eec-ad14-475b-aadf-b37e34da6a62"
+    },
+    {
+      "name": "W2 – Webhook Source?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        880
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "28db3727-7747-4631-a7a2-a11bcb559cdb",
+              "leftValue": "={{ $json.source === 'webhook' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ed7b9b93-6fe5-4df2-a818-8c32b3882553"
+    },
+    {
+      "name": "W2 – Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        704
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.response_body }}",
+        "options": {
+          "responseCode": "={{ $json.http_status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "1f2d0ce7-fb16-4577-af89-0cea29f85fae"
+    },
+    {
+      "name": "W2 – Valid Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        880
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "220b10c5-69ec-42f8-a456-05151a2fec32",
+              "leftValue": "={{ $json.kind === 'message' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a8051479-6eeb-45bb-a00d-85b2f700b7d3"
+    },
+    {
+      "name": "W2 – Split Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        880
+      ],
+      "parameters": {
+        "jsCode": "// One item per inbound message (Meta may batch several in one webhook). The next node processes them ONE AT A TIME,\n// so two messages from the same new patient can never create two leads, and Lead_ids stay unique inside a batch.\nconst out = [];\n$input.all().forEach((item, i) => {\n  const { events, rejected, statuses_seen, http_status, response_body, reject_reason, kind, ...ctx } = item.json;\n  for (const ev of events || []) out.push({ json: { ...ctx, ...ev }, pairedItem: { item: i } });\n});\nreturn out;\n"
+      },
+      "id": "01d8a6f0-8a12-4827-a676-9a442a3b6d8c"
+    },
+    {
+      "name": "W2 – Loop Over Messages",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1920,
+        880
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "a58d99d1-a56d-4f54-a314-34a8fcabd10f"
+    },
+    {
+      "name": "W2 – Clinics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        1584
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.registry_doc_id }}/tables/Clinics/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "1135d9c0-fe35-4949-ad66-b2c205fdeecf"
+    },
+    {
+      "name": "W2 – Resolve Clinic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        1584
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// phone_number_id -> clinic. The Agency Registry table Clinics is small, so it is read whole and matched here as TEXT\n// (a Grist column holding the id as a number or as text both work). Active may come back as true or the string \"TRUE\".\nconst ctx = $('W2 – Loop Over Messages').item.json;\nconst rows = Array.isArray($json.records) ? $json.records : [];\nconst want = String(ctx.phone_number_id || '').trim();\nconst rec = rows.find((r) => r && r.fields && String(r.fields.WA_Phone_Number_ID === undefined || r.fields.WA_Phone_Number_ID === null ? '' : r.fields.WA_Phone_Number_ID).trim() === want);\nconst f = rec ? rec.fields : {};\nconst active = !!rec && String(f.Active).toUpperCase() === 'TRUE';\nconst doc = rec ? String(f.Grist_Doc_ID || '').trim() : '';\nlet reason = '';\nif (!want) reason = 'no phone_number_id';\nelse if (!rec) reason = 'unknown phone_number_id';\nelse if (!active) reason = 'clinic is not active';\nelse if (!doc) reason = 'clinic has no Grist_Doc_ID';\nreturn {\n  json: {\n    ...ctx,\n    clinic_found: reason === '',\n    clinic_reject_reason: reason,\n    clinic_slug: rec ? String(f.Clinic_Slug || '') : '',\n    clinic_name: rec ? String(f.Clinic_Name || '') : '',\n    doc_id: reason === '' ? doc : '',\n    wa_phone_number_id: want,\n  },\n};\n"
+      },
+      "id": "0de85c8d-2824-4724-a2c2-e8b53bb840d0"
+    },
+    {
+      "name": "W2 – Clinic Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        1584
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3c570bfc-50d3-41ab-a9c5-61c323313d78",
+              "leftValue": "={{ $json.clinic_found === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "808f971c-d8a2-4762-a2e4-b7e6d7d5b9c7"
+    },
+    {
+      "name": "W2 – Clinic Rejected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1760
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// This message belongs to no active clinic, so nothing is written: there is no clinic CRM to write to. Only the reason is kept (no phone numbers).\nreturn { json: { outcome: 'ignored', reason: $json.clinic_reject_reason, phone_number_id: $json.phone_number_id, wa_message_id: $json.wa_message_id, test_case: $json.test_case } };\n"
+      },
+      "id": "e862c0aa-711e-409a-a67f-ec3bf8d4e50d"
+    },
+    {
+      "name": "W2 – Normalize Phone",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        1584
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js (the same function W12 uses) - keep identical.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  let digits = String(raw).replace(/\\D/g, '');          // keep digits only\n  if (digits.startsWith('0091')) digits = digits.slice(4);\n  else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);\n  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);\n  const valid = /^[6-9]\\d{9}$/.test(digits);            // Indian mobiles start 6-9\n  return { phone: valid ? `+91${digits}` : null, valid };\n}\n\n// WhatsApp gives the sender as digits with the country code (919000000011). Store ONE form only: +91XXXXXXXXXX (CLAUDE.md rule 7).\nconst { phone, valid } = normalizeIndianPhone($json.from);\nreturn {\n  json: {\n    ...$json,\n    patient_phone: phone,\n    phone_valid: valid,\n    run_outcome: valid ? '' : 'skipped',\n    run_error: valid ? '' : 'sender number is not a valid Indian mobile (+91XXXXXXXXXX); nothing was stored',\n  },\n};\n"
+      },
+      "id": "bd3a3598-52d6-4a97-a53c-d31a96690e2e"
+    },
+    {
+      "name": "W2 – Phone Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        1584
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dfc54c98-8488-40c7-a4ce-c6f3dd127e81",
+              "leftValue": "={{ $json.phone_valid === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3b0138a0-6201-4193-a96b-8ed1a19d3414"
+    },
+    {
+      "name": "W2 – Check Duplicate Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        1584
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Messages/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ WA_Message_ID: [$json.wa_message_id] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "08c90dfd-4222-4769-a4cf-836ab1574b90"
+    },
+    {
+      "name": "W2 – Read Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        1584
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Has this WA_Message_ID been stored before? Meta retries deliveries, so the same id can arrive twice.\nconst ctx = $('W2 – Normalize Phone').item.json;\nconst rows = Array.isArray($json.records) ? $json.records : [];\nconst dup = rows.length > 0;\nreturn {\n  json: {\n    ...ctx,\n    is_duplicate: dup,\n    run_outcome: dup ? 'skipped' : '',\n    run_error: dup ? `duplicate WA_Message_ID (Messages row ${rows[0].id}); nothing was created` : '',\n  },\n};\n"
+      },
+      "id": "1cd755b6-b885-4ed6-ae45-82b5ebbe5cfa"
+    },
+    {
+      "name": "W2 – Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        1584
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9e206d67-fe9b-43b2-ac33-9321d35f787f",
+              "leftValue": "={{ $json.is_duplicate === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5c6720f5-b775-4cb5-a908-c6998cc01433"
+    },
+    {
+      "name": "W2 – Find Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        2288
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/{{ $json.leads_table }}/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Phone: [$json.patient_phone] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "807aff2d-00ad-48e0-a7d4-a40536bc6224"
+    },
+    {
+      "name": "W2 – Read Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        2288
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('W2 – Read Duplicate').item.json;\nconst rec = Array.isArray($json.records) ? $json.records[0] : null;\nreturn {\n  json: {\n    ...ctx,\n    lead_found: !!rec,\n    lead_row_id: rec ? rec.id : 0,\n    lead_id: rec ? String((rec.fields || {}).Lead_id || `row ${rec.id}`) : '',\n    lead_created: false,\n  },\n};\n"
+      },
+      "id": "d36c4c22-5d9a-450c-aaa7-2aea30b73ff7"
+    },
+    {
+      "name": "W2 – Lead Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        2288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "31ade19f-df8a-4176-a369-d05015dc5fd8",
+              "leftValue": "={{ $json.lead_found === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ba2c0ca5-ec92-413e-abb6-d1d5c8c10fa7"
+    },
+    {
+      "name": "W2 – Recent Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        2464
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/{{ $json.leads_table }}/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sort",
+              "value": "-Created_At"
+            },
+            {
+              "name": "limit",
+              "value": "200"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0da0efd5-c7a8-4902-a15b-10d09da6a4ec"
+    },
+    {
+      "name": "W2 – Build New Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        2464
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Same Lead_id rule as W1: L-YYYYMMDD-NNNN (IST date, next free number of the day, read from the 200 newest leads).\nconst ctx = $('W2 – Read Lead').item.json;\nconst now = Date.now();\nconst ymd = new Date(now + 5.5 * 3600 * 1000).toISOString().slice(0, 10).replace(/-/g, '');   // IST date\nconst prefix = `L-${ymd}-`;\nlet max = 0;\nfor (const r of $json.records || []) {\n  const id = String((r.fields || {}).Lead_id || '');\n  if (id.startsWith(prefix)) max = Math.max(max, parseInt(id.slice(prefix.length), 10) || 0);\n}\nconst lead_id = prefix + String(max + 1).padStart(4, '0');\nconst fields = {\n  Lead_id: lead_id,\n  Created_At: Math.floor(now / 1000),                                   // Grist DateTime = epoch seconds\n  Name: ctx.sender_name || ctx.default_lead_name || 'WhatsApp Lead',\n  Phone: ctx.patient_phone,\n  Source: 'WhatsApp',\n  Status: 'New',\n};\nif (ctx.enquiry_text) fields.Enquiry = ctx.enquiry_text;                // only when the patient wrote text\nreturn { json: { ...ctx, new_lead_id: lead_id, create: { records: [{ fields }] } } };\n"
+      },
+      "id": "999fa3ca-c29f-4057-ab8d-d397862a8377"
+    },
+    {
+      "name": "W2 – Create Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        2464
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/{{ $json.leads_table }}/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.create) }}",
+        "options": {}
+      },
+      "id": "44c71095-ed0b-4f02-a848-f87eb22303e1"
+    },
+    {
+      "name": "W2 – Recheck Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        2464
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "url": "={{ $('W2 – Build New Lead').item.json.grist_base_url }}/api/docs/{{ $('W2 – Build New Lead').item.json.doc_id }}/tables/{{ $('W2 – Build New Lead').item.json.leads_table }}/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Phone: [$('W2 – Build New Lead').item.json.patient_phone] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "538b2215-3d2d-4cf2-acd8-34b75c9c2667"
+    },
+    {
+      "name": "W2 – Read Created Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        2464
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Race guard. Two messages from the same NEW patient can arrive in parallel (two executions), and both would create a lead.\n// After creating, look again: whoever sees several leads for this phone uses the LOWEST row id, so both runs end up on the same lead.\n// The extra row is left for staff to delete (W2 never deletes) and is named in the Run_Log note.\nconst ctx = $('W2 – Build New Lead').item.json;\nconst made = $('W2 – Create Lead').item.json;\nconst madeId = made && Array.isArray(made.records) && made.records[0] ? Number(made.records[0].id) : 0;\nconst rows = (Array.isArray($json.records) ? $json.records : []).filter((r) => r && Number.isInteger(r.id)).sort((a, b) => a.id - b.id);\nconst canon = rows[0] || (madeId ? { id: madeId, fields: { Lead_id: ctx.new_lead_id } } : null);\nconst race = !!canon && madeId > 0 && canon.id !== madeId;\nconst notes = Array.isArray(ctx.race_notes) ? ctx.race_notes.slice() : [];\nif (race) notes.push(`parallel messages created lead row ${madeId} as a duplicate of row ${canon.id}; row ${canon.id} is used (row ${madeId} can be deleted)`);\nreturn {\n  json: {\n    ...ctx,\n    lead_found: false,\n    lead_row_id: canon ? canon.id : 0,\n    lead_id: canon ? String((canon.fields || {}).Lead_id || ctx.new_lead_id) : '',\n    lead_created: !!canon && !race,\n    race_notes: notes,\n    run_outcome: canon ? '' : 'failed',\n    run_error: canon ? '' : 'the lead was not found after it was created; message not stored',\n  },\n};\n"
+      },
+      "id": "479d4a79-30a9-449c-a990-0828ab2eae9f"
+    },
+    {
+      "name": "W2 – Lead Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        2464
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6930280d-2860-4038-ad4a-101354fe3f66",
+              "leftValue": "={{ Number($json.lead_row_id) > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cf78153d-e41c-4c82-a1fd-f4ba8f2b3412"
+    },
+    {
+      "name": "W2 – Lead Ready",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        2288
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Join point: the lead exists (found, or just created). Nothing changes here; later nodes read this item by name.\nreturn { json: { ...$json } };\n"
+      },
+      "id": "329fc0c1-467d-4772-a234-cf7fffbecdd3"
+    },
+    {
+      "name": "W2 – Find Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        3168
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Conversations/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Phone: [$json.patient_phone] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d21e9982-7c38-43f4-a952-481783875c87"
+    },
+    {
+      "name": "W2 – Read Conversation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        3168
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('W2 – Lead Ready').item.json;\nconst rows = (Array.isArray($json.records) ? $json.records : []).filter((r) => r && Number.isInteger(r.id)).sort((a, b) => a.id - b.id);\nconst conv = rows[0] || null;                                           // several rows for one phone: the oldest wins\nconst f = conv ? conv.fields || {} : {};\nreturn {\n  json: {\n    ...ctx,\n    conversation_found: !!conv,\n    conversation_id: conv ? conv.id : 0,\n    conversation_created: false,\n    conv_unread: Number(f.Unread) || 0,\n    conv_last_inbound: Number(f.Last_Inbound_At) || 0,\n  },\n};\n"
+      },
+      "id": "302e21f1-1d3b-4508-a736-d63664b758e8"
+    },
+    {
+      "name": "W2 – Conversation Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        3168
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b6fb0c2c-9f75-43e2-a705-0c4cd265a432",
+              "leftValue": "={{ $json.conversation_found === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5ed9b660-b581-438e-aa25-97104e78c9f5"
+    },
+    {
+      "name": "W2 – Create Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        3344
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Conversations/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { Phone: $json.patient_phone, Lead: $json.lead_row_id } }] }) }}",
+        "options": {}
+      },
+      "id": "1fc9c1ed-72b4-4f84-a268-da567af0f03a"
+    },
+    {
+      "name": "W2 – Recheck Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        3344
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "url": "={{ $('W2 – Read Conversation').item.json.grist_base_url }}/api/docs/{{ $('W2 – Read Conversation').item.json.doc_id }}/tables/Conversations/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Phone: [$('W2 – Read Conversation').item.json.patient_phone] }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a5646eb9-fcbe-475b-a4f8-31d664684c27"
+    },
+    {
+      "name": "W2 – Read Created Conversation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        3344
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Same race guard as for leads: after creating, the lowest conversation row id for this phone is the one everybody uses.\nconst ctx = $('W2 – Read Conversation').item.json;\nconst made = $('W2 – Create Conversation').item.json;\nconst madeId = made && Array.isArray(made.records) && made.records[0] ? Number(made.records[0].id) : 0;\nconst rows = (Array.isArray($json.records) ? $json.records : []).filter((r) => r && Number.isInteger(r.id)).sort((a, b) => a.id - b.id);\nconst conv = rows[0] || (madeId ? { id: madeId, fields: {} } : null);\nconst f = conv ? conv.fields || {} : {};\nconst race = !!conv && madeId > 0 && conv.id !== madeId;\nconst notes = Array.isArray(ctx.race_notes) ? ctx.race_notes.slice() : [];\nif (race) notes.push(`parallel messages created conversation row ${madeId} as a duplicate of row ${conv.id}; row ${conv.id} is used (row ${madeId} can be deleted)`);\nreturn {\n  json: {\n    ...ctx,\n    conversation_found: false,\n    conversation_id: conv ? conv.id : 0,\n    conversation_created: !!conv && !race,\n    conv_unread: Number(f.Unread) || 0,\n    conv_last_inbound: Number(f.Last_Inbound_At) || 0,\n    race_notes: notes,\n    run_outcome: conv ? '' : 'failed',\n    run_error: conv ? '' : 'the conversation was not found after it was created; message not stored',\n  },\n};\n"
+      },
+      "id": "2e52c1d4-a288-4375-aad5-fcffdcb28082"
+    },
+    {
+      "name": "W2 – Conversation Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        3344
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "99e7b41d-4c5f-4222-adcb-1e8c39c73ca4",
+              "leftValue": "={{ Number($json.conversation_id) > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ade248ee-b207-4ed0-a503-7363b021c856"
+    },
+    {
+      "name": "W2 – Conversation Ready",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        3168
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Join point: the conversation exists (found, or just created). Nothing changes here; later nodes read this item by name.\nreturn { json: { ...$json } };\n"
+      },
+      "id": "cc02cb22-525f-4755-a6ae-cafcac9fda76"
+    },
+    {
+      "name": "W2 – Add Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        3872
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Messages/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { Conversation: $json.conversation_id, Direction: $json.message_direction_in, Body: $json.body_text, Sent_By: $json.message_sent_by, WA_Message_ID: $json.wa_message_id, Status: $json.message_status_in, Created_At: $json.msg_timestamp } }] }) }}",
+        "options": {}
+      },
+      "id": "83388925-77f8-4d23-a91e-9d292d79e072"
+    },
+    {
+      "name": "W2 – Message Saved",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        3872
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The Messages row exists. Work out the conversation update: Last_Inbound_At never moves backwards (messages can arrive out of order),\n// Unread counts up by one (grist/schema.md: Integer) - or becomes true when unread_mode is 'flag' (a Toggle column).\n// This runs only for a NEW WA_Message_ID (duplicates stop earlier), so Unread can never be counted twice for one message.\nconst ctx = $('W2 – Conversation Ready').item.json;\nconst rec = Array.isArray($json.records) ? $json.records[0] : null;\nconst unread = ctx.unread_mode === 'flag' ? true : (Number(ctx.conv_unread) || 0) + 1;\nconst lastInbound = Math.max(Number(ctx.conv_last_inbound) || 0, ctx.msg_timestamp);\nreturn {\n  json: {\n    ...ctx,\n    message_row_id: rec ? Number(rec.id) || 0 : 0,\n    conv_update: { records: [{ id: ctx.conversation_id, fields: { Lead: ctx.lead_row_id, Last_Inbound_At: lastInbound, Unread: unread } }] },\n  },\n};\n"
+      },
+      "id": "bac7bf08-717f-4073-a2f5-a94c23c7626a"
+    },
+    {
+      "name": "W2 – Update Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        3872
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Conversations/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.conv_update) }}",
+        "options": {}
+      },
+      "id": "26d66add-4a74-4f81-a681-b4465a38acec"
+    },
+    {
+      "name": "W2 – Prepare Staff Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        3872
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Staff alert for a brand-new lead: the PAYLOAD only. W2 sends nothing and does not call W12 (the one WhatsApp sender).\n// decision.send is false on purpose, so even if this item is wired to W12 by mistake nothing is sent. After the merge, a guard node\n// must fill decision (owner phone from Settings, TEST_MODE / TEST_PHONE, quiet hours) exactly like W3 does, then call W12.\nconst ctx = $('W2 – Message Saved').item.json;\nconst saved = ctx.message_row_id > 0;\nlet staff_alert = null;\nif (ctx.lead_created === true) {\n  const name = ctx.sender_name || ctx.default_lead_name || 'WhatsApp Lead';\n  const quote = ctx.enquiry_text ? ` - \"${ctx.enquiry_text.replace(/\\s+/g, ' ').slice(0, 200)}\"` : '';\n  staff_alert = {\n    prepared: true,\n    audience: 'staff',\n    source_workflow: 'W2-WhatsApp-Inbound',\n    template: 'new_lead_staff_alert',                                  // W12's WA_TEMPLATES: clinic_name, lead_name, lead_phone, enquiry\n    template_params: { clinic_name: ctx.clinic_name, lead_name: name, lead_phone: ctx.patient_phone, enquiry: ctx.enquiry_text || '' },\n    message_text: `New WhatsApp lead (${ctx.clinic_name}): ${name}, ${ctx.patient_phone}${quote}. ${ctx.lead_id}.`,\n    wa_phone_number_id: ctx.wa_phone_number_id,\n    grist_base_url: ctx.grist_base_url,\n    doc_id: ctx.doc_id,\n    lead_row_id: ctx.lead_row_id,\n    lead_phone: ctx.patient_phone,\n    decision: { send: false, to: null, reason: 'W2 standalone: staff alert prepared only, not sent', test_mode: true },\n  };\n}\nreturn {\n  json: {\n    ...ctx,\n    staff_alert,\n    run_outcome: saved ? 'ok' : 'failed',\n    run_error: saved ? '' : 'the message insert returned no row id',\n  },\n};\n"
+      },
+      "id": "30f418fe-b6a7-4f41-a802-0021daf72446"
+    },
+    {
+      "name": "W2 – AI Wanted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        3872
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e31eaa69-297f-4626-a48c-3d84216d29ee",
+              "leftValue": "={{ $json.run_outcome === 'ok' && !$json.test_case && /^[A-Za-z0-9]{8,32}$/.test(String($json.ai_workflow_id || '')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c1a22d52-239d-48a3-aa31-379af0490a29"
+    },
+    {
+      "name": "W2 – Hand To AI",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        1200,
+        3696
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $json.ai_workflow_id }}",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "b9826a67-e565-47d6-ab28-b8a78caf0ec6"
+    },
+    {
+      "name": "W2 – AI Handed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        3696
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// W13 was started for this message (it runs on its own; W2 does not wait for it). If starting it failed (wrong ai_workflow_id,\n// W13 not saved), the message is still stored: the reason goes to Run_Log and nothing else changes.\nconst ctx = $('W2 – Prepare Staff Alert').item.json;\nconst e = $json && $json.error;\nreturn { json: { ...ctx, ai_note: e ? `AI hand-off failed: ${String(e.message || e).replace(/\\s+/g, ' ').slice(0, 200)}` : 'AI hand-off started' } };\n"
+      },
+      "id": "bc19d323-ba1b-4256-a4fe-d5e65a384408"
+    },
+    {
+      "name": "W2 – Build Run Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        3872
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The one place that turns any outcome (stored, skipped, failed) into a Run_Log row.\n// Input is either (a) a full item with run_outcome / run_error, or (b) the error output of a Grist HTTP node ({ error }), in which case the\n// message's context is taken from the nearest earlier stage of THIS message. No phone numbers are written: numbers are masked.\nconst STAGES = ['W2 – Message Saved', 'W2 – Conversation Ready', 'W2 – Read Created Conversation', 'W2 – Read Conversation', 'W2 – Lead Ready',\n  'W2 – Read Created Lead', 'W2 – Read Lead', 'W2 – Read Duplicate', 'W2 – Normalize Phone', 'W2 – Resolve Clinic'];\nconst from = (name) => { try { return $(name).item.json; } catch (e) { return null; } };   // throws when that stage did not run for this message\nconst isFull = $json && $json.wa_message_id !== undefined;\nconst loop = from('W2 – Loop Over Messages');\nlet ctx = null;\nlet stage = '';\nif (isFull) ctx = $json;\nelse {\n  for (const s of STAGES) {\n    const c = from(s);\n    if (c && (!loop || c.wa_message_id === loop.wa_message_id)) { ctx = c; stage = s.replace('W2 – ', ''); break; }   // same message id = not left over from an earlier loop round\n  }\n  if (!ctx) ctx = loop || {};\n}\n\nconst safe = (v, max) => String(v === undefined || v === null ? '' : v).replace(/bearer\\s+\\S+/gi, 'bearer [hidden]').replace(/\\s+/g, ' ').trim().slice(0, max);\nconst failedHttp = !isFull;\nconst outcome = failedHttp ? 'failed' : (ctx.run_outcome || 'ok');\nlet err;\nif (failedHttp) {\n  const e = $json && $json.error;\n  const msg = safe(e && typeof e === 'object' ? (e.message || e.description || JSON.stringify(e)) : e, 300) || 'unknown error';\n  err = `Grist request failed${stage ? ` after \"${stage}\"` : ''}: ${msg}`;\n} else if (outcome === 'ok' && Array.isArray(ctx.race_notes) && ctx.race_notes.length) err = ctx.race_notes.join('; ');\nelse err = ctx.run_error || '';\nif (/failed/.test(String(ctx.ai_note || ''))) err = [err, ctx.ai_note].filter(Boolean).join('; ');   // the message is stored; only the AI step failed\n\nconst mask = (p) => String(p || '').replace(/\\d(?=\\d{4})/g, '*');\nconst id = ctx.wa_message_id || '';\nconst record = !failedHttp && outcome === 'ok'\n  ? `${ctx.lead_id || 'lead'} ${id} (${ctx.lead_created ? 'new lead' : 'existing lead'}, ${ctx.msg_type || 'message'})`\n  : `${id} ${mask(ctx.patient_phone || ctx.from)}`.trim();\n\nreturn {\n  json: {\n    can_log: !!(ctx.grist_base_url && ctx.doc_id),                      // no clinic resolved = no CRM to log into\n    grist_base_url: ctx.grist_base_url,\n    doc_id: ctx.doc_id,\n    log: { Workflow: 'W2-WhatsApp-Inbound', Record: safe(record, 200), Outcome: outcome, Error: safe(err, 500), At: Math.floor(Date.now() / 1000) },\n    outcome,\n    wa_message_id: id,\n    lead_row_id: ctx.lead_row_id || 0,\n    conversation_id: ctx.conversation_id || 0,\n    message_row_id: ctx.message_row_id || 0,\n    staff_alert: ctx.staff_alert || null,\n    ai_handoff: ctx.ai_note || '',\n    test_case: ctx.test_case,\n  },\n};\n"
+      },
+      "id": "3c9a4033-3a01-4c84-a424-50fc6c0a3c22"
+    },
+    {
+      "name": "W2 – Can Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        3872
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bfb184b5-94ff-477d-aa55-a5f2878513a0",
+              "leftValue": "={{ $json.can_log === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "759248bb-18b4-48c7-a1eb-90278e2bd913"
+    },
+    {
+      "name": "W2 – Run Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        3872
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Run_Log/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $json.log }] }) }}",
+        "options": {}
+      },
+      "id": "28a00e9a-5b1d-4973-a579-d3e913734dd5"
+    },
+    {
+      "name": "W2 – Section 00 Read Me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -560
+      ],
+      "parameters": {
+        "content": "## W2 – WhatsApp Inbound (STANDALONE)\nMeta WhatsApp Cloud API -> n8n -> the clinic's Grist CRM. **Not connected to any other workflow.** Sends nothing to WhatsApp.\n\n**Webhook:** GET + POST `/webhook/whatsapp-inbound` (test URL: `/webhook-test/whatsapp-inbound`). Meta needs the PRODUCTION URL, so the workflow must be **Active**.\n\n**Fill after import:** `W2 – Verify Config` > meta_verify_token (any string you choose; paste the SAME string in Meta). Nothing else is secret: Grist uses the existing credential \"Header Auth account 2\".\n\n**Check in `W2 – Config`:** leads_table (LEADS), message_direction_in (In), message_status_in (Received), unread_mode (count). These follow grist/schema.md; see the README.\n\n**Test first:** click Execute workflow on `W2 – Manual Test` (fake data only), then see README.md.\n\n**Safe by design:** answers Meta 200 first, then processes one message at a time; duplicates (same WA_Message_ID) change nothing; no deletes; failures go to Run_Log.",
+        "width": 1180,
+        "height": 400,
+        "color": 5
+      },
+      "id": "7faadc9f-d0f8-4583-a3d7-a61870188e45"
+    },
+    {
+      "name": "W2 – Section A Verify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -80
+      ],
+      "parameters": {
+        "content": "## SECTION A — META WEBHOOK VERIFY (GET)\nMeta calls this once when you save the webhook. It sends hub.mode, hub.verify_token and hub.challenge. The token must match \"W2 – Verify Config\"; then the challenge is echoed back as plain text. A wrong or unconfigured token answers 403.",
+        "width": 2500,
+        "height": 400,
+        "color": 7
+      },
+      "id": "ae2bf21e-9088-47a9-a590-f6db729f9e39"
+    },
+    {
+      "name": "W2 – Section B Inbound",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        620
+      ],
+      "parameters": {
+        "content": "## SECTION B — INBOUND POST + MANUAL TEST\nMeta POST (or the manual test data) -> Config -> Parse. Webhook calls are answered right away (200 for anything Meta-shaped, 400 for garbage), then processing continues. Delivery receipts and other events are ignored. Messages are processed ONE AT A TIME.",
+        "width": 2500,
+        "height": 620,
+        "color": 4
+      },
+      "id": "52e7ce83-13ad-4057-a210-669a80957571"
+    },
+    {
+      "name": "W2 – Section C Clinic",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        1500
+      ],
+      "parameters": {
+        "content": "## SECTION C — CLINIC, PHONE, DUPLICATE CHECK\nphone_number_id -> Agency Registry Clinics (Active must be TRUE) -> unknown / inactive clinic stops here. Sender -> +91XXXXXXXXXX. Same WA_Message_ID already in Messages = duplicate: nothing is created.",
+        "width": 2500,
+        "height": 400,
+        "color": 6
+      },
+      "id": "df15e19b-8471-4529-af34-06f24a709218"
+    },
+    {
+      "name": "W2 – Section D Lead",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        2200
+      ],
+      "parameters": {
+        "content": "## SECTION D — LEAD\nFind the lead by normalized phone; if none, create one (Source WhatsApp, Status New, Lead_id L-YYYYMMDD-NNNN). After creating, look again: parallel messages from one new patient converge on the lowest row id.",
+        "width": 2500,
+        "height": 400,
+        "color": 3
+      },
+      "id": "4aa41343-4c24-4202-a7b4-7637be8433d2"
+    },
+    {
+      "name": "W2 – Section E Conversation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3040
+      ],
+      "parameters": {
+        "content": "## SECTION E — CONVERSATION\nFind the conversation by normalized phone; if none, create it (Phone + Lead). After creating, look again: parallel messages converge on the lowest row id.",
+        "width": 2500,
+        "height": 420,
+        "color": 2
+      },
+      "id": "a23c1ac6-4a31-4709-a6bc-01a3f6b3d7d1"
+    },
+    {
+      "name": "W2 – Section F Message and Log",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        3780
+      ],
+      "parameters": {
+        "content": "## SECTION F — MESSAGE, STAFF ALERT PAYLOAD, RUN_LOG\nAdd the Messages row (Direction In, WA_Message_ID), then update Last_Inbound_At / Unread (Automation_Paused and Assigned_To are never touched). A new lead prepares a staff-alert payload for W12 (decision.send = false: NOT sent from here). Every message ends in one Run_Log row: ok, skipped (duplicate, bad number) or failed (with the reason). A failing Run_Log write ends quietly: no retries, no loops.",
+        "width": 2500,
+        "height": 420,
+        "color": 5
+      },
+      "id": "91a028e5-c6c3-4c4d-afeb-a702f55b2b91"
+    },
+    {
+      "name": "W2 – Section G AI",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        4260
+      ],
+      "parameters": {
+        "content": "## SECTION G — AI RECEPTIONIST (W13)\nEvery stored patient message is handed to W13 (one run per message, W2 does not wait). W13 decides with Claude, writes the CRM and replies through W12. Off until W2 – Config > ai_workflow_id is set (and the clinic has Settings ai_mode). The new-lead staff-alert payload is still prepared only (not sent).",
+        "width": 2500,
+        "height": 260,
+        "color": 7
+      },
+      "id": "0522abe4-4d87-4c3d-acc1-bc6669afa711"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "W2 – Webhook Verify": {
+      "main": [
+        [
+          {
+            "node": "W2 – Verify Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Verify Config": {
+      "main": [
+        [
+          {
+            "node": "W2 – Check Verify Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Check Verify Token": {
+      "main": [
+        [
+          {
+            "node": "W2 – Verify OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Verify OK?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Respond Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Respond Forbidden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Webhook Inbound": {
+      "main": [
+        [
+          {
+            "node": "W2 – Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Manual Test": {
+      "main": [
+        [
+          {
+            "node": "W2 – Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Test Cases": {
+      "main": [
+        [
+          {
+            "node": "W2 – Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Config": {
+      "main": [
+        [
+          {
+            "node": "W2 – Parse Meta Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Parse Meta Event": {
+      "main": [
+        [
+          {
+            "node": "W2 – Webhook Source?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Webhook Source?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Respond",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Valid Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Respond": {
+      "main": [
+        [
+          {
+            "node": "W2 – Valid Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Valid Event?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Split Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Split Messages": {
+      "main": [
+        [
+          {
+            "node": "W2 – Loop Over Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Loop Over Messages": {
+      "main": [
+        [],
+        [
+          {
+            "node": "W2 – Clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Clinics": {
+      "main": [
+        [
+          {
+            "node": "W2 – Resolve Clinic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Resolve Clinic": {
+      "main": [
+        [
+          {
+            "node": "W2 – Clinic Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Clinic Found?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Normalize Phone",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Clinic Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Clinic Rejected": {
+      "main": [
+        [
+          {
+            "node": "W2 – Loop Over Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Normalize Phone": {
+      "main": [
+        [
+          {
+            "node": "W2 – Phone Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Phone Valid?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Check Duplicate Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Check Duplicate Message": {
+      "main": [
+        [
+          {
+            "node": "W2 – Read Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Read Duplicate": {
+      "main": [
+        [
+          {
+            "node": "W2 – Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Find Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Find Lead": {
+      "main": [
+        [
+          {
+            "node": "W2 – Read Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Read Lead": {
+      "main": [
+        [
+          {
+            "node": "W2 – Lead Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Lead Exists?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Lead Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Recent Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Recent Leads": {
+      "main": [
+        [
+          {
+            "node": "W2 – Build New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Build New Lead": {
+      "main": [
+        [
+          {
+            "node": "W2 – Create Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Create Lead": {
+      "main": [
+        [
+          {
+            "node": "W2 – Recheck Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Recheck Lead": {
+      "main": [
+        [
+          {
+            "node": "W2 – Read Created Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Read Created Lead": {
+      "main": [
+        [
+          {
+            "node": "W2 – Lead Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Lead Resolved?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Lead Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Lead Ready": {
+      "main": [
+        [
+          {
+            "node": "W2 – Find Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Find Conversation": {
+      "main": [
+        [
+          {
+            "node": "W2 – Read Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Read Conversation": {
+      "main": [
+        [
+          {
+            "node": "W2 – Conversation Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Conversation Exists?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Conversation Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Create Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Create Conversation": {
+      "main": [
+        [
+          {
+            "node": "W2 – Recheck Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Recheck Conversation": {
+      "main": [
+        [
+          {
+            "node": "W2 – Read Created Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Read Created Conversation": {
+      "main": [
+        [
+          {
+            "node": "W2 – Conversation Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Conversation Resolved?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Conversation Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Conversation Ready": {
+      "main": [
+        [
+          {
+            "node": "W2 – Add Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Add Message": {
+      "main": [
+        [
+          {
+            "node": "W2 – Message Saved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Message Saved": {
+      "main": [
+        [
+          {
+            "node": "W2 – Update Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Update Conversation": {
+      "main": [
+        [
+          {
+            "node": "W2 – Prepare Staff Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Prepare Staff Alert": {
+      "main": [
+        [
+          {
+            "node": "W2 – AI Wanted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – AI Wanted?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Hand To AI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Hand To AI": {
+      "main": [
+        [
+          {
+            "node": "W2 – AI Handed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – AI Handed": {
+      "main": [
+        [
+          {
+            "node": "W2 – Build Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Build Run Log": {
+      "main": [
+        [
+          {
+            "node": "W2 – Can Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Can Log?": {
+      "main": [
+        [
+          {
+            "node": "W2 – Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W2 – Loop Over Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W2 – Run Log": {
+      "main": [
+        [
+          {
+            "node": "W2 – Loop Over Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "tags": []
+}

@@ -1,0 +1,272 @@
+---
+import { steps } from '../data/site';
+---
+
+<section id="how-it-works" class="section curve surface-ivory" data-section data-ambient aria-labelledby="how-title">
+
+  <div class="container-site relative">
+    <header class="head reveal">
+      <p class="eyebrow">06 / How it works</p>
+      <h2 id="how-title" class="h2">Three steps. No jargon, no confusion.</h2>
+    </header>
+
+    <div class="timeline reveal" data-timeline>
+      <ol class="steps">
+        {
+          steps.map((s, i) => (
+            <li class="step" style={`--i:${i}`}>
+              <span class="step__node" aria-hidden="true">{s.n}</span>
+              {i < steps.length - 1 && (
+                <span class="step__line" aria-hidden="true">
+                  <span class="step__fill" />
+                </span>
+              )}
+              <div class="step__card">
+                <h3 class="step__title">{s.title}</h3>
+                <p class="step__body">{s.body}</p>
+              </div>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </div>
+</section>
+
+<style>
+  .relative {
+    position: relative;
+  }
+  .head {
+    display: grid;
+    gap: 1.1rem;
+    max-width: 40rem;
+    margin-bottom: clamp(24px, 3.5vw, 40px);
+  }
+
+  .timeline {
+    position: relative;
+    /* one step = 720ms: the node fills, a ring appears and the step rises 3px; the connector draws
+       toward the next step and arrives as it activates, while this one settles back */
+    --t: 720ms;
+  }
+  .steps {
+    display: grid;
+    gap: 22px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Connector between one node and the next — vertical on mobile, horizontal from tablet up. */
+  .step__line {
+    position: absolute;
+    left: 27px;
+    top: 58px;
+    bottom: -22px;
+    width: 2px;
+    border-radius: 2px;
+    background: rgb(12 59 54 / 0.12);
+    overflow: hidden;
+  }
+  .step__fill {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, var(--color-teal), var(--teal-light));
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform calc(var(--t) * 0.5) var(--ease-inout);
+    transition-delay: calc(var(--i) * var(--t) + var(--t) * 0.5);
+  }
+  .timeline.in-view .step__fill {
+    transform: scaleY(1);
+  }
+  :global(html:not(.js)) .step__fill {
+    transform: none;
+  }
+
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .step__node {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1.5px solid rgb(12 59 54 / 0.28);
+    background: var(--color-ivory);
+    color: var(--color-pine);
+    font: 400 1.125rem/1 var(--font-serif);
+    transition:
+      background-color 450ms ease,
+      color 450ms ease,
+      border-color 450ms ease;
+    transition-delay: calc(var(--i) * var(--t) + 120ms);
+  }
+  /* The ring marks the step that is currently active */
+  .step__node::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1.5px solid rgb(15 118 110 / 0.5);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .timeline.in-view .step__node {
+    background: var(--color-teal);
+    border-color: var(--color-teal);
+    color: #fff;
+  }
+  :global(html:not(.js)) .step__node {
+    background: var(--color-teal);
+    color: #fff;
+  }
+
+  .step__card {
+    padding: 1rem 1.1rem 1.1rem;
+    border-radius: 16px;
+    background: rgb(250 248 242 / 0.8);
+    border: 1px solid rgb(12 59 54 / 0.1);
+    transition:
+      transform var(--dur-normal) var(--ease-soft),
+      border-color var(--dur-normal) ease,
+      box-shadow var(--dur-normal) ease;
+  }
+  @media (hover: hover) {
+    .step__card:hover {
+      transform: translateY(-2px);
+      border-color: rgb(15 118 110 / 0.5);
+    }
+  }
+  .step__title {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-pine);
+  }
+  .step__body {
+    margin-top: 0.55rem;
+    color: color-mix(in srgb, var(--color-ink) 78%, transparent);
+  }
+
+  /* ---- Sequence: only runs once the timeline enters the viewport ---- */
+  .timeline:not(.in-view) .step__node,
+  .timeline:not(.in-view) .step__node::after,
+  .timeline:not(.in-view) .step__card {
+    animation-play-state: paused;
+  }
+  .step__node,
+  .step__card {
+    animation-name: step-active;
+    animation-duration: calc(var(--t) * 1.25);
+    animation-delay: calc(var(--i) * var(--t) + 120ms);
+    animation-timing-function: var(--ease-soft);
+    animation-fill-mode: backwards; /* settle back to the normal (hoverable) state afterwards */
+  }
+  .step__node::after {
+    animation-name: ring-active;
+    animation-duration: calc(var(--t) * 1.25);
+    animation-delay: calc(var(--i) * var(--t) + 120ms);
+    animation-timing-function: ease-out;
+    animation-fill-mode: backwards;
+  }
+  /* The last step has nothing to hand over to, so it stays active */
+  .step:last-child .step__node,
+  .step:last-child .step__card {
+    animation-name: step-final;
+    animation-fill-mode: both;
+  }
+  .step:last-child .step__node::after {
+    animation-name: ring-final;
+    animation-fill-mode: both;
+  }
+  @keyframes step-active {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    16%,
+    80% {
+      transform: translate3d(0, -3px, 0);
+    }
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  @keyframes step-final {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(0, -3px, 0);
+    }
+  }
+  @keyframes ring-active {
+    0% {
+      opacity: 0;
+      transform: scale(0.84);
+    }
+    18%,
+    78% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.1);
+    }
+  }
+  @keyframes ring-final {
+    from {
+      opacity: 0;
+      transform: scale(0.84);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Horizontal on tablet/desktop: the track sits behind the nodes */
+  @media (min-width: 768px) {
+    .steps {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 28px;
+    }
+    .step__line {
+      left: 64px;
+      right: -20px;
+      top: 27px;
+      bottom: auto;
+      width: auto;
+      height: 2px;
+    }
+    .step__fill {
+      background: linear-gradient(90deg, var(--color-teal), var(--teal-light));
+      transform: scaleX(0);
+      transform-origin: left;
+    }
+    .timeline.in-view .step__fill {
+      transform: scaleX(1);
+    }
+    :global(html:not(.js)) .step__fill {
+      transform: none;
+    }
+    .step {
+      grid-template-columns: 1fr;
+      gap: 22px;
+    }
+    .step__card {
+      padding: 1.15rem 1.25rem 1.25rem;
+    }
+  }
+</style>

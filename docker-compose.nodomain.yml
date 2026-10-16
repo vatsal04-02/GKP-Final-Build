@@ -1,0 +1,53 @@
+# NO-DOMAIN version: n8n + Grist on your laptop, reached through Tailscale (free).
+#   n8n   -> PUBLIC  via Tailscale Funnel:  https://<laptop>.<tailnet>.ts.net        (Meta + Cal.com webhooks need this)
+#   Grist -> PRIVATE via Tailscale Serve:   https://<laptop>.<tailnet>.ts.net:8443   (only your team's devices on the tailnet)
+#
+# No domain, no Google login setup, no server. Grist runs in single-user mode (everyone on your tailnet is
+# the admin), which is fine because only your own devices can reach it. NEVER funnel Grist publicly in this mode.
+#
+# Usage:
+#   cp .env.example .env   (set TS_HOSTNAME, secrets, GRIST_ADMIN_EMAIL)
+#   docker compose -f docker-compose.nodomain.yml up -d
+#   tailscale funnel --bg 5678
+#   tailscale serve --bg --https=8443 8484
+#
+# Limit: stops when the laptop sleeps or goes offline. For building and demos, not for a live clinic.
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"     # only reachable through Tailscale, not your Wi-Fi
+    environment:
+      - N8N_HOST=${TS_HOSTNAME}
+      - N8N_PROTOCOL=https
+      - N8N_PORT=5678
+      - WEBHOOK_URL=https://${TS_HOSTNAME}/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - TZ=Asia/Kolkata
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  grist:
+    image: gristlabs/grist:${GRIST_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8484:8484"
+    environment:
+      - APP_HOME_URL=https://${TS_HOSTNAME}:8443
+      - GRIST_SESSION_SECRET=${GRIST_SESSION_SECRET}
+      - GRIST_DEFAULT_EMAIL=${GRIST_ADMIN_EMAIL}
+      - GRIST_SINGLE_ORG=${GRIST_TEAM_NAME}
+      - GRIST_SANDBOX_FLAVOR=${GRIST_SANDBOX_FLAVOR:-gvisor}
+    volumes:
+      - grist_data:/persist
+
+volumes:
+  n8n_data:
+  grist_data:

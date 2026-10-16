@@ -1,0 +1,178 @@
+{
+  "run_at": "2026-10-14T16:18:05.049Z",
+  "node": "v22.22.0",
+  "n8n": "2.43.5",
+  "results": [
+    {
+      "id": "static",
+      "category": "automatic",
+      "what": "structure, secrets, credentials, webhooks, Code-node syntax, config guards",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 14,
+      "failed": 0
+    },
+    {
+      "id": "phone",
+      "category": "automatic",
+      "what": "E.164 normaliser and its 19 copies",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "id": "ai-redact",
+      "category": "automatic",
+      "what": "privacy filter for the AI provider (pure functions)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 1,
+      "failed": null
+    },
+    {
+      "id": "ops",
+      "category": "automatic",
+      "what": "compose files (docker compose config), Caddyfile, credentials / migration / preflight / backup / restore / health scripts",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 2,
+      "passed": 15,
+      "failed": 0
+    },
+    {
+      "id": "w1",
+      "category": "mocks",
+      "what": "W1 website enquiry (simulator, fake Grist / Meta)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 15,
+      "failed": 0
+    },
+    {
+      "id": "w2",
+      "category": "mocks",
+      "what": "W2 inbound + signature + AI gate + delivery receipts (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 15,
+      "failed": 0
+    },
+    {
+      "id": "w4",
+      "category": "mocks",
+      "what": "W4 Cal.com bookings (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 16,
+      "failed": 0
+    },
+    {
+      "id": "w12",
+      "category": "mocks",
+      "what": "W12 sender: ledger, uncertain, templates, quiet hours (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 17,
+      "failed": 0
+    },
+    {
+      "id": "callers",
+      "category": "mocks",
+      "what": "W3 / W5 / W6 (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 16,
+      "failed": 0
+    },
+    {
+      "id": "senders",
+      "category": "mocks",
+      "what": "W7 / W8 / W9 / W10 / W13 through the new W12 (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "id": "consent",
+      "category": "mocks",
+      "what": "consent gate and capture (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "id": "templates",
+      "category": "automatic",
+      "what": "WhatsApp template list matches W12 and the callers",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "id": "email",
+      "category": "mocks",
+      "what": "e-mail gateway (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 8,
+      "failed": 0
+    },
+    {
+      "id": "w14",
+      "category": "mocks",
+      "what": "W14 reconcile + multi-clinic isolation (simulator)",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 0,
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "id": "real-n8n",
+      "category": "real-software",
+      "what": "the installed n8n 2.43.5 + real Mailpit + fake Grist / Meta / AI servers; real HTTP to the real webhooks",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 139,
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "id": "mutation",
+      "category": "meta",
+      "what": "the tests above must fail when the export is broken on purpose",
+      "status": "pass",
+      "exit": 0,
+      "seconds": 4,
+      "passed": 30,
+      "failed": 0
+    }
+  ],
+  "baseline": {
+    "status": "pass",
+    "seconds": 132,
+    "summary": [
+      "pass  n8n/demo/fill-demo-config.test.js  (FILL DEMO CONFIG: 4 of 4 checks pass)",
+      "pass  n8n/demo/seed-grist.test.js  (SEED GRIST: 5 of 5 checks pass)",
+      "pass  n8n/demo/stack-regression.test.js  (STACKING: 6 layer suites pass on the stacked workflows (A, B, C and the demo chain))",
+      "All 77 test files pass."
+    ],
+    "files": 12
+  }
+}

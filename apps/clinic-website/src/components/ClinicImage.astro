@@ -1,0 +1,53 @@
+---
+import { Picture } from 'astro:assets';
+import { getPhoto } from '../lib/photos';
+
+interface Props {
+  /** File name(s) in src/assets/clinic/ — first match wins. */
+  photo: string | readonly string[];
+  alt: string;
+  sizes?: string;
+  /** Above-the-fold image: eager, high priority. */
+  priority?: boolean;
+  class?: string;
+}
+
+const { photo: name, alt, sizes = '100vw', priority = false, class: className } = Astro.props;
+const image = getPhoto(name);
+// Never ask for more pixels than the file has: small source photos get one native-size variant
+// instead of blurry up-scaled copies.
+const widths = image ? [480, 768, 1100, 1600].filter((w) => w <= image.width) : [];
+// ...but a mid-sized source (a 730px portrait, say) is also offered at its own width for dense screens
+if (image && image.width <= 1600 && !widths.includes(image.width)) widths.push(image.width);
+---
+
+{
+  image ? (
+    <Picture
+      src={image}
+      alt={alt}
+      formats={['avif', 'webp']}
+      fallbackFormat="jpeg"
+      widths={widths}
+      sizes={sizes}
+      loading={priority ? 'eager' : 'lazy'}
+      fetchpriority={priority ? 'high' : 'auto'}
+      decoding={priority ? 'sync' : 'async'}
+      class:list={['clinic-img', 'clinic-photo', className]}
+    />
+  ) : (
+    <slot />
+  )
+}
+
+<style is:global>
+  .clinic-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* One warm grade over every clinic / treatment photograph, so photos from different cameras sit together */
+  .clinic-photo {
+    filter: sepia(0.12) saturate(1.06) contrast(1.02);
+  }
+</style>

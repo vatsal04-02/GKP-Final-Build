@@ -1,0 +1,168 @@
+---
+import Icon from './Icon.astro';
+import { TBD, faqs, links } from '../data/site';
+---
+
+<section id="faq" class="section curve surface-tint" data-section data-ambient aria-labelledby="faq-title">
+  <div class="bg" aria-hidden="true">
+    <span class="orb" style="--s:440px; --c:rgb(233 223 201 / 1); right:-160px; top:6%; --dur:46s"></span>
+  </div>
+
+  <div class="container-site grid">
+    <header class="copy reveal">
+      <p class="eyebrow">08 / FAQ</p>
+      <h2 id="faq-title" class="h2">Questions, answered.</h2>
+      <p class="lead">Can’t find what you’re looking for? Ask the clinic directly.</p>
+      <a class="link-arrow" href={links.whatsapp} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location="faq">
+        Ask on WhatsApp
+        <Icon name="arrow-up-right" size={18} />
+      </a>
+    </header>
+
+    <div class="list reveal" style="--i:1" data-faq>
+      {
+        faqs.map((f, i) => (
+          <div class="item">
+            <h3 class="item__q">
+              <button type="button" id={`faq-q-${i}`} aria-expanded="false" aria-controls={`faq-a-${i}`} data-faq-btn data-faq-index={i + 1}>
+                <span>{f.q}</span>
+                <span class="plus" aria-hidden="true">
+                  <Icon name="plus" size={20} />
+                </span>
+              </button>
+            </h3>
+            <div class="panel" id={`faq-a-${i}`} role="region" aria-labelledby={`faq-q-${i}`}>
+              <div class="panel__inner">
+                <p>{f.confirmed ? f.a : <span class="tbd">{TBD}</span>}</p>
+              </div>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .grid {
+    position: relative;
+    display: grid;
+    gap: clamp(28px, 5vw, 56px);
+    align-items: start;
+  }
+  .copy {
+    display: grid;
+    justify-items: start;
+    gap: 1.1rem;
+  }
+
+  .list {
+    border-top: 1px solid rgb(12 59 54 / 0.14);
+  }
+  .item {
+    border-bottom: 1px solid rgb(12 59 54 / 0.14);
+  }
+  .item__q {
+    margin: 0;
+    font-family: var(--font-sans);
+  }
+  .item__q button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    width: 100%;
+    min-height: 58px;
+    padding: 0.9rem 0.25rem;
+    border: 0;
+    background: none;
+    color: var(--color-ink);
+    font: 600 1.0625rem/1.4 var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color var(--dur-normal) ease;
+  }
+  .item__q button:hover {
+    color: var(--color-teal);
+  }
+  .plus {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid rgb(12 59 54 / 0.2);
+    color: var(--color-teal);
+    transition:
+      transform 280ms var(--ease-soft),
+      background-color 280ms ease,
+      color 280ms ease,
+      border-color 280ms ease;
+  }
+  .item.is-open .plus {
+    transform: rotate(45deg);
+    background: var(--color-teal);
+    border-color: var(--color-teal);
+    color: #fff;
+  }
+
+  /* Answers are open without JS; with JS they collapse and animate */
+  .panel {
+    display: grid;
+    grid-template-rows: 1fr;
+  }
+  .panel__inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .panel p {
+    padding: 0 3.25rem 1.4rem 0.25rem;
+    color: color-mix(in srgb, var(--color-ink) 78%, transparent);
+  }
+  :global(.js) .panel {
+    grid-template-rows: 0fr;
+    visibility: hidden;
+    transition:
+      grid-template-rows 280ms var(--ease-soft),
+      visibility 0s linear 280ms;
+  }
+  :global(.js) .panel .panel__inner {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+    transition:
+      opacity 240ms ease,
+      transform 280ms var(--ease-soft);
+  }
+  :global(.js) .item.is-open .panel {
+    grid-template-rows: 1fr;
+    visibility: visible;
+    transition-delay: 0s;
+  }
+  :global(.js) .item.is-open .panel .panel__inner {
+    opacity: 1;
+    transform: none;
+    transition-delay: 60ms;
+  }
+
+  @media (min-width: 960px) {
+    .grid {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 32px;
+    }
+    .copy {
+      grid-column: 1 / span 4;
+      position: sticky;
+      top: calc(var(--header-h) + 16px);
+    }
+    .list {
+      grid-column: 6 / span 7;
+    }
+  }
+</style>

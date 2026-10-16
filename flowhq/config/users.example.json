@@ -1,0 +1,16 @@
+[
+  {
+    "email": "owner@example.com",
+    "name": "Owner",
+    "role": "admin",
+    "workspaces": ["*"],
+    "passwordHash": "REPLACE with the output of: npm run hash-password -- \"a long password\""
+  },
+  {
+    "email": "frontdesk@example.com",
+    "name": "Front desk",
+    "role": "staff",
+    "workspaces": ["your-clinic-slug"],
+    "passwordHash": "REPLACE with the output of: npm run hash-password -- \"another long password\""
+  }
+]

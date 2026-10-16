@@ -1,0 +1,55 @@
+# Public: ONLY the n8n webhooks (/webhook/*), the CRM (Grist, behind Google sign-in) and a plain health answer.
+# The n8n editor, REST API and test webhooks (/webhook-test/*) are NOT public: they are served on N8N_ADMIN_DOMAIN to ADMIN_ALLOW_CIDR only.
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_body 10s
+			read_header 10s
+		}
+	}
+}
+
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}
+
+{$N8N_DOMAIN} {
+	import secure_headers
+	encode gzip
+	request_body {
+		max_size 2MB
+	}
+	@webhooks path /webhook/*
+	handle @webhooks {
+		reverse_proxy n8n:5678
+	}
+	handle /healthz {
+		respond "ok" 200
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$N8N_ADMIN_DOMAIN} {
+	import secure_headers
+	@allowed remote_ip {$ADMIN_ALLOW_CIDR}
+	handle @allowed {
+		reverse_proxy n8n:5678
+	}
+	handle {
+		respond "Forbidden" 403
+	}
+}
+
+{$GRIST_DOMAIN} {
+	import secure_headers
+	encode gzip
+	reverse_proxy grist:8484
+}

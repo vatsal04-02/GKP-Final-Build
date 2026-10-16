@@ -1,0 +1,250 @@
+---
+import { conditions } from '../data/site';
+
+// Each hotspot jumps to the condition card whose title matches `target` (case-insensitive).
+// x / y are positions on the 220 × 440 silhouette below, as percentages of it.
+const spots = [
+  { key: 'neck', label: 'Neck', target: 'Neck Pain', x: 50, y: 20 },
+  { key: 'shoulder', label: 'Shoulder', target: 'Shoulder Pain / Frozen Shoulder', x: 72.7, y: 24.5 },
+  { key: 'back', label: 'Back', target: 'Back Pain', x: 50, y: 43 },
+  { key: 'knee', label: 'Knee', target: 'Knee Pain / Arthritis', x: 59, y: 78.4 },
+  { key: 'leg', label: 'Leg', target: 'Sciatica', x: 40, y: 89 },
+  { key: 'sports', label: 'Sports', target: 'Sports Injuries', x: 61, y: 95.5 },
+] as const;
+
+// A hotspot must never point at a card that does not exist
+for (const s of spots) {
+  if (!conditions.some((c) => c.title.toLowerCase() === s.target.toLowerCase())) {
+    throw new Error(`BodyMap: no condition titled "${s.target}"`);
+  }
+}
+---
+
+<div class="bm reveal" data-bodymap>
+  <div class="bm__fig">
+    <div class="bm__stage">
+      <svg class="bm__svg" viewBox="0 0 220 440" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="bm-body" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="440">
+            <stop offset="0" stop-color="#2f8f84"></stop>
+            <stop offset="1" stop-color="#1b6a62"></stop>
+          </linearGradient>
+        </defs>
+        <!-- soft rings behind the figure -->
+        <g fill="none" stroke="#e9dfc9" stroke-opacity=".2" vector-effect="non-scaling-stroke">
+          <circle cx="110" cy="236" r="150" vector-effect="non-scaling-stroke"></circle>
+          <circle cx="110" cy="236" r="205" stroke-dasharray="2 7" vector-effect="non-scaling-stroke"></circle>
+        </g>
+        <!-- flat front-view figure -->
+        <g fill="url(#bm-body)" stroke="url(#bm-body)">
+          <ellipse cx="110" cy="46" rx="24" ry="28" stroke="none"></ellipse>
+          <path d="M99 68h22v20l15 6H84l15-6z" stroke="none"></path>
+          <path
+            d="M84 92q26 8 52 0l16 6q14 4 14 20l-6 78q-2 18-8 32l4 34q-46 14-92 0l4-34q-6-14-8-32l-6-78q0-16 14-20z"
+            stroke-width="2"
+            stroke-linejoin="round"></path>
+          <g fill="none" stroke-width="22" stroke-linecap="round">
+            <path d="M58 112q-20 62-24 130"></path>
+            <path d="M162 112q20 62 24 130"></path>
+          </g>
+          <g fill="none" stroke-width="32" stroke-linecap="round">
+            <path d="M92 266q-4 76-6 152"></path>
+            <path d="M128 266q4 76 6 152"></path>
+          </g>
+        </g>
+        <!-- the spine, drawn very faintly -->
+        <path d="M110 98v150" fill="none" stroke="#faf8f2" stroke-opacity=".32" stroke-width="1.5" stroke-dasharray="2 6" stroke-linecap="round"></path>
+      </svg>
+
+      {
+        spots.map((s, i) => (
+          <button
+            type="button"
+            class="hs"
+            style={`left:${s.x}%; top:${s.y}%; --i:${i}`}
+            data-bodymap-target={s.target}
+            aria-label={`${s.label} — jump to the ${s.target} card`}
+          >
+            <span class="hs__pulse drift" aria-hidden="true"></span>
+            <span class="hs__dot" aria-hidden="true"></span>
+            <span class="hs__tip" aria-hidden="true">{s.label}</span>
+          </button>
+        ))
+      }
+    </div>
+  </div>
+
+  <div class="bm__copy">
+    <h3 class="bm__title">Tap where it hurts.</h3>
+    <p class="bm__hint">Pick the area closest to your pain and we’ll jump to the matching card below.</p>
+  </div>
+
+  <p class="sr-only" role="status" aria-live="polite" data-bodymap-status></p>
+</div>
+
+<style>
+  /* A deep-pine stage: the orange hotspots are the brightest thing on it */
+  .bm {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: center;
+    max-width: 980px;
+    margin: 0 auto clamp(20px, 3vw, 32px);
+    padding: clamp(1.1rem, 0.8rem + 1.6vw, 2rem);
+    overflow: hidden;
+    border-radius: 28px;
+    color: var(--color-ivory);
+    background:
+      radial-gradient(70% 90% at 0% 0%, rgb(45 156 146 / 0.26), transparent 62%),
+      radial-gradient(60% 80% at 100% 100%, rgb(233 223 201 / 0.06), transparent 60%),
+      linear-gradient(160deg, #0f4a44 0%, var(--color-pine) 55%, #082e2a 100%);
+    box-shadow:
+      0 1px 0 rgb(250 248 242 / 0.12) inset,
+      0 34px 60px -38px rgb(12 59 54 / 0.8);
+  }
+
+  /* ---- Figure ---- */
+  .bm__fig {
+    display: grid;
+    place-items: center;
+  }
+  .bm__stage {
+    position: relative;
+    width: 180px;
+    aspect-ratio: 220 / 440;
+  }
+  .bm__svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* ---- Hotspots: a 44px touch area around a 14px dot ---- */
+  .hs {
+    position: absolute;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    margin: -22px 0 0 -22px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hs__dot {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--color-cta);
+    border: 2px solid var(--color-ivory);
+    box-shadow: 0 0 0 4px rgb(234 88 12 / 0.28), 0 2px 8px rgb(0 0 0 / 0.5);
+    transition: transform var(--dur-fast) var(--ease-soft);
+  }
+  /* The pulse is a ring that grows and fades (transform + opacity only), staggered across the six dots */
+  .hs__pulse {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border-radius: 50%;
+    background: var(--color-cta);
+    opacity: 0.5;
+    animation: hs-pulse 2.4s ease-out infinite;
+    animation-delay: calc(var(--i) * 0.4s);
+    pointer-events: none;
+  }
+  @keyframes hs-pulse {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    70%,
+    100% {
+      transform: scale(2.7);
+      opacity: 0;
+    }
+  }
+  .hs:hover .hs__dot,
+  .hs:focus-visible .hs__dot {
+    transform: scale(1.18);
+  }
+  .hs:focus-visible {
+    outline: 3px solid var(--color-sand);
+    outline-offset: 0;
+  }
+  .hs:active .hs__dot {
+    transform: scale(0.92);
+  }
+
+  /* Name tag: on hover and keyboard focus */
+  .hs__tip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% - 4px);
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: var(--color-ivory);
+    color: var(--color-pine);
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate3d(-50%, 4px, 0);
+    transition:
+      opacity var(--dur-fast) ease,
+      transform var(--dur-fast) var(--ease-soft);
+    pointer-events: none;
+  }
+  .hs:hover .hs__tip,
+  .hs:focus-visible .hs__tip {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  /* ---- Copy ---- */
+  .bm__copy {
+    display: grid;
+    gap: 0.6rem;
+    justify-items: center;
+    text-align: center;
+  }
+  .bm__title {
+    margin: 0;
+    font: 400 clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem) / 1.12 var(--font-serif);
+    letter-spacing: -0.01em;
+    color: var(--color-ivory);
+  }
+  .bm__hint {
+    margin: 0;
+    max-width: 26rem;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: rgb(250 248 242 / 0.82);
+  }
+
+  @media (min-width: 768px) {
+    .bm {
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: clamp(1.5rem, 4vw, 3.5rem);
+    }
+    .bm__stage {
+      width: 210px;
+    }
+    .bm__copy {
+      justify-items: start;
+      text-align: left;
+    }
+  }
+</style>

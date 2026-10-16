@@ -1,0 +1,723 @@
+{
+  "name": "W1 - Website lead intake",
+  "nodes": [
+    {
+      "id": "50ac24ec-8225-4537-9602-b752cb8a8a92",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        -420
+      ],
+      "parameters": {
+        "content": "## W1 - Website lead intake\nForm (Vercel /api/lead route) -> POST /webhook/website-lead -> Grist **Leads** + **Run_Log**.\n\n**After importing, set up once:**\n1. Credentials (Credentials > Create, type *Header Auth*):\n   - **Lead webhook secret**: Name `X-Lead-Secret`, Value = a long random string (same value goes in Vercel as N8N_LEAD_SECRET).\n   - **Grist API**: Name `Authorization`, Value = `Bearer <your Grist API key>`.\n   Then open the *Webhook* node and every blue *Grist* (HTTP Request) node and pick them.\n2. Edit the **Config** node: registry_doc_id = the doc id of your *Agency Registry* Grist doc.\n3. Test with the *Test URL*, then **Activate** the workflow (the Production URL only works when active).\n\nThe staff alert is a STUB: it builds the message but sends nothing yet.",
+        "height": 360,
+        "width": 620
+      }
+    },
+    {
+      "id": "522f56a6-0e89-469a-8baf-eee3a5d710e1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "795caac8-04e1-4f24-9981-ef8ddddf5b84",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lead-webhook-secret",
+          "name": "Lead webhook secret"
+        }
+      },
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-lead",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "cb5b7994-ba04-44a0-8d1e-fe314eee940c",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b0e5d968-dfc1-49f7-9658-a68bccdf8a91",
+              "name": "grist_base_url",
+              "value": "http://grist:8484",
+              "type": "string"
+            },
+            {
+              "id": "453cbcb5-8a23-41e1-abe5-441dbe337137",
+              "name": "registry_doc_id",
+              "value": "REPLACE_WITH_AGENCY_REGISTRY_DOC_ID",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "441fec66-f296-4d36-8ada-a55d582c68e6",
+      "name": "Prepare lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  // Clean the form data and normalise the phone. The phone function is the same one as\n  // n8n/snippets/normalize-phone.js (rule 7) - keep them identical.\n  function normalizeIndianPhone(raw) {\n    if (raw === null || raw === undefined) return { phone: null, valid: false };\n    let digits = String(raw).replace(/\\D/g, '');\n    if (digits.startsWith('0091')) digits = digits.slice(4);\n    else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);\n    else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);\n    const valid = /^[6-9]\\d{9}$/.test(digits);\n    return { phone: valid ? `+91${digits}` : null, valid };\n  }\n\n  const body = $json.body || {};\n  const noControl = (v) => String(v === null || v === undefined ? '' : v).replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, '');\n  const line = (v, max) => noControl(v).replace(/\\s+/g, ' ').trim().slice(0, max);\n  const text = (v, max) => noControl(v).trim().slice(0, max);\n\n  const slug = line(body.clinic, 40).toLowerCase();\n  const clinic_slug = /^[a-z0-9-]{2,40}$/.test(slug) ? slug : '';\n  const name = line(body.name, 100);\n  const { phone, valid } = normalizeIndianPhone(body.phone);\n  const honeypot = line(body.website, 200);   // hidden field: humans leave it empty, bots fill it\n\n  let skip_reason = '';\n  if (honeypot) skip_reason = 'honeypot filled';\n  else if (!name) skip_reason = 'missing name';\n  else if (!valid) skip_reason = 'invalid phone';\n\n  return {\n    json: {\n      grist_base_url: String($json.grist_base_url || '').replace(/\\/+$/, ''),\n      registry_doc_id: String($json.registry_doc_id || '').trim(),\n      clinic_slug,\n      name,\n      phone,\n      phone_raw: line(body.phone, 30),\n      enquiry: text(body.enquiry, 1000),\n      page_url: line(body.page_url, 500),\n      utm_campaign: line(body.utm_campaign, 100),\n      input_ok: skip_reason === '',\n      skip_reason,\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "c5558a14-1913-45a2-9cc9-9f173c8873a2",
+      "name": "Clinic lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.registry_doc_id }}/tables/Clinics/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Clinic_Slug: [$json.clinic_slug] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "266d78c7-b9c2-4fd8-8313-04504147e8df",
+      "name": "Resolve clinic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ctx = $('Prepare lead').first().json;\n  const rec = ($json.records || [])[0];\n  const f = rec ? rec.fields || {} : {};\n  const found = !!(rec && ctx.clinic_slug && f.Clinic_Slug === ctx.clinic_slug && f.Active === true && f.Grist_Doc_ID);\n  return {\n    json: {\n      ...ctx,\n      clinic_found: found,\n      doc_id: found ? String(f.Grist_Doc_ID).trim() : '',\n      clinic_name: found ? String(f.Clinic_Name || '') : '',\n      wa_phone_number_id: found ? String(f.WA_Phone_Number_ID || '') : '',\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "8f75f8bc-9dcf-46a1-b8da-3a32dc2cbb69",
+      "name": "Clinic found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8291487a-395c-42ae-a591-c7b2ad521d00",
+              "leftValue": "={{ $json.clinic_found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "71909ceb-c56f-48e7-b913-93c064a24df1",
+      "name": "Unknown clinic",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        180
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=W1: unknown or inactive clinic slug \"{{ $json.clinic_slug }}\""
+      }
+    },
+    {
+      "id": "f0b9c634-96d9-4cdf-b6a2-410585d3cd5e",
+      "name": "Input valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        -60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3acf73c-f08b-42a6-81d5-752ad76c6977",
+              "leftValue": "={{ $json.input_ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e74e9698-99a6-41b8-9741-f1f2dc4f9c49",
+      "name": "Find lead by phone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Phone: [$json.phone] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "088fb051-02fd-416d-b299-822fd21d3b10",
+      "name": "Lead exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        -60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f5faff1b-8afb-4408-8dea-81511d89db70",
+              "leftValue": "={{ ($json.records || []).length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2f2f52b6-482f-466c-bb78-61087383b83b",
+      "name": "Build update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -160
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ctx = $('Resolve clinic').first().json;\n  const rec = $json.records[0];\n  const old = String(rec.fields.Enquiry || '');\n  const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);   // IST date\n\n  const fields = {};\n  if (ctx.enquiry && !old.includes(ctx.enquiry)) {\n    fields.Enquiry = old ? `${old}\\n---\\n${today}: ${ctx.enquiry}` : ctx.enquiry;\n  }\n  if (ctx.page_url && ctx.page_url !== String(rec.fields.Page_URL || '')) fields.Page_URL = ctx.page_url;                 // only if it changed,\n  if (ctx.utm_campaign && ctx.utm_campaign !== String(rec.fields.UTM_Campaign || '')) fields.UTM_Campaign = ctx.utm_campaign;   // so a double-submit is a duplicate\n\n  const has_changes = Object.keys(fields).length > 0;\n  return {\n    json: {\n      ...ctx,\n      action: 'updated',\n      lead_id: rec.fields.Lead_ID || `row ${rec.id}`,\n      has_changes,\n      skip_reason: has_changes ? '' : 'duplicate submission',\n      patch: { records: [{ id: rec.id, fields }] },\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "65e44c16-fd9e-4c00-9b3b-92e4848c18be",
+      "name": "Has changes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        -160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a14e3cc5-427d-4074-8d4e-afaebdbc1bcc",
+              "leftValue": "={{ $json.has_changes }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "451f37c7-3afa-4d95-a7c2-bdb91f487942",
+      "name": "Update lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        -220
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.patch) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "f708c407-8b3e-46f5-8760-80c25959e24a",
+      "name": "Recent leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Resolve clinic').first().json.grist_base_url }}/api/docs/{{ $('Resolve clinic').first().json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sort",
+              "value": "-Created_At"
+            },
+            {
+              "name": "limit",
+              "value": "200"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6cb97d87-aa3a-475f-87b3-fd3c11bda5c8",
+      "name": "Build new lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        60
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ctx = $('Resolve clinic').first().json;\n  const now = Date.now();\n  const ymd = new Date(now + 5.5 * 3600 * 1000).toISOString().slice(0, 10).replace(/-/g, '');   // IST date\n  const prefix = `L-${ymd}-`;\n\n  let max = 0;\n  for (const r of $json.records || []) {\n    const id = String((r.fields || {}).Lead_ID || '');\n    if (id.startsWith(prefix)) max = Math.max(max, parseInt(id.slice(prefix.length), 10) || 0);\n  }\n  const lead_id = prefix + String(max + 1).padStart(4, '0');\n\n  const fields = {\n    Lead_ID: lead_id,\n    Created_At: Math.floor(now / 1000),   // Grist DateTime = epoch seconds\n    Name: ctx.name,\n    Phone: ctx.phone,\n    Source: 'Website',\n    Page_URL: ctx.page_url,\n    UTM_Campaign: ctx.utm_campaign,\n    Enquiry: ctx.enquiry,\n    Status: 'New',\n  };\n  return { json: { ...ctx, action: 'created', lead_id, create: { records: [{ fields }] } } };\n"
+      }
+    },
+    {
+      "id": "6ded9345-7164-491b-b886-3589cb4a5bb1",
+      "name": "Create lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.create) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d08bf804-a79b-49f1-a7dd-4cb6575f3431",
+      "name": "Staff alert (stub)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -80
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const from = (name) => {\n    try { return $(name).first().json; } catch (e) { return null; }   // throws if that branch did not run\n  };\n  const ctx = from('Build update') || from('Build new lead');\n\n  const quote = ctx.enquiry ? ` - \"${ctx.enquiry.slice(0, 200)}\"` : '';\n  const what = ctx.action === 'created' ? 'New website lead' : 'Existing lead enquired again';\n  const staff_alert_text = `${what} (${ctx.clinic_name || ctx.clinic_slug}): ${ctx.name}, ${ctx.phone}${quote}. ${ctx.lead_id}.`;\n\n  // STUB: nothing is sent. The real WhatsApp alert comes in a later slice and must follow rules 4 and 5\n  // (sent flag, Opted_Out / Automation_Paused, quiet hours 21:00-08:00 IST, TEST_MODE).\n  return {\n    json: {\n      ...ctx,\n      staff_alert_text,\n      staff_alert_sent: false,\n      log: {\n        Workflow: 'W1-website-lead',\n        Record: `${ctx.lead_id} (${ctx.action})`,\n        Outcome: 'ok',\n        Error: '',\n        At: Math.floor(Date.now() / 1000),\n      },\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "92966438-01dc-42b7-8a78-41c7bb2bd381",
+      "name": "Log skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  return {\n    json: {\n      ...$json,\n      log: {\n        Workflow: 'W1-website-lead',\n        Record: $json.phone || $json.phone_raw || '',\n        Outcome: 'skipped',\n        Error: $json.skip_reason || 'unknown',\n        At: Math.floor(Date.now() / 1000),\n      },\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "e2c8af2a-bf63-4406-b726-c33cc957fc68",
+      "name": "Write Run_Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Run_Log/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $json.log }] }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Prepare lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare lead": {
+      "main": [
+        [
+          {
+            "node": "Clinic lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinic lookup": {
+      "main": [
+        [
+          {
+            "node": "Resolve clinic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve clinic": {
+      "main": [
+        [
+          {
+            "node": "Clinic found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinic found?": {
+      "main": [
+        [
+          {
+            "node": "Input valid?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown clinic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input valid?": {
+      "main": [
+        [
+          {
+            "node": "Find lead by phone",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find lead by phone": {
+      "main": [
+        [
+          {
+            "node": "Lead exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead exists?": {
+      "main": [
+        [
+          {
+            "node": "Build update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recent leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build update": {
+      "main": [
+        [
+          {
+            "node": "Has changes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has changes?": {
+      "main": [
+        [
+          {
+            "node": "Update lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update lead": {
+      "main": [
+        [
+          {
+            "node": "Staff alert (stub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent leads": {
+      "main": [
+        [
+          {
+            "node": "Build new lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build new lead": {
+      "main": [
+        [
+          {
+            "node": "Create lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create lead": {
+      "main": [
+        [
+          {
+            "node": "Staff alert (stub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Staff alert (stub)": {
+      "main": [
+        [
+          {
+            "node": "Write Run_Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log skipped": {
+      "main": [
+        [
+          {
+            "node": "Write Run_Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

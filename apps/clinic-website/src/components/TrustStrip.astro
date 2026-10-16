@@ -1,0 +1,158 @@
+---
+import DarkFx from './DarkFx.astro';
+import Icon from './Icon.astro';
+import { clinic } from '../data/site';
+---
+
+<section class="trust curve surface-pine on-dark" data-ambient aria-label="Clinic at a glance">
+  <DarkFx />
+  <div class="container-site trust__inner">
+    <!-- Transition moment: a hairline draws across the container as the strip comes into view -->
+    <span class="trust__rule reveal" data-reveal="group" aria-hidden="true"></span>
+    <dl class="trust__grid">
+      <div class="stat reveal" data-reveal="group" style="--i:0">
+        <dd class="stat__value">
+          <span class="num" data-count="5.0" data-decimals="1" data-live-rating>{clinic.rating.value}</span>
+          <Icon name="star" size={18} class="star" />
+        </dd>
+        <dt class="stat__label">Google Rating</dt>
+      </div>
+      <div class="stat reveal" data-reveal="group" style="--i:1">
+        <dd class="stat__value">
+          <span class="num"><span data-count="467" data-decimals="0" data-live-count>467</span><span data-live-plus>+</span></span>
+        </dd>
+        <dt class="stat__label">Google Reviews</dt>
+      </div>
+      <div class="stat reveal" data-reveal="group" style="--i:2">
+        <dd class="stat__value">
+          <span class="num" data-count="2" data-decimals="0">2</span>
+        </dd>
+        <dt class="stat__label">MPT Doctors</dt>
+      </div>
+      <div class="stat reveal" data-reveal="group" style="--i:3">
+        <dd class="stat__value">
+          <span class="num num--place">Gomti Nagar</span>
+        </dd>
+        <dt class="stat__label">Lucknow</dt>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<style>
+  .trust {
+    position: relative;
+    /* extra bottom room: the ticker below curves up over it */
+    padding: calc(var(--curve) + 6px) 0 calc(var(--curve) + 4px);
+  }
+  .trust__inner {
+    position: relative;
+  }
+  .trust__rule {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -2px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(233 223 201 / 0.5) 20%, rgb(233 223 201 / 0.5) 80%, transparent);
+    transform-origin: center;
+    transition: transform 1300ms var(--ease-inout);
+  }
+  :global(.js) .trust__rule:not(.in-view) {
+    transform: scaleX(0);
+  }
+  .trust__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 1.1rem 0.5rem;
+    text-align: center;
+  }
+  .stat:nth-child(odd) {
+    border-right: 1px solid rgb(250 248 242 / 0.12);
+  }
+  .stat:nth-child(-n + 2) {
+    border-bottom: 1px solid rgb(250 248 242 / 0.12);
+  }
+  /* Numbers rise and fade in one after another, labels follow them */
+  .stat__value,
+  .stat__label {
+    transition:
+      opacity 700ms ease-out,
+      transform 700ms ease-out;
+    transition-delay: calc(var(--i, 0) * 90ms);
+  }
+  .stat__label {
+    transition-delay: calc(var(--i, 0) * 90ms + 200ms);
+  }
+  :global(.js) .stat:not(.in-view) .stat__value {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0);
+  }
+  :global(.js) .stat:not(.in-view) .stat__label {
+    opacity: 0;
+  }
+  .stat__value {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.75rem;
+  }
+  .stat__value :global(.star) {
+    fill: var(--color-sand);
+    color: var(--color-sand);
+    stroke-width: 1.5;
+    margin-top: -4px;
+  }
+  .num {
+    font: 400 clamp(2rem, 1.5rem + 1.6vw, 2.75rem) / 1 var(--font-serif);
+    letter-spacing: -0.015em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ivory);
+  }
+  .num--place {
+    font-size: clamp(1.375rem, 1.1rem + 0.9vw, 1.875rem);
+    line-height: 1.15;
+  }
+  .stat__label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgb(250 248 242 / 0.66);
+  }
+
+  /* Phones: 2 x 2, numerals 28px, labels 11px uppercase */
+  @media (max-width: 767px) {
+    .num {
+      font-size: 28px;
+    }
+    .num--place {
+      font-size: 22px;
+    }
+    .stat__value {
+      min-height: 2.25rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .trust__grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .stat {
+      padding-block: 1.25rem;
+      border: 0 !important;
+    }
+    .stat + .stat {
+      border-left: 1px solid rgb(250 248 242 / 0.12) !important;
+    }
+  }
+</style>

@@ -1,0 +1,28 @@
+{
+  "_comment": "FAKE sample of a Meta WhatsApp Cloud API inbound text message, same structure as the real thing. The numbers and ids are made up. POST this body to /webhook-test/whatsapp-inbound (see ../README.md). Change phone_number_id to your clinic's WA_Phone_Number_ID and use a NEW message id for every try.",
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "TEST_WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000000", "phone_number_id": "123456789012345" },
+            "contacts": [ { "profile": { "name": "W2 Test Patient" }, "wa_id": "919000000012" } ],
+            "messages": [
+              {
+                "from": "919000000012",
+                "id": "wamid.W2SAMPLE.0001",
+                "timestamp": "1790000000",
+                "type": "text",
+                "text": { "body": "Hello, do you treat shoulder pain?" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

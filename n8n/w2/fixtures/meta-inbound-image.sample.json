@@ -1,0 +1,28 @@
+{
+  "_comment": "FAKE sample: an inbound image message with a caption (a non-text message). Made-up numbers and ids.",
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "TEST_WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000000", "phone_number_id": "123456789012345" },
+            "contacts": [ { "profile": { "name": "W2 Test Patient" }, "wa_id": "919000000012" } ],
+            "messages": [
+              {
+                "from": "919000000012",
+                "id": "wamid.W2SAMPLE.0002",
+                "timestamp": "1790000100",
+                "type": "image",
+                "image": { "id": "TEST_MEDIA_ID", "mime_type": "image/jpeg", "sha256": "test", "caption": "photo of my shoulder" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

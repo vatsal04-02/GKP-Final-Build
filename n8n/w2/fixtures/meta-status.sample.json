@@ -1,0 +1,19 @@
+{
+  "_comment": "FAKE sample: a delivery receipt (status event). W2 must answer 200 and ignore it. Made-up numbers and ids.",
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "TEST_WABA_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550000000", "phone_number_id": "123456789012345" },
+            "statuses": [ { "id": "wamid.W2SAMPLE.0003", "status": "delivered", "timestamp": "1790000200", "recipient_id": "919000000012" } ]
+          }
+        }
+      ]
+    }
+  ]
+}

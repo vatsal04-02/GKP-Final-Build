@@ -1,0 +1,192 @@
+{
+  "name": "W11 - Error alert",
+  "nodes": [
+    {
+      "id": "472bdcfb-a80e-446a-93ed-e3494e81f526",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        -400
+      ],
+      "parameters": {
+        "content": "## W11 - Error alert (Telegram)\nAny workflow that fails -> this one -> a Telegram message in your \"agency-alerts\" group.\nThe message holds only the workflow name, step, a trimmed error text and a link. No patient data.\nThe same failure alerts at most once per 10 minutes (so a Grist outage doesn't flood your phone).\n\n**Set up once:**\n1. Telegram: make a bot with @BotFather, make a group \"agency-alerts\", add the bot to it.\n2. n8n > Credentials > Create > **Telegram API**, paste the bot token, save as \"Telegram agency-alerts bot\". Pick it in the *Telegram alert* node.\n3. Edit the **Config** node: telegram_chat_id = the group's chat id (a negative number like -100123...).\n4. Open each workflow you want covered (start with W1) > ... menu > **Settings** > *Error workflow* > choose this workflow > Save.\n\nDoes not need to be activated.",
+        "height": 380,
+        "width": 600
+      }
+    },
+    {
+      "id": "70eba2c4-0fc6-45e8-af6d-ee0f622b3e7d",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "9f5d4818-92eb-41f9-b291-612f0f134989",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12f084d1-9cbd-4ed9-94d5-d1c5ffeabc1f",
+              "name": "telegram_chat_id",
+              "value": "REPLACE_WITH_AGENCY_ALERTS_CHAT_ID",
+              "type": "string"
+            },
+            {
+              "id": "ff852b80-1005-435b-8ce0-bf3e90016a06",
+              "name": "throttle_minutes",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "0aad13bd-bbd6-41cd-a883-005fa3c35c7e",
+      "name": "Format alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ex = $json.execution || {};\n  const err = ex.error || {};\n  const wfName = ($json.workflow || {}).name || 'unknown workflow';\n  const step = ex.lastNodeExecuted || (err.node && err.node.name) || 'unknown step';\n  const throttleMs = (Number($json.throttle_minutes) || 10) * 60000;\n\n  // Keep patient data and secrets out of the alert: mask long digit runs (phones) and token-like text, then trim.\n  const safe = (s, max) =>\n    String(s === undefined || s === null ? '' : s)\n      .replace(/bearer\\s+\\S+/gi, 'bearer [hidden]')\n      .replace(/(token|api[_-]?key|secret|authorization|password)[\\s:=]+\\S+/gi, '$1 [hidden]')\n      .replace(/\\+?\\d[\\d\\s-]{7,}\\d/g, '[number]')\n      .replace(/\\s+/g, ' ')\n      .trim()\n      .slice(0, max);\n  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');   // Telegram parse_mode=HTML\n\n  // Throttle: the same failure (workflow + step + message) alerts at most once per throttle window.\n  const store = $getWorkflowStaticData('global');\n  store.recent = store.recent || {};\n  const now = Date.now();\n  for (const k of Object.keys(store.recent)) if (now - store.recent[k].at > 24 * 3600 * 1000) delete store.recent[k];\n  const old = Object.keys(store.recent).sort((a, b) => store.recent[a].at - store.recent[b].at);\n  old.slice(0, Math.max(0, old.length - 49)).forEach((k) => delete store.recent[k]);   // at most 50 entries once this one is added\n\n  const key = `${wfName}|${step}|${safe(err.message, 80)}`;\n  const prev = store.recent[key];\n  let send = true;\n  let held = 0;\n  if (prev && now - prev.at < throttleMs) {\n    prev.held = (prev.held || 0) + 1;\n    send = false;\n  } else {\n    held = prev ? prev.held || 0 : 0;\n    store.recent[key] = { at: now, held: 0 };\n  }\n\n  const when = new Date(now + 5.5 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' IST';\n  const lines = [\n    '<b>n8n workflow failed</b>',\n    `Workflow: ${esc(safe(wfName, 100))}`,\n    `Step: ${esc(safe(step, 100))}`,\n    `Error: ${esc(safe(err.message || 'no message', 300))}`,\n    `Time: ${when}`,\n  ];\n  if (ex.url) lines.push(`Execution: ${esc(String(ex.url).slice(0, 300))}`);\n  if (held > 0) lines.push(`(${held} similar alert${held === 1 ? '' : 's'} held back since the last one)`);\n\n  return { json: { telegram_chat_id: $json.telegram_chat_id, alert_text: lines.join('\\n'), send, workflow_name: wfName, step } };\n"
+      }
+    },
+    {
+      "id": "24220ee8-a5a6-400e-beb4-9ff9298cbe3b",
+      "name": "Should send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3ae1b7c5-ef05-4992-b9f6-f83393c0ae0e",
+              "leftValue": "={{ $json.send }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e0a8e196-b7db-4ba8-a23f-ccc9308e44a4",
+      "name": "Telegram alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        -20
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-agency-alerts",
+          "name": "Telegram agency-alerts bot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.telegram_chat_id }}",
+        "text": "={{ $json.alert_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Format alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format alert": {
+      "main": [
+        [
+          {
+            "node": "Should send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should send?": {
+      "main": [
+        [
+          {
+            "node": "Telegram alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

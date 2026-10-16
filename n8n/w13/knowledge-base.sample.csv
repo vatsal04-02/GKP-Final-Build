@@ -1,0 +1,11 @@
+Title,Category,Content,Active
+Knee pain physiotherapy,services,"One-to-one knee rehab: assessment, manual therapy and exercises. ₹800 per session (45 minutes).",true
+Back and neck pain physiotherapy,services,Treatment for lower back and neck pain. ₹800 per session (45 minutes).,true
+Sports injury rehab,services,"Sprains, ligament and muscle injuries, return-to-sport plans. ₹900 per session.",true
+First assessment,pricing,The first assessment costs ₹500 and takes 45 minutes. Please bring any reports or X-rays you have.,true
+Packages,pricing,10 sessions for ₹7000 (paid in advance). Ask the front desk for details.,true
+Opening hours,hours,"Monday to Saturday, 9 AM to 7 PM. Closed on Sunday and public holidays.",true
+Address,location,"Demo Physio, 12 MG Road, Pune (opposite City Mall). Parking available.",true
+Payment,policy,"We accept cash, UPI and cards at the clinic. Refunds are handled by the front desk only.",true
+Cancellation,policy,"Cancel or reschedule up to 2 hours before your appointment, free of charge.",true
+Home visits,faq,We do not offer home visits at the moment.,true

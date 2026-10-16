@@ -1,0 +1,172 @@
+---
+/**
+ * Editorial background depth for selected sections (hero, conditions, why, gallery, visit):
+ *   warm base → soft teal/sand glow → faint dots → a barely-there 1px grid → a few oversized thin
+ *   circles and lines. Think architectural drawing, not HUD.
+ *
+ * Every layer is a static painted element (no blur, no filters). With `drift`, and where the browser
+ * supports native scroll-driven animations, the far layer (glow + circles, ±14px) and the grid (±6px)
+ * move at different rates (global.css) — on the compositor, with no scroll listener. Elsewhere, and in
+ * reduced-motion, they stay still.
+ */
+interface Props {
+  tone?: 'light' | 'sand' | 'dark';
+  /** Soft radial glows (light/sand tones; dark sections already get theirs from <DarkFx>). */
+  glow?: boolean;
+  /** Mirror the circles/lines so neighbouring sections don't repeat the same composition. */
+  mirror?: boolean;
+  /** A wide soft glow that sweeps behind the content as the section scrolls past (one of the 3 transition moments). */
+  sweep?: boolean;
+  /**
+   * Let the far layer and the grid drift with scroll. Every drifting layer is its own composited surface
+   * behind the content, so it is switched on only for the light sections where the movement reads; the
+   * dark bands keep the same texture, standing still.
+   */
+  drift?: boolean;
+}
+const { tone = 'light', glow = false, mirror = false, sweep = false, drift = true } = Astro.props;
+const depthAttr = drift ? '' : undefined;
+---
+
+<div class:list={['depth', `depth--${tone}`, { 'depth--mirror': mirror }]} aria-hidden="true">
+  <!-- Far layer: glows and thin circles share one slow drift (14px) -->
+  <div class="d-far" data-depth={depthAttr} style="--amp:14px; --dir:-1">
+    {
+      glow && (
+        <>
+          <span class="d-glow d-glow--1"></span>
+          <span class="d-glow d-glow--2"></span>
+        </>
+      )
+    }
+    <svg class="d-rings" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" focusable="false">
+      <g fill="none" stroke="currentColor" stroke-width="1" transform={mirror ? 'translate(1200 0) scale(-1 1)' : undefined}>
+        <circle cx="1010" cy="250" r="330" vector-effect="non-scaling-stroke"></circle>
+        <circle cx="1010" cy="250" r="520" vector-effect="non-scaling-stroke"></circle>
+        <circle cx="120" cy="700" r="260" stroke-dasharray="2 10" vector-effect="non-scaling-stroke"></circle>
+        <line x1="-20" y1="610" x2="1220" y2="430" vector-effect="non-scaling-stroke"></line>
+      </g>
+    </svg>
+  </div>
+  {sweep && <span class="d-sweep" data-sweep></span>}
+  <span class="d-dots"></span>
+  <!-- Near layer: the grid drifts a little less (6px) so the two never move in lockstep -->
+  <span class="d-grid" data-depth={depthAttr} style="--amp:6px; --dir:1"></span>
+</div>
+
+<style>
+  .depth {
+    position: absolute;
+    inset: 0;
+    overflow: clip;
+    pointer-events: none;
+    --glow-1: rgb(15 118 110 / 0.13);
+    --glow-2: rgb(233 223 201 / 0.95);
+    --grid: rgb(12 59 54 / 0.055);
+    --ring: rgb(15 118 110 / 0.17);
+    --dot: rgb(12 59 54 / 0.15);
+  }
+  .depth--sand {
+    --glow-1: rgb(15 118 110 / 0.14);
+    --glow-2: rgb(255 255 255 / 0.5);
+    --grid: rgb(12 59 54 / 0.07);
+    --ring: rgb(12 59 54 / 0.16);
+    --dot: rgb(12 59 54 / 0.18);
+  }
+  .depth--dark {
+    --grid: rgb(250 248 242 / 0.05);
+    --ring: rgb(233 223 201 / 0.13);
+    --dot: rgb(250 248 242 / 0.16);
+  }
+
+  .d-far {
+    position: absolute;
+    inset: -16px 0;
+  }
+
+  /* ---- Glow ---- */
+  .d-glow {
+    position: absolute;
+    width: min(760px, 92vw);
+    aspect-ratio: 1;
+    border-radius: 50%;
+  }
+  .d-glow--1 {
+    right: -14%;
+    top: 4%;
+    background: radial-gradient(closest-side, var(--glow-1), transparent);
+  }
+  .d-glow--2 {
+    left: -18%;
+    bottom: 2%;
+    width: min(620px, 80vw);
+    background: radial-gradient(closest-side, var(--glow-2), transparent);
+  }
+  .depth--mirror .d-glow--1 {
+    right: auto;
+    left: -14%;
+  }
+  .depth--mirror .d-glow--2 {
+    left: auto;
+    right: -18%;
+  }
+
+  /* ---- Sweep (transition moment) ---- */
+  .d-sweep {
+    position: absolute;
+    top: 6%;
+    bottom: 6%;
+    left: -30%;
+    width: 70%;
+    opacity: 0;
+    background: radial-gradient(closest-side, rgb(45 156 146 / 0.2), transparent);
+  }
+
+  /* ---- Dots: static, fading toward the edges ---- */
+  .d-dots {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.4px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(ellipse 60% 60% at 70% 35%, #000 0%, transparent 100%);
+    mask-image: radial-gradient(ellipse 60% 60% at 70% 35%, #000 0%, transparent 100%);
+  }
+  .depth--mirror .d-dots {
+    -webkit-mask-image: radial-gradient(ellipse 60% 60% at 30% 35%, #000 0%, transparent 100%);
+    mask-image: radial-gradient(ellipse 60% 60% at 30% 35%, #000 0%, transparent 100%);
+  }
+
+  /* ---- Grid: 1px lines, large cells, very low opacity. It only exists where it is visible (the
+     busier side of the section), which also keeps the drifting layer small. ---- */
+  .d-grid {
+    position: absolute;
+    inset: -14px 0 -14px 28%;
+    --cell: 132px;
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: var(--cell) var(--cell);
+    -webkit-mask-image: radial-gradient(ellipse 78% 72% at 62% 42%, #000 0%, rgb(0 0 0 / 0.5) 48%, transparent 100%);
+    mask-image: radial-gradient(ellipse 78% 72% at 62% 42%, #000 0%, rgb(0 0 0 / 0.5) 48%, transparent 100%);
+  }
+  .depth--mirror .d-grid {
+    inset: -14px 28% -14px 0;
+    -webkit-mask-image: radial-gradient(ellipse 78% 72% at 38% 42%, #000 0%, rgb(0 0 0 / 0.5) 48%, transparent 100%);
+    mask-image: radial-gradient(ellipse 78% 72% at 38% 42%, #000 0%, rgb(0 0 0 / 0.5) 48%, transparent 100%);
+  }
+
+  /* ---- Oversized thin circles + a long hairline ---- */
+  .d-rings {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--ring);
+  }
+
+  @media (max-width: 639px) {
+    .d-grid {
+      --cell: 88px;
+    }
+  }
+</style>

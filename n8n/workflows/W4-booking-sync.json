@@ -1,0 +1,858 @@
+{
+  "name": "W4 - Booking sync",
+  "nodes": [
+    {
+      "id": "e54a6806-42e5-4631-8e14-0458f52ef032",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        -520
+      ],
+      "parameters": {
+        "content": "## W4 - Booking sync (Cal.com -> Grist)\nCal.com booking created / rescheduled / cancelled -> Appointments row (+ Lead) -> Run_Log.\nWebhook URL for Cal.com:  https://<your-tailscale-name>/webhook/cal?clinic=<Clinic_Slug>\n(use the Test URL, .../webhook-test/cal?clinic=..., while testing; the workflow must be Active for the Production URL)\n\n**Set up once**\n1. Cal.com > Settings > Developer > Webhooks: Subscriber URL as above; triggers *Booking created / rescheduled / cancelled*;\n   Secret = a long random string. Put the SAME string in the Config node below (cal_webhook_secret).\n   While testing without a secret you may set require_signature to false - set it back to true afterwards.\n2. Config node: registry_doc_id (and the secret). Keep the real secret out of any exported copy you commit to git.\n3. Pick the *Grist API* credential in every Grist (HTTP Request) node.\n4. Each Cal.com event type needs a REQUIRED phone question (Advanced > Booking questions): without a phone the run fails on purpose.\n5. Settings > Error workflow > W11.\n\n**Rules:** signature checked first. Duplicate BOOKING_CREATED (Cal.com retries) is skipped. A booking from someone with no lead yet creates one\n(Source = Website, Status = Booked). The confirmation message is a STUB: nothing is sent; the send guard (opt-out, quiet hours, TEST_MODE) still runs\nand any skip is shown in the Run_Log Error column.",
+        "height": 440,
+        "width": 760
+      }
+    },
+    {
+      "id": "b4371dd6-0f93-41b0-a0e8-5245e17a3962",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "cba6af9a-2f1b-41ed-95e8-2daf45641340",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cal",
+        "authentication": "none",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "eea7c1b5-b7df-4ec3-8429-20bda36b4422",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bd67676b-e29b-42e2-9efc-5659adb2ad9a",
+              "name": "grist_base_url",
+              "value": "http://grist:8484",
+              "type": "string"
+            },
+            {
+              "id": "159abe7b-a4a4-4058-821e-2926241cae69",
+              "name": "registry_doc_id",
+              "value": "REPLACE_WITH_AGENCY_REGISTRY_DOC_ID",
+              "type": "string"
+            },
+            {
+              "id": "ffcaf79e-9f0d-4295-96a4-023ee0dddcd5",
+              "name": "cal_webhook_secret",
+              "value": "REPLACE_WITH_CAL_WEBHOOK_SECRET",
+              "type": "string"
+            },
+            {
+              "id": "bccf7fdb-df08-4443-b5bf-a41d77d6f982",
+              "name": "require_signature",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "dddc2a0a-61fd-4a26-b2b1-b8878fbe59c7",
+      "name": "Verify & parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js and n8n/snippets/hmac-sha256.js - keep identical.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  let digits = String(raw).replace(/\\D/g, '');          // keep digits only\n  if (digits.startsWith('0091')) digits = digits.slice(4);\n  else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);\n  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);\n  const valid = /^[6-9]\\d{9}$/.test(digits);            // Indian mobiles start 6-9\n  return { phone: valid ? `+91${digits}` : null, valid };\n}\n\nfunction utf8Bytes(str) {\n  const out = [];\n  for (const ch of String(str)) {\n    const c = ch.codePointAt(0);\n    if (c < 0x80) out.push(c);\n    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));\n    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));\n    else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));\n  }\n  return out;\n}\n\nfunction sha256Bytes(bytes) {\n  const K = [\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,\n  ];\n  const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];\n  const rotr = (x, n) => (x >>> n) | (x << (32 - n));\n\n  const msg = bytes.slice();\n  const bitLen = bytes.length * 8;\n  msg.push(0x80);\n  while (msg.length % 64 !== 56) msg.push(0);\n  const hi = Math.floor(bitLen / 0x100000000);\n  const lo = bitLen >>> 0;\n  for (const w of [hi, lo]) msg.push((w >>> 24) & 255, (w >>> 16) & 255, (w >>> 8) & 255, w & 255);\n\n  const w = new Array(64);\n  for (let off = 0; off < msg.length; off += 64) {\n    for (let i = 0; i < 16; i++) w[i] = ((msg[off + 4 * i] << 24) | (msg[off + 4 * i + 1] << 16) | (msg[off + 4 * i + 2] << 8) | msg[off + 4 * i + 3]) >>> 0;\n    for (let i = 16; i < 64; i++) {\n      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);\n      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);\n      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;\n    }\n    let [a, b, c, d, e, f, g, h] = H;\n    for (let i = 0; i < 64; i++) {\n      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);\n      const ch = (e & f) ^ (~e & g);\n      const t1 = (h + S1 + ch + K[i] + w[i]) >>> 0;\n      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);\n      const maj = (a & b) ^ (a & c) ^ (b & c);\n      const t2 = (S0 + maj) >>> 0;\n      h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;\n    }\n    [a, b, c, d, e, f, g, h].forEach((v, i) => { H[i] = (H[i] + v) >>> 0; });\n  }\n  const out = [];\n  for (const v of H) out.push((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);\n  return out;\n}\n\nfunction hmacSha256Hex(key, message) {\n  let k = utf8Bytes(key);\n  if (k.length > 64) k = sha256Bytes(k);\n  while (k.length < 64) k.push(0);\n  const inner = sha256Bytes(k.map((b) => b ^ 0x36).concat(utf8Bytes(message)));\n  const mac = sha256Bytes(k.map((b) => b ^ 0x5c).concat(inner));\n  return mac.map((b) => b.toString(16).padStart(2, '0')).join('');\n}\n\nfunction safeEqual(a, b) {\n  a = String(a); b = String(b);\n  if (a.length !== b.length) return false;\n  let diff = 0;\n  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);\n  return diff === 0;\n}\n\n  const reject = (reason) => ({ json: { route: 'reject', reject_reason: reason } });\n  const headers = $json.headers || {};\n  const body = $json.body;\n\n  // 1. Is it really Cal.com? It signs JSON.stringify(body) with the webhook secret (HMAC-SHA256, hex) in\n  //    X-Cal-Signature-256. With no secret set, Cal.com sends the text \"no-secret-provided\".\n  if ($json.require_signature !== false) {\n    const secret = String($json.cal_webhook_secret || '');\n    const sig = String(headers['x-cal-signature-256'] || '').trim().toLowerCase();\n    if (!secret || secret.startsWith('REPLACE_')) return reject('Cal.com webhook secret is not set in the Config node');\n    if (!sig || sig === 'no-secret-provided') return reject('unsigned request: set the same Secret in the Cal.com webhook');\n    if (!body || typeof body !== 'object' || !safeEqual(hmacSha256Hex(secret, JSON.stringify(body)), sig)) return reject('bad signature');\n  }\n  if (!body || typeof body !== 'object') return reject('empty body');\n\n  // 2. Which event? Others (ping, meeting started/ended, ...) are ignored without an alert.\n  const event = String(body.triggerEvent || '');\n  if (!['BOOKING_CREATED', 'BOOKING_RESCHEDULED', 'BOOKING_CANCELLED'].includes(event)) return { json: { route: 'ignore', event } };\n  const p = body.payload || {};\n\n  // 3. Which clinic? The Cal.com webhook URL ends in ?clinic=<Clinic_Slug>.\n  const slug = String(($json.query || {}).clinic || '').trim().toLowerCase();\n  if (!/^[a-z0-9-]{2,40}$/.test(slug)) return reject('missing or invalid ?clinic= in the webhook URL');\n\n  // 4. Booking fields.\n  const uid = String(p.uid || '').trim();\n  if (!uid) return reject('booking has no uid');\n  const text = (v, max) => String(v === null || v === undefined ? '' : v).replace(/[\\u0000-\\u001f\\u007f]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, max);\n  const attendee = (Array.isArray(p.attendees) && p.attendees[0]) || {};\n  const resp = p.responses && typeof p.responses === 'object' ? p.responses : {};\n\n  const start = Math.floor(Date.parse(p.startTime) / 1000);\n  const end = Math.floor(Date.parse(p.endTime) / 1000);\n\n  // Phone: the attendee's phoneNumber, else any response whose key mentions phone (Cal.com: attendeePhoneNumber).\n  // A hidden / unanswered question has no \"value\", so it is skipped.\n  const candidates = [attendee.phoneNumber];\n  for (const k of Object.keys(resp)) if (/phone/i.test(k) && resp[k] && typeof resp[k] === 'object') candidates.push(resp[k].value);\n  let phone = null;\n  for (const c of candidates) {\n    const r = normalizeIndianPhone(c);\n    if (r.valid) { phone = r.phone; break; }\n  }\n\n  if (event !== 'BOOKING_CANCELLED') {\n    if (!(start > 0 && end > 0)) return reject('booking has no valid start or end time');\n    if (!phone) return reject(`booking ${uid} has no valid phone number: add a required phone question to the Cal.com event type`);\n  }\n\n  const fromUid = text(p.rescheduledFromUid || p.rescheduleUid, 60);\n  return {\n    json: {\n      route: 'process',\n      grist_base_url: String($json.grist_base_url || '').replace(/\\/+$/, ''),\n      registry_doc_id: String($json.registry_doc_id || '').trim(),\n      event,\n      clinic_slug: slug,\n      uid,\n      from_uid: fromUid === uid ? '' : fromUid,\n      start: start > 0 ? start : null,\n      end: end > 0 ? end : null,\n      service: text(p.eventTitle || p.eventTypeTitle || p.title, 100),\n      physio: text((p.organizer || {}).name, 100),\n      name: text(attendee.name || (resp.name && resp.name.value), 100),\n      phone,\n      notes: text(p.additionalNotes, 500),\n      cal_status: text(p.status, 30),\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "728dbc43-5985-4ed0-8072-da466b1d39e3",
+      "name": "Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dce551a1-96e2-4e86-8413-e7d46942a159",
+              "leftValue": "={{ $json.route === 'process' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "584ae912-f79d-4466-95b0-4ef6da37af19",
+      "name": "Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "43582485-a834-483c-9c9f-6e1ac3718361",
+              "leftValue": "={{ $json.route === 'reject' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "292e440a-02aa-4d44-b9aa-a4b2666c90c4",
+      "name": "Reject",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        160
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "={{ 'W4: ' + $json.reject_reason }}"
+      }
+    },
+    {
+      "id": "c42f8671-c8a5-4d30-bc6d-7d4ef63123a3",
+      "name": "Clinic lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.registry_doc_id }}/tables/Clinics/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Clinic_Slug: [$json.clinic_slug] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f7edb55b-96f3-42f5-a374-1617edff1297",
+      "name": "Resolve clinic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -60
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ctx = $('Verify & parse').first().json;\n  const rec = ($json.records || [])[0];\n  const f = rec ? rec.fields || {} : {};\n  const found = !!(rec && ctx.clinic_slug && f.Clinic_Slug === ctx.clinic_slug && f.Active === true && f.Grist_Doc_ID);\n  return {\n    json: {\n      ...ctx,\n      clinic_found: found,\n      doc_id: found ? String(f.Grist_Doc_ID).trim() : '',\n      clinic_name: found ? String(f.Clinic_Name || '') : '',\n    },\n  };\n"
+      }
+    },
+    {
+      "id": "e6189ccc-1aa4-418b-8c36-b926542172d6",
+      "name": "Clinic found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        -60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3e76dceb-682f-40b7-b125-4319d14f462b",
+              "leftValue": "={{ $json.clinic_found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "41eb69a4-a8a9-4aa4-b4c5-2235e93e5ea3",
+      "name": "Unknown clinic",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=W4: unknown or inactive clinic slug \"{{ $json.clinic_slug }}\""
+      }
+    },
+    {
+      "id": "ff34c940-e820-42d4-a596-0d502c1ef269",
+      "name": "Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Settings/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "84fd34ed-956c-4718-9535-73cb5ad6998d",
+      "name": "Add settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -120
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ctx = $('Resolve clinic').first().json;\n  const s = {};\n  for (const r of $json.records || []) {\n    const f = r.fields || {};\n    if (f.Key) s[String(f.Key).trim()] = f.Value;\n  }\n  return { json: { ...ctx, clinic_name: String(s.clinic_name || ctx.clinic_name || ''), test_mode: s.TEST_MODE, test_phone: s.TEST_PHONE } };\n"
+      }
+    },
+    {
+      "id": "763cfde8-09f5-4ac2-94b4-216894f55d02",
+      "name": "Find appointments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Appointments/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Booking_UID: [$json.uid, $json.from_uid].filter(Boolean) }) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dae27be1-22ba-4992-8e5f-4d365686e8de",
+      "name": "Plan appointment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -120
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ctx = $('Add settings').first().json;\n  const rows = ($json.records || []).map((r) => ({ id: r.id, uid: (r.fields || {}).Booking_UID, status: (r.fields || {}).Status }));\n  const byUid = rows.find((r) => r.uid === ctx.uid);\n  const byFrom = ctx.from_uid ? rows.find((r) => r.uid === ctx.from_uid) : null;\n  const closed = ['Completed', 'No-show', 'Cancelled'];\n\n  const logWrite = (record, outcome, error) => ({\n    method: 'POST', table: 'Run_Log',\n    body: { records: [{ fields: { Workflow: 'W4-booking-sync', Record: record, Outcome: outcome, Error: error || '', At: Math.floor(Date.now() / 1000) } }] },\n  });\n  const done = (plan) => ({ json: { ...ctx, plan, needs_lead: !!plan.needs_lead, writes: plan.writes || [] } });\n  const skip = (reason) => done({ action: 'skip', writes: [logWrite(ctx.uid, 'skipped', reason)] });\n\n  if (ctx.event === 'BOOKING_CANCELLED') {\n    if (!byUid) return skip('cancelled booking not found in Appointments');\n    if (closed.includes(byUid.status)) return skip(`booking is already ${byUid.status}`);\n    return done({\n      action: 'cancel',\n      writes: [\n        { method: 'PATCH', table: 'Appointments', body: { records: [{ id: byUid.id, fields: { Status: 'Cancelled' } }] } },\n        logWrite(`${ctx.uid} (cancelled)`, 'ok'),\n      ],\n    });\n  }\n\n  if (ctx.cal_status && ctx.cal_status !== 'ACCEPTED') return skip(`booking status is ${ctx.cal_status}, not ACCEPTED`);\n\n  if (ctx.event === 'BOOKING_CREATED') {\n    if (byUid) return skip('duplicate booking event');       // Cal.com retried: the row already exists, so no second confirmation\n    return done({ action: 'create', needs_lead: true });\n  }\n\n  // BOOKING_RESCHEDULED: Cal.com normally issues a NEW uid and names the old one; handle a same-uid reschedule too.\n  if (byUid) return done({ action: 'update', existing_row_id: byUid.id, needs_lead: true });\n  return done({ action: 'create', old_row_id: byFrom && !closed.includes(byFrom.status) ? byFrom.id : null, needs_lead: true });\n"
+      }
+    },
+    {
+      "id": "817b1858-df65-4026-b10e-c0aa0df3dbb3",
+      "name": "Needs lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "be7d1510-acc9-46ce-a137-190125c50fcb",
+              "leftValue": "={{ $json.needs_lead }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dd5bea42-8929-4a3f-a7e7-3f5b0d476a3a",
+      "name": "Find lead by phone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Phone: [$json.phone] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a5c9891b-e247-4049-b04e-67aee30eaf74",
+      "name": "Lead exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        -200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a6e16fa1-04ba-4e83-ad89-f5a1634fa98c",
+              "leftValue": "={{ ($json.records || []).length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "488675ab-f4b4-4128-8cda-e9772aee546a",
+      "name": "Recent leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Plan appointment').first().json.grist_base_url }}/api/docs/{{ $('Plan appointment').first().json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sort",
+              "value": "-Created_At"
+            },
+            {
+              "name": "limit",
+              "value": "200"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2f807be4-da1b-43b3-8d8e-ade03f2ca6c5",
+      "name": "Build new lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "  const ctx = $('Plan appointment').first().json;\n  const now = Date.now();\n  const ymd = new Date(now + 5.5 * 3600 * 1000).toISOString().slice(0, 10).replace(/-/g, '');   // IST date\n  const prefix = `L-${ymd}-`;\n  let max = 0;\n  for (const r of $json.records || []) {\n    const id = String((r.fields || {}).Lead_ID || '');\n    if (id.startsWith(prefix)) max = Math.max(max, parseInt(id.slice(prefix.length), 10) || 0);\n  }\n  const lead_id = prefix + String(max + 1).padStart(4, '0');\n  const fields = {\n    Lead_ID: lead_id,\n    Created_At: Math.floor(now / 1000),\n    Name: ctx.name || 'Cal.com booking',\n    Phone: ctx.phone,\n    Source: 'Website',            // someone who books straight from the Cal.com link on the site\n    Enquiry: ctx.notes,\n    Status: 'Booked',\n  };\n  return { json: { ...ctx, lead_id, create: { records: [{ fields }] } } };\n"
+      }
+    },
+    {
+      "id": "2da0f1f2-75c5-447b-9ad8-1d15ce704d06",
+      "name": "Create lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Leads/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.create) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d781ead9-b62f-4858-be27-4c180ade2b39",
+      "name": "Plan writes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        -200
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js and n8n/snippets/send-guard.js - keep identical.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  let digits = String(raw).replace(/\\D/g, '');          // keep digits only\n  if (digits.startsWith('0091')) digits = digits.slice(4);\n  else if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);\n  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);\n  const valid = /^[6-9]\\d{9}$/.test(digits);            // Indian mobiles start 6-9\n  return { phone: valid ? `+91${digits}` : null, valid };\n}\n\nfunction isTestMode(value) {\n  const v = String(value === null || value === undefined ? '' : value).trim().toLowerCase();\n  return !['false', '0', 'no', 'off'].includes(v);   // anything else, including a missing row, means ON (fail safe)\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nfunction decideSend(i) {\n  const testMode = isTestMode(i.test_mode);\n  const skip = (reason) => ({ send: false, to: null, reason, test_mode: testMode });\n\n  if (i.flag_value) return skip('already sent');\n  if (i.opted_out) return skip('opted out');\n  if (i.kind !== 'transactional' && i.automation_paused) return skip('automation paused');\n  if (inQuietHours(i.now_ms)) return skip('quiet hours');\n\n  const to = testMode ? i.test_phone : i.patient_phone;\n  if (!to) return skip(testMode ? 'test mode on but TEST_PHONE is missing or invalid' : 'no valid patient phone');\n  return { send: true, to, reason: testMode ? 'test mode: sent to TEST_PHONE' : 'ok', test_mode: testMode };\n}\n\n  const from = (name) => {\n    try { return $(name).first().json; } catch (e) { return null; }   // throws if that branch did not run\n  };\n  const ctx = from('Plan appointment');\n  const made = from('Build new lead');\n\n  let lead;\n  if (made) {\n    lead = { id: $json.records[0].id, status: 'Booked', opted_out: false, label: made.lead_id, is_new: true };\n  } else {\n    const r = $json.records[0];\n    lead = { id: r.id, status: String(r.fields.Status || ''), opted_out: r.fields.Opted_Out === true, label: r.fields.Lead_ID || `row ${r.id}`, is_new: false };\n  }\n\n  const plan = ctx.plan;\n  const appt = { Service: ctx.service, Physio: ctx.physio, Start: ctx.start, End: ctx.end, Status: 'Booked' };\n  const writes = [];\n  if (plan.action === 'update') {\n    writes.push({ method: 'PATCH', table: 'Appointments', body: { records: [{ id: plan.existing_row_id, fields: { ...appt, Lead: lead.id } }] } });\n  } else {\n    writes.push({ method: 'POST', table: 'Appointments', body: { records: [{ fields: { Booking_UID: ctx.uid, Lead: lead.id, ...appt } }] } });\n  }\n  if (plan.old_row_id) {\n    writes.push({ method: 'PATCH', table: 'Appointments', body: { records: [{ id: plan.old_row_id, fields: { Status: 'Rescheduled' } }] } });\n  }\n  if (!lead.is_new && lead.status !== 'Booked' && lead.status !== 'Converted') {\n    writes.push({ method: 'PATCH', table: 'Leads', body: { records: [{ id: lead.id, fields: { Status: 'Booked' } }] } });\n  }\n\n  // Confirmation: STUB. Nothing is sent. The guard still runs so the log shows what would happen.\n  // There is no \"confirmation sent\" column, so a repeated BOOKING_CREATED is stopped earlier (the row exists).\n  const { phone: patient_phone } = normalizeIndianPhone(ctx.phone);\n  const { phone: test_phone } = normalizeIndianPhone(ctx.test_phone);\n  const decision = decideSend({\n    kind: 'transactional',           // confirmations still go when Automation_Paused is on\n    flag_value: null,\n    opted_out: lead.opted_out,\n    automation_paused: false,\n    patient_phone,\n    test_mode: ctx.test_mode,\n    test_phone,\n    now_ms: Date.now(),\n  });\n  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\n  const t = new Date(ctx.start * 1000 + 5.5 * 3600 * 1000);   // IST wall-clock via UTC getters\n  const date = `${String(t.getUTCDate()).padStart(2, '0')} ${MONTHS[t.getUTCMonth()]}`;\n  const h = t.getUTCHours();\n  const time = `${h % 12 || 12}:${String(t.getUTCMinutes()).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;\n  const name = ctx.name || 'there';\n  const service = ctx.service || 'appointment';\n  const confirmation = {\n    template: 'booking_confirmation',\n    template_params: { name, clinic_name: ctx.clinic_name, date, time, service, physio: ctx.physio },\n    message_text: `Hi ${name}, your ${service} at ${ctx.clinic_name} is booked for ${date} at ${time}.`,\n    decision,\n    sent: false,\n    stub: true,\n  };\n\n  const label = ctx.event === 'BOOKING_RESCHEDULED' ? 'rescheduled' : 'created';\n  writes.push({\n    method: 'POST', table: 'Run_Log',\n    body: { records: [{ fields: {\n      Workflow: 'W4-booking-sync',\n      Record: `${ctx.uid} (${label}) ${lead.label}`,\n      Outcome: 'ok',\n      Error: decision.send ? '' : `confirmation not sent: ${decision.reason}`,\n      At: Math.floor(Date.now() / 1000),\n    } }] },\n  });\n\n  return { json: { ...ctx, lead_label: lead.label, confirmation, writes } };\n"
+      }
+    },
+    {
+      "id": "c7d3c174-ec6c-4fdc-b4fb-08422821e3de",
+      "name": "Expand writes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        -120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "  const item = $input.first().json;\n  return (item.writes || []).map((w) => ({\n    json: { grist_base_url: item.grist_base_url, doc_id: item.doc_id, ...w },\n    pairedItem: { item: 0 },\n  }));\n"
+      }
+    },
+    {
+      "id": "bb688540-03df-4f1a-80c0-7cf0b25e2d9a",
+      "name": "Grist write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "grist-api",
+          "name": "Grist API"
+        }
+      },
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/{{ $json.table }}/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Verify & parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify & parse": {
+      "main": [
+        [
+          {
+            "node": "Verified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verified?": {
+      "main": [
+        [
+          {
+            "node": "Clinic lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejected?": {
+      "main": [
+        [
+          {
+            "node": "Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinic lookup": {
+      "main": [
+        [
+          {
+            "node": "Resolve clinic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve clinic": {
+      "main": [
+        [
+          {
+            "node": "Clinic found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clinic found?": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown clinic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Add settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add settings": {
+      "main": [
+        [
+          {
+            "node": "Find appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find appointments": {
+      "main": [
+        [
+          {
+            "node": "Plan appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan appointment": {
+      "main": [
+        [
+          {
+            "node": "Needs lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs lead?": {
+      "main": [
+        [
+          {
+            "node": "Find lead by phone",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Expand writes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find lead by phone": {
+      "main": [
+        [
+          {
+            "node": "Lead exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead exists?": {
+      "main": [
+        [
+          {
+            "node": "Plan writes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recent leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent leads": {
+      "main": [
+        [
+          {
+            "node": "Build new lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build new lead": {
+      "main": [
+        [
+          {
+            "node": "Create lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create lead": {
+      "main": [
+        [
+          {
+            "node": "Plan writes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan writes": {
+      "main": [
+        [
+          {
+            "node": "Expand writes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand writes": {
+      "main": [
+        [
+          {
+            "node": "Grist write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}
