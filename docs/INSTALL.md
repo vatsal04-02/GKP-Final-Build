@@ -71,13 +71,13 @@ Grist is the CRM database; nothing here replaces it. The workflow reads and writ
 1. Export your current workflow from n8n first (backup; see `docs/ROLLBACK.md`).
 2. Import `n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json` through the UI ("Import from file") into a **copy**; the CLI `n8n import:workflow` deactivates what it imports. The file says `active: false`.
 3. Validate offline before and after: `node n8n/final/tools/audit-credentials.js <file>`; `node n8n/final/tests/final.test.js`; `node n8n/final/run-tests.js authoritative`.
-4. Review `docs/KNOWN_FINDINGS.md`; decide whether to import the **proposed** file instead (`n8n/final/workflows/proposed/…`: the selected workflow plus the W1 race guard).
+4. Review `docs/KNOWN_FINDINGS.md`. The race guard is already in the selected file.
 5. `W12 – Test input` (manual test node) carries fictional values; put a number you own in it **locally** if you use it, never in git.
 
 ## 6. Synthetic tests (all offline, fake services)
 ```bash
-node n8n/final/run-tests.js                       # reference, authoritative and proposed; unexpected failures only -> exit 1
-node n8n/final/run-tests.js proposed              # one target
+node n8n/final/run-tests.js                       # reference and authoritative; unexpected failures only -> exit 1
+node n8n/final/run-tests.js authoritative         # one target
 node n8n/production/tests/website-w1.test.js      # website payload -> W1 -> LEADS, consent, downstream consent, race guard
 node n8n/production/tests/w13-visible-skip.test.js
 SITE_DIR=apps/clinic-website node n8n/production/tests/website-w1.test.js     # also proves the website's payload equals the tested fixture

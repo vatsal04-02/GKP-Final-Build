@@ -17,7 +17,7 @@ There is **no environment variable for the API key**. It lives only in the n8n c
 |---|---|---|---|---|
 | **`OpenRouter API`** (`As1GpZb3W665Na7C`) | Header Auth | `Authorization` | `Bearer <your OpenRouter API key, sk-or-v1-…>` | **only** `W13 – Ask Model` and `W9 – Ask Model` |
 | **`FlowHQ W1 Webhook Auth`** (`FhqCredW1Hook001`) | Header Auth | `X-Lead-Secret` (or your choice) | a long random secret made for **this webhook only** (≥ 20 characters) | **only** `W1 – Webhook` (the website's enquiry endpoint) |
-| **`Header Auth account 2`** (`9J6XxrIQoFDcQZ0Y`) | Header Auth | `Authorization` | `Bearer <Grist API key of a service user that can edit the clinic documents>` | the 114 Grist nodes |
+| **`Header Auth account 2`** (`9J6XxrIQoFDcQZ0Y`) | Header Auth | `Authorization` | `Bearer <Grist API key of a service user that can edit the clinic documents>` | every Grist node (116) |
 | `WhatsApp Cloud API`, `SMTP account`, `Telegram account` | as before | | | W12, W1 e-mail, W11 |
 
 Rules: **never** use the OpenRouter key as the website webhook secret (or the Grist key); never reuse a credential across roles. `node n8n/final/tools/audit-credentials.js <export> --check` verifies the separation of an export; the audit and the nine-node change history are in `docs/CREDENTIAL_AUDIT.md`.

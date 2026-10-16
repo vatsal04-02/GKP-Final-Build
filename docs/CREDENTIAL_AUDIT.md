@@ -24,7 +24,7 @@ The tool classifies every node **by what it calls** (Grist `/api/docs/…`, the 
 | Credential (name, id) | Role of the node | Nodes | Which |
 |---|---|---|---|
 | `FlowHQ W1 Webhook Auth` (`FhqCredW1Hook001`) | webhook-auth | 1 | W1 – Webhook |
-| `Header Auth account 2` (`9J6XxrIQoFDcQZ0Y`) | grist | 114 | (114 nodes) |
+| `Header Auth account 2` (`9J6XxrIQoFDcQZ0Y`) | grist | 116 | (116 nodes, including the 2 Grist calls of the W1 race guard) |
 | `Telegram account` (`NzFVBwmYZTH1K6L8`) | telegram | 1 | W11 – Telegram alert |
 | `WhatsApp Cloud API` (`k01hgCFOtdH5hdiq`) | whatsapp-meta | 1 | W12 – Meta send |
 | `OpenRouter API` (`As1GpZb3W665Na7C`) | ai-provider | 2 | W13 – Ask Model, W9 – Ask Model |
@@ -43,7 +43,9 @@ What changed (16 nodes, references only; applied by `n8n/final/tools/apply-openr
 This was decided **by role (what the node calls)**, not by name: no `replace all`. Credentials were not renamed and no credential id other than the new website-webhook one was introduced.
 
 ## 3. Assumption you must verify in n8n (values are never needed here)
-The assignment treats `Header Auth account 2` as the **Grist** credential (it already serves 105 of the 114 Grist nodes, which is the only evidence available) and `OpenRouter API` as the **OpenRouter** credential (its name and `W13 – Ask Model`). Open each in n8n and confirm the header **name** (never paste the value anywhere): both should be `Authorization`, with a value of the form `Bearer <key>`: the Grist key for `Header Auth account 2`, the OpenRouter key (`sk-or-v1-…`) for `OpenRouter API`. If they are the other way round, swap the credential in the 11 listed nodes inside n8n (the tool's role table above is what to follow).
+The assignment treats `Header Auth account 2` as the **Grist** credential (it already serves 105 of the 114 original Grist nodes, which is the only evidence available) and `OpenRouter API` as the **OpenRouter** credential (its name and `W13 – Ask Model`). Open each in n8n and confirm the header **name** (never paste the value anywhere): both should be `Authorization`, with a value of the form `Bearer <key>`: the Grist key for `Header Auth account 2`, the OpenRouter key (`sk-or-v1-…`) for `OpenRouter API`. If they are the other way round, swap the credential in the 11 listed nodes inside n8n (the tool's role table above is what to follow).
+
+How to confirm without exposing anything: in n8n open **Credentials**, open each of the two, and look only at the **Name** field (it must read `Authorization`) and the first characters of the **Value** field, which n8n shows masked. `OpenRouter API` must start with `Bearer sk-or-`; `Header Auth account 2` must **not** (a Grist key has no `sk-or-` prefix). Do not copy the value anywhere. Then run a single manual execution of `W1 – Clinic lookup` (a Grist read; sends nothing): a 200 confirms the Grist credential. The OpenRouter credential is only exercised once `FLOWHQ_AI_EXTERNAL_ENABLED=true`; with the switch off no AI call is made at all.
 
 ## 4. Guard rails now in place
 * `node n8n/final/tools/audit-credentials.js <export> --check` exits 1 when any credential serves two roles (also run by `n8n/final/tests/final.test.js` and `n8n/production/tests/openrouter.test.js`).

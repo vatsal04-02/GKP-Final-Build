@@ -7,13 +7,12 @@ const path = require('path');
 const { sanitize } = require('../tools/sanitize-export');
 const { audit } = require('../tools/audit-credentials');
 const { propose } = require('../tools/propose-fixes');
-const { apply } = require('../tools/apply-openrouter-config');
+const { build } = require('../tools/build-selected');
 const cp = require('child_process');
 
 const W = path.join(__dirname, '..', 'workflows');
 const AUTH = path.join(W, 'FlowHQ_Clinic_Automation_production_candidatefinal.json');
 const SUPPLIED = path.join(W, 'history', 'FlowHQ_Clinic_Automation_production_candidatefinal.as-supplied.sanitized.json');
-const PROP = path.join(W, 'proposed', 'FlowHQ_final_proposed_w1-race-guard.json');
 const read = (f) => fs.readFileSync(f, 'utf8');
 const auth = JSON.parse(read(AUTH));
 const tests = []; const test = (n, f) => tests.push([n, f]);
@@ -23,7 +22,7 @@ test('the authoritative export is valid, inactive, has no instance id and every 
   assert.strictEqual(auth.name, 'FlowHQ Clinic Automation (production candidate)');
   assert.strictEqual(auth.active, false);
   assert(!(auth.meta && auth.meta.instanceId));
-  assert.strictEqual(auth.nodes.length, 418);
+  assert.strictEqual(auth.nodes.length, 424);
   const names = new Set(auth.nodes.map((n) => n.name));
   assert.strictEqual(names.size, auth.nodes.length, 'node names are unique');
   for (const [from, v] of Object.entries(auth.connections)) { assert(names.has(from), from); for (const o of v.main || []) for (const c of o || []) assert(names.has(c.node), `${from} -> ${c.node}`); }
@@ -34,7 +33,7 @@ test('sanitizing it again changes nothing (idempotent): no private value is wait
 });
 
 test('no secret, token, personal phone number, e-mail address or tailnet host is stored in the selected files', () => {
-  for (const f of [AUTH, PROP, SUPPLIED]) {
+  for (const f of [AUTH, SUPPLIED]) {
     const t = read(f);
     for (const [name, re] of [['bearer token', /Bearer\s+[A-Za-z0-9._-]{16,}/], ['Meta token', /EAA[A-Za-z0-9]{20,}/], ['sk- key', /sk-(or-)?[A-Za-z0-9-]{20,}/], ['Telegram token', /\d{8,10}:[A-Za-z0-9_-]{30,}/], ['long hex', /\b[0-9a-f]{32,}\b/i], ['private key', /BEGIN [A-Z ]*PRIVATE KEY/], ['e-mail', /[\w.+-]+@[\w-]+\.[a-z]{2,}/i], ['tailnet host', /\.ts\.net/]]) assert(!re.test(t), `${path.basename(f)}: ${name}`);
     const digits = (t.match(/(?<![\w.-])\d{10,16}(?![\w.-])/g) || []).filter((d) => !/^(91)?(9000000\d{2,5}|98000\d{5}|9876543210)$/.test(d) && d !== '123456789012345');
@@ -60,33 +59,32 @@ test('credential audit: every credential serves exactly ONE role (website webhoo
   assert.deepStrictEqual(a.credentials.filter((c) => c.shared), []);
   const by = Object.fromEntries(a.credentials.map((c) => [c.credentialName, Object.fromEntries(Object.entries(c.roles).map(([k, v]) => [k.split(' ')[0], v.length]))]));
   assert.deepStrictEqual(by, {
-    'FlowHQ W1 Webhook Auth': { 'webhook-auth': 1 }, 'Header Auth account 2': { grist: 114 }, 'OpenRouter API': { 'ai-provider': 2 },
+    'FlowHQ W1 Webhook Auth': { 'webhook-auth': 1 }, 'Header Auth account 2': { grist: 116 }, 'OpenRouter API': { 'ai-provider': 2 },
     'WhatsApp Cloud API': { 'whatsapp-meta': 1 }, 'SMTP account': { smtp: 1 }, 'Telegram account': { telegram: 1 },
   });
   assert.deepStrictEqual(a.credentials.find((c) => c.credentialName === 'OpenRouter API').roles['ai-provider'].sort(), ['W13 – Ask Model', 'W9 – Ask Model']);
-  assert.strictEqual(a.nodes, 120);
+  assert.strictEqual(a.nodes, 122);
 });
 
-test('the as-supplied copy still has the two shared credentials, and the authoritative file is exactly apply-openrouter-config applied to it', () => {
+test('the as-supplied copy still has the two shared credentials, and the authoritative file is exactly build-selected (OpenRouter config, then the W1 race guard) applied to it', () => {
   const supplied = JSON.parse(read(SUPPLIED));
   assert.deepStrictEqual(audit(supplied).credentials.filter((c) => c.shared).map((c) => c.credentialName).sort(), ['Header Auth account 2', 'OpenRouter API']);
-  const { wf, changed } = apply(supplied);
+  const { wf, changed } = build(supplied);
   assert.strictEqual(JSON.stringify(wf), JSON.stringify(auth), 'the committed authoritative file is current');
-  assert.strictEqual(changed.length, 16);
-  assert.strictEqual(supplied.nodes.length, auth.nodes.length);
-  assert.strictEqual(JSON.stringify(supplied.connections), JSON.stringify(auth.connections), 'connections unchanged');
+  assert.strictEqual(changed.length, 16, 'the OpenRouter step touches 16 nodes');
+  assert.strictEqual(auth.nodes.length, supplied.nodes.length + 6, 'the race guard adds exactly 6 nodes');
   assert.strictEqual(supplied.id, auth.id);
+  assert.strictEqual(auth.active, false);
 });
 
-test('the proposed file is exactly the authoritative one plus the six W1 race-guard nodes: nothing else changes, credentials and ids are identical', () => {
-  const { wf } = propose(auth);
-  assert.strictEqual(JSON.stringify(JSON.parse(read(PROP))), JSON.stringify(wf), 'the committed proposal is current');
-  const before = new Map(auth.nodes.map((n) => [n.name, JSON.stringify(n)]));
-  const changed = wf.nodes.filter((n) => before.has(n.name) && before.get(n.name) !== JSON.stringify(n)).map((n) => n.name);
-  assert.deepStrictEqual(changed, []);
-  assert.strictEqual(wf.nodes.length, auth.nodes.length + 6);
-  assert.strictEqual(wf.active, false);
-  for (const n of auth.nodes) assert.strictEqual(JSON.stringify(wf.nodes.find((x) => x.name === n.name).credentials || null), JSON.stringify(n.credentials || null), n.name);
+test('the W1 race guard is in the selected file: 6 added nodes, no existing node changed beyond the OpenRouter step, every added node uses the Grist credential only', () => {
+  const supplied = JSON.parse(read(SUPPLIED));
+  const names = new Set(supplied.nodes.map((n) => n.name));
+  const added = auth.nodes.filter((n) => !names.has(n.name));
+  assert.strictEqual(added.length, 6);
+  assert(added.every((n) => /^W1 – /.test(n.name)), added.map((n) => n.name).join(', '));
+  for (const n of added) for (const c of Object.values(n.credentials || {})) assert.strictEqual(c.name, 'Header Auth account 2', n.name);
+  assert.deepStrictEqual(propose(auth).wf, auth, 'propose-fixes has nothing left to change on the selected file');
 });
 
 test('create-credentials --only creates just the website webhook credential (what an existing instance needs): needs only its own secret, never prints a value', () => {

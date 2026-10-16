@@ -9827,6 +9827,154 @@
         10720
       ],
       "id": "f18c6542-6c86-4c29-9b5e-efef406b5fa8"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('W1 – Build new lead').first().json.grist_base_url }}/api/docs/{{ $('W1 – Build new lead').first().json.doc_id }}/tables/LEADS/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Phone: [$('W1 – Build new lead').first().json.phone] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f791b036-3939-418a-a2f2-f4f4e174134d",
+      "name": "W1 – Recheck lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        1936
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Race guard (website integration). Two enquiries for the same phone can arrive at the same moment (two executions) and both create a lead.\n// After creating, read the leads with this phone again: the LOWEST row id is the lead. If our row is not it, another run got there first.\nconst ctx = $('W1 – Build new lead').first().json;\nconst made = $('W1 – Create lead').first().json;\nconst madeId = made && Array.isArray(made.records) && made.records[0] ? Number(made.records[0].id) : 0;\nconst rows = (Array.isArray($json.records) ? $json.records : []).filter((r) => r && Number.isInteger(r.id) && r.fields).sort((a, b) => a.id - b.id);\nconst canon = rows[0] || null;                                   // null when the re-read failed: carry on exactly as before\nconst race = !!canon && madeId > 0 && canon.id !== madeId;\nreturn [{ json: { ...ctx, race, made_row_id: madeId, kept_row_id: canon ? canon.id : madeId, skip_reason: race ? 'parallel submission: lead row ' + canon.id + ' was created first and is kept' : '' } }];\n"
+      },
+      "name": "W1 – Race guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3424,
+        1936
+      ],
+      "id": "edbe84de-b7ba-48de-a059-3ae7ff42ed03"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2d4b5cac-e065-427d-a3ac-fbc89e659d40",
+              "leftValue": "={{ $json.race === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "W1 – Race?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3648,
+        1936
+      ],
+      "id": "7e7b0309-62f7-4c90-a492-145f5d75f37b"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'duplicate' }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "name": "W1 – Respond Duplicate (race)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3872,
+        2056
+      ],
+      "id": "f3fcab46-31cd-40aa-a6c6-6588fdb883be"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('W1 – Build new lead').first().json.grist_base_url }}/api/docs/{{ $('W1 – Build new lead').first().json.doc_id }}/tables/LEADS/data/delete",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify([$('W1 – Race guard').first().json.made_row_id]) }}",
+        "options": {}
+      },
+      "id": "dabe963a-3987-4fcb-ad2d-7e9cbc10c4f0",
+      "name": "W1 – Remove duplicate row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4096,
+        2056
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// What the race branch tells staff: which row was kept and whether the extra row could be removed.\nconst g = $('W1 – Race guard').first().json;\nconst removed = !($json && $json.error);   // Grist answers a delete with null: only an error item means it failed\nreturn [{ json: { ...g, skip_reason: g.skip_reason + (removed ? '; the duplicate row ' + g.made_row_id + ' was removed' : '; the duplicate row ' + g.made_row_id + ' could NOT be removed automatically: please delete it in Grist') } }];\n"
+      },
+      "name": "W1 – Race log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        2056
+      ],
+      "id": "299cf9f7-f651-49ae-a658-49cc7f1b6fa3"
     }
   ],
   "pinData": {},
@@ -10017,7 +10165,7 @@
       "main": [
         [
           {
-            "node": "W1 – Respond Created",
+            "node": "W1 – Recheck lead",
             "type": "main",
             "index": 0
           }
@@ -14211,6 +14359,79 @@
         [
           {
             "node": "W14 – Write logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W1 – Recheck lead": {
+      "main": [
+        [
+          {
+            "node": "W1 – Race guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W1 – Race guard": {
+      "main": [
+        [
+          {
+            "node": "W1 – Race?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W1 – Race?": {
+      "main": [
+        [
+          {
+            "node": "W1 – Respond Duplicate (race)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W1 – Respond Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W1 – Respond Duplicate (race)": {
+      "main": [
+        [
+          {
+            "node": "W1 – Remove duplicate row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W1 – Remove duplicate row": {
+      "main": [
+        [
+          {
+            "node": "W1 – Race log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W1 – Race log": {
+      "main": [
+        [
+          {
+            "node": "W1 – Log skipped",
             "type": "main",
             "index": 0
           }

@@ -2,11 +2,10 @@
 // Runs the synthetic test suites (simulator with fake Grist / Meta / AI / SMTP: nothing leaves this computer) against one workflow file and sorts every failure into
 // "known finding" (documented in docs/KNOWN_FINDINGS.md) or "UNEXPECTED". Exit code 1 only for an unexpected failure.
 //
-//   node n8n/final/run-tests.js [reference|authoritative|proposed|<path to an export>]     (default: all three)
+//   node n8n/final/run-tests.js [reference|authoritative|<path to an export>]     (default: both)
 //
 //   reference      n8n/production/clinic-autopilot-production.json   the earlier hardened build (FlowHQ credential names): everything passes
-//   authoritative  n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json   the selected workflow: OpenRouter configured, credentials by role (+ the openrouter suite)
-//   proposed       n8n/final/workflows/proposed/…   authoritative + the W1 race guard (not applied to any live n8n)
+//   authoritative  n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidatefinal.json   the selected workflow: OpenRouter configured, credentials by role, W1 race guard (+ the openrouter suite)
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -20,16 +19,6 @@ const TARGETS = {
   reference: { file: path.join(ROOT, 'clinic-autopilot-production.json'), env: {}, known: [], extraSuites: ['mutation'] },
   authoritative: {
     file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidatefinal.json'),
-    env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }) },
-    extraSuites: ['openrouter'],
-    known: [
-      ['F-ID', /^identity: inactive, own id and name/],
-      ['F-CRED-NAMES', /^credentials: only the production credentials/],
-      ['F-CRED-NAMES', /SMTP credential "FlowHQ SMTP"/],
-    ],
-  },
-  proposed: {
-    file: path.join(__dirname, 'workflows', 'proposed', 'FlowHQ_final_proposed_w1-race-guard.json'),
     env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }) },
     extraSuites: ['openrouter'],
     known: [
@@ -61,14 +50,14 @@ function runTarget(name, t) {
   return unexpected;
 }
 
-// the selected files themselves (no workflow needed): shape, sanitization, configuration, credential audit, proposed fixes
+// the selected files themselves (no workflow needed): shape, sanitization, configuration, credential audit, build from the as-supplied copy
 {
   const r = cp.spawnSync(process.execPath, [path.join(__dirname, 'tests', 'final.test.js')], { encoding: 'utf8' });
   process.stdout.write(`\n=== selected workflow files\n${r.stdout.split('\n').filter(Boolean).map((l) => `  ${l.trim()}`).join('\n')}\n`);
   if (r.status !== 0) { console.log('  FAIL'); process.exit(1); }
 }
 const arg = process.argv[2];
-const names = arg ? [arg] : ['reference', 'authoritative', 'proposed'];
+const names = arg ? [arg] : ['reference', 'authoritative'];
 let bad = 0;
 for (const n of names) bad += runTarget(n, TARGETS[n] || { file: path.resolve(n), env: {}, known: [] });
 process.exit(bad ? 1 : 0);

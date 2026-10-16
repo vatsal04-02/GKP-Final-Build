@@ -9,7 +9,7 @@ Activation needs your explicit decision for each step. This repository did not d
 4. **Verify the clinic slug** in the registry's `Clinics` table and set `CLINIC_SLUG` in Vercel. `FLOWHQ_REGISTRY_DOC_ID` set on the server.
 5. **Clinic approval of the wording** (`PRIVACY_DRAFT.md`), a published privacy page, a retention period, and the `CONSENT_VERSION` bumped (drop `DRAFT-`).
 6. **Backups.** Export the live n8n workflow; back up the n8n volume and Grist (`n8n/production/scripts/backup.sh`); keep `N8N_ENCRYPTION_KEY` separately. Never change that key.
-7. **Race guard (F-RACE-01).** Decide to import the proposed workflow (recommended): without it two simultaneous enquiries from one phone can create two leads.
+7. **Race guard (F-RACE-01).** Now part of the selected workflow (6 W1 nodes). Nothing to decide; just confirm the six `W1 – …` race nodes are present after import.
 
 ## Then, in this order
 8. Controlled test (docs/INSTALL.md §7): `FLOWHQ_WA_SEND_MODE=off`, no alert e-mail, AI off, Vercel **Preview**, n8n **test** webhook, one synthetic enquiry.

@@ -10,7 +10,7 @@
                                                               ▼
  n8n (Docker; Caddy in front)   POST /webhook/website-lead  (W1, header auth, "respond after store")
         W1: registry lookup (Clinics, by clinic_slug) → clinic doc → find lead by PHONE → update (append, never overwrite) | create
-            [proposed] re-read after create: oldest row wins, a loser deletes only its own row
+            [race guard] re-read after create: oldest row wins, a loser deletes only its own row
             → Run_Log → staff alert via W12 (send mode off | allowlist | live) → optional staff e-mail (SMTP)
         W2  WhatsApp inbound (Meta signature, raw body, dedupe on message id)          → Messages / Conversations → W13
         W13 AI receptionist: gates (opt-out, pause, human hand-off, emergency, quiet hours, AI switch) → AI only to *propose*; W12 sends
