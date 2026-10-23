@@ -18,5 +18,7 @@ export type DoctorFilterState = ReturnType<typeof useDoctorFilter>;
 
 export function DoctorFilter({ f }: { f: DoctorFilterState }) {
   if (!f.show) return null;
-  return <Segmented value={f.pick} onChange={f.setPick} options={[{ value: '', label: 'All doctors' }, ...f.doctors.map((d) => ({ value: d, label: d }))]} />;
+  // on a phone the surname is dropped from the labels ("Dr. Sandeep"); the full name is in the tooltip and everywhere else
+  const label = (d: string) => <span title={d}><span className="sm:hidden">{d.replace(/\s+\S+$/, '')}</span><span className="hidden sm:inline">{d}</span></span>;
+  return <Segmented value={f.pick} onChange={f.setPick} options={[{ value: '', label: 'All doctors' }, ...f.doctors.map((d) => ({ value: d, label: label(d) }))]} />;
 }

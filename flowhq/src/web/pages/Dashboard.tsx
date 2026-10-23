@@ -46,7 +46,7 @@ export default function Dashboard() {
       actions={<Segmented value={days} onChange={setDays} options={RANGES.map((r) => ({ value: r.value, label: r.label }))} />}
     >
       {q.error ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card> : (
-        <div className="space-y-5">
+        <div className="space-y-4">
           {clinical && <DoctorOverview days={days} />}
           {clinical && <h2 className="pt-2 text-[12px] font-semibold uppercase tracking-wide text-muted">Enquiries &amp; messages</h2>}
           {enquiryCard && <EnquiryOverview d={d} days={days} />}
@@ -55,7 +55,7 @@ export default function Dashboard() {
               : metrics.map((m) => <MetricCard key={m.key} m={m} spark={days !== '1' ? series(m.key) : undefined} emphasis={m.key === 'new_contacts' || m.key === 'ai_handled'} />)}
           </section>
 
-          <div className={clinical ? 'grid gap-5 xl:grid-cols-2' : 'grid gap-5 xl:grid-cols-3'}>
+          <div className={clinical ? 'grid gap-4 xl:grid-cols-2 [&>*]:min-w-0' : 'grid gap-4 xl:grid-cols-3 [&>*]:min-w-0'}>
             {!clinical && <Card className="xl:col-span-2">
               <CardHeader title="Conversations" subtitle={has('ai') ? tt('Incoming messages and what the {ai.name} did with them') : 'Incoming messages'} icon={<Sparkles className="h-4 w-4" />} />
               <div className="px-3 pb-3 pt-2">
@@ -75,7 +75,7 @@ export default function Dashboard() {
             </Card>
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3 [&>*]:min-w-0">
             {has('bookings') && (
               <Card className="xl:col-span-1">
                 <CardHeader title={tt('Upcoming {booking.plural|lower}')} icon={<CalendarDays className="h-4 w-4" />} action={<Link to={`/w/${ws.id}/bookings`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">View all <ArrowRight className="h-3 w-3" /></Link>} />
