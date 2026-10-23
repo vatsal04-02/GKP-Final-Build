@@ -3,7 +3,7 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import { existsSync, readFileSync } from 'node:fs';
 import type { Role, Viewer } from './adapters/types';
 
-export interface UserRecord { email: string; name: string; role: Role; workspaces: string[]; passwordHash: string }
+export interface UserRecord { email: string; name: string; role: Role; workspaces: string[]; passwordHash: string; clinician?: string }   // clinician: the doctor this login is (the exact name in config/clinic.json); such a login only ever sees that doctor's prescriptions and dues
 export const COOKIE = 'fhq_session';
 const SESSION_HOURS = 12;
 
@@ -24,7 +24,7 @@ export function loadUsers(file: string, json: string): UserRecord[] {
   const raw = json || (existsSync(file) ? readFileSync(file, 'utf8') : '[]');
   const list = JSON.parse(raw) as UserRecord[];
   if (!Array.isArray(list)) throw new Error('users: expected a JSON array');
-  return list.map((u) => ({ email: String(u.email).trim().toLowerCase(), name: String(u.name || u.email), role: u.role === 'admin' ? 'admin' : 'staff', workspaces: Array.isArray(u.workspaces) && u.workspaces.length ? u.workspaces.map(String) : ['*'], passwordHash: String(u.passwordHash || '') }));
+  return list.map((u) => ({ email: String(u.email).trim().toLowerCase(), name: String(u.name || u.email), role: u.role === 'admin' ? 'admin' : 'staff', workspaces: Array.isArray(u.workspaces) && u.workspaces.length ? u.workspaces.map(String) : ['*'], passwordHash: String(u.passwordHash || ''), ...(typeof u.clinician === 'string' && u.clinician.trim() ? { clinician: u.clinician.trim() } : {}) }));
 }
 
 export function signSession(email: string, secret: string, now = Date.now()): string {
@@ -43,7 +43,7 @@ export function readSession(token: string | undefined, secret: string, now = Dat
   } catch { return null; }
 }
 
-export const viewerOf = (u: UserRecord): Viewer => ({ email: u.email, name: u.name, role: u.role });
+export const viewerOf = (u: UserRecord): Viewer => ({ email: u.email, name: u.name, role: u.role, ...(u.clinician ? { clinician: u.clinician } : {}) });
 export const canAccess = (u: UserRecord, workspaceId: string) => u.workspaces.includes('*') || u.workspaces.includes(workspaceId);
 
 // 10 failed attempts per address per 15 minutes

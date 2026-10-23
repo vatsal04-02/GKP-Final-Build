@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Bot, Check, CheckCheck, Clock, Inbox as InboxIcon, Loader2, MessageSquareDashed, PauseCircle, PlayCircle, Search, Send, Sparkles, UserRound, UserRoundCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bot, Check, CheckCheck, Clock, Inbox as InboxIcon, Loader2, MessageSquareDashed, PauseCircle, Search, Send, Sparkles, UserRound, UserRoundCheck } from 'lucide-react';
 import type { ChannelKey, Contact, Conversation, Message } from '@core/domain';
 import { api, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
@@ -12,6 +12,7 @@ import { cn } from '../lib/cn';
 import { Avatar, Badge, Button, Input, Segmented, StatusDot } from '../components/ui/primitives';
 import { EmptyState, ErrorState, SkeletonRows, useToast } from '../components/ui/feedback';
 import { AiBadge, AttentionBadge, Confidence, StageDot } from '../components/data/widgets';
+import { HumanHandlingToggle } from '../components/data/HumanHandlingToggle';
 
 const CHANNEL_LABEL: Record<ChannelKey, string> = { whatsapp: 'WhatsApp', website: 'Website', email: 'Email', instagram: 'Instagram', messenger: 'Messenger', sms: 'SMS' };
 type Filter = 'all' | 'unread' | 'attention' | 'ai' | 'paused' | 'mine';
@@ -115,9 +116,7 @@ function Thread({ id }: { id: string }) {
           </div>
           <div className="flex items-center gap-1.5">
             {caps.conversationEditable.includes('assignedTo') && !c.assignedTo && <Button size="sm" variant="ghost" icon={<UserRoundCheck className="h-4 w-4" />} onClick={() => patch.mutate({ assignedTo: me.user.name })} aria-label="Take it" title="Assign this conversation to me"><span className="hidden 2xl:inline">Take it</span></Button>}
-            {caps.conversationEditable.includes('automationPaused') && (
-              <Button size="sm" variant="ghost" icon={c.automationPaused ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />} onClick={() => patch.mutate({ automationPaused: !c.automationPaused })} title={c.automationPaused ? 'Let automations and the assistant write again' : 'Stop automations and the assistant for this conversation'} aria-label={c.automationPaused ? 'Resume automations' : 'Pause automations'}><span className="hidden 2xl:inline">{c.automationPaused ? 'Resume automations' : 'Pause automations'}</span></Button>
-            )}
+            {caps.conversationEditable.includes('automationPaused') && <HumanHandlingToggle conversationId={c.id} paused={c.automationPaused} className="mr-1" />}
             {c.attentionRequired && caps.conversationEditable.includes('resolveAttention') && <Button size="sm" variant="subtle" icon={<Check className="h-4 w-4" />} onClick={() => patch.mutate({ resolveAttention: true })}>Mark handled</Button>}
           </div>
         </header>

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { PAYMENT_METHODS, PATIENT_STATUSES, SEXES, VISIT_STATUSES, type InvoiceInput } from '../../core/clinical';
 import type { Ctx, WorkspaceBackend } from '../adapters/types';
 import { bad } from './ids';
-import type { Actor, RecordsService } from './service';
+import type { Actor, RecordsService, Scope } from './service';
 
 type E = { Variables: { backend: WorkspaceBackend; ctx: Ctx } };
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -24,31 +24,42 @@ const invoiceBody = z.object({ patientId: z.string().min(1).max(40), date, lines
 export function recordsRoutes() {
   const r = new Hono<E>();
   const svc = (c: Context<E>): RecordsService => { const s = c.get('backend').records?.(); if (!s) throw bad('records_unavailable', 'Clinic records are not set up for this workspace yet', 404); return s; };
-  const who = (c: Context<E>): Actor => { const v = c.get('ctx').viewer; return { email: v.email, name: v.name, role: v.role }; };
+  // A doctor's login is bound to ONE name from config/clinic.json: it only ever sees that doctor's prescriptions and dues (the patient register is shared).
+  // Anyone else may ask for one doctor with ?doctor=<name>; an unknown name is refused, never ignored.
+  const doctorOf = (c: Context<E>): string | null => { const v = c.get('ctx').viewer; if (!v.clinician) return null; const d = svc(c).clinic().clinicians.find((x) => x.name.trim().toLowerCase() === v.clinician!.trim().toLowerCase()); if (!d) throw bad('doctor_not_set_up', 'Your doctor profile is not set up in the clinic details. Ask the admin.', 403); return d.name; };
+  const who = (c: Context<E>): Actor => { const v = c.get('ctx').viewer; const d = doctorOf(c); return { email: v.email, name: v.name, role: v.role, ...(d ? { clinician: d } : {}) }; };
+  const scope = (c: Context<E>): Scope => {
+    const d = doctorOf(c); if (d) return { only: d };
+    const asked = (c.req.query('doctor') || '').trim(); if (!asked) return {};
+    const hit = svc(c).clinic().clinicians.find((x) => x.name.trim().toLowerCase() === asked.toLowerCase());
+    if (!hit) throw bad('unknown_doctor', 'Unknown doctor', 400);
+    return { only: hit.name };
+  };
+  const doctorScope = (c: Context<E>): Scope => { const d = doctorOf(c); return d ? { only: d } : {}; };   // writes and photos: only a doctor login is limited (an admin's ?doctor= filter is for reading)
   const found = <T,>(x: T | null) => { if (x === null) throw bad('not_found', 'Not found', 404); return x; };
   const clean = <T extends Record<string, unknown>>(o: T) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v === '' && /On$/.test(k) ? null : v])) as T;
 
   r.get('/clinic', (c) => c.json(svc(c).clinic()));
-  r.get('/clinic-summary', async (c) => c.json(await svc(c).doctorSummary(Number(c.req.query('days') || 7))));
+  r.get('/clinic-summary', async (c) => { const sc = scope(c); return c.json(await svc(c).doctorSummary(Number(c.req.query('days') || 7), sc, !sc.only && c.get('ctx').viewer.role === 'admin')); });
 
   r.get('/patients', async (c) => c.json(await svc(c).listPatients({ q: c.req.query('q'), status: c.req.query('status') || undefined, followUp: c.req.query('followUp') === '1', owing: c.req.query('owing') === '1',
-    sort: c.req.query('sort'), dir: c.req.query('dir') === 'desc' ? 'desc' : 'asc', page: Number(c.req.query('page') || 1), pageSize: Number(c.req.query('pageSize') || 50), week: c.req.query('week') })));
+    sort: c.req.query('sort'), dir: c.req.query('dir') === 'desc' ? 'desc' : 'asc', page: Number(c.req.query('page') || 1), pageSize: Number(c.req.query('pageSize') || 50), week: c.req.query('week') }, scope(c))));
   r.get('/patients/check', async (c) => c.json({ matches: await svc(c).findDuplicates(c.req.query('name') || '', c.req.query('phone') || '', c.req.query('except') || undefined) }));
   r.post('/patients', async (c) => {
     const b = patientFields.extend({ name: z.string().min(1).max(120), confirmDuplicate: z.boolean().optional() }).parse(await c.req.json());
     const { confirmDuplicate, ...f } = b;
     return c.json(await svc(c).createPatient(clean(f) as never, who(c), confirmDuplicate), 201);
   });
-  r.get('/patients/:id', async (c) => c.json(found(await svc(c).profile(c.req.param('id')))));
+  r.get('/patients/:id', async (c) => c.json(found(await svc(c).profile(c.req.param('id'), scope(c)))));
   r.patch('/patients/:id', async (c) => {
     const { confirmDuplicate, ...f } = patientFields.extend({ confirmDuplicate: z.boolean().optional() }).parse(await c.req.json());
     return c.json(await svc(c).updatePatient(c.req.param('id'), clean(f) as never, who(c), confirmDuplicate));
   });
 
-  r.get('/prescriptions', async (c) => c.json(await svc(c).listPrescriptions({ patientId: c.req.query('patient') || undefined, q: c.req.query('q') })));
-  r.post('/prescriptions', async (c) => c.json(await svc(c).savePrescription(clean(rxBody.parse(await c.req.json())) as never, who(c)), 201));
-  r.get('/prescriptions/:id', async (c) => c.json(found(await svc(c).getPrescription(c.req.param('id')))));
-  r.put('/prescriptions/:id', async (c) => c.json(await svc(c).savePrescription(clean({ ...rxBody.parse(await c.req.json()), rxId: c.req.param('id') }) as never, who(c))));
+  r.get('/prescriptions', async (c) => c.json(await svc(c).listPrescriptions({ patientId: c.req.query('patient') || undefined, q: c.req.query('q') }, scope(c))));
+  r.post('/prescriptions', async (c) => c.json(await svc(c).savePrescription(clean(rxBody.parse(await c.req.json())) as never, who(c), doctorScope(c)), 201));
+  r.get('/prescriptions/:id', async (c) => c.json(found(await svc(c).getPrescription(c.req.param('id'), scope(c)))));
+  r.put('/prescriptions/:id', async (c) => c.json(await svc(c).savePrescription(clean({ ...rxBody.parse(await c.req.json()), rxId: c.req.param('id') }) as never, who(c), doctorScope(c))));
   r.post('/prescriptions/:id/images', async (c) => {
     const len = Number(c.req.header('content-length') || 0);
     if (len > 6 * 1024 * 1024) throw bad('file_too_large', 'The photo is larger than 5 MB', 413);
@@ -57,21 +68,21 @@ export function recordsRoutes() {
     const f = form.get('file');
     if (!(f instanceof File)) throw bad('invalid', 'No photo was sent');
     const caption = typeof form.get('caption') === 'string' ? (form.get('caption') as string) : '';
-    return c.json(await svc(c).addImage(c.req.param('id'), { bytes: new Uint8Array(await f.arrayBuffer()), name: f.name, caption }, who(c)), 201);
+    return c.json(await svc(c).addImage(c.req.param('id'), { bytes: new Uint8Array(await f.arrayBuffer()), name: f.name, caption }, who(c), doctorScope(c)), 201);
   });
-  r.delete('/prescriptions/:id/images/:imageId', async (c) => { await svc(c).removeImage(c.req.param('id'), c.req.param('imageId'), who(c)); return c.json({ ok: true }); });
+  r.delete('/prescriptions/:id/images/:imageId', async (c) => { await svc(c).removeImage(c.req.param('id'), c.req.param('imageId'), who(c), doctorScope(c)); return c.json({ ok: true }); });
   r.get('/prescriptions/:id/images/:imageId', async (c) => {      // patient photos are only ever served here, to a signed-in user with access to this workspace
-    const img = found(await svc(c).readImage(c.req.param('id'), c.req.param('imageId')));
+    const img = found(await svc(c).readImage(c.req.param('id'), c.req.param('imageId'), doctorScope(c)));
     return c.body(img.bytes as unknown as ArrayBuffer, 200, { 'Content-Type': img.mime, 'Cache-Control': 'private, no-store', 'Content-Disposition': 'inline; filename="photo"' });
   });
 
-  r.get('/invoices', async (c) => c.json(await svc(c).listInvoices({ patientId: c.req.query('patient') || undefined, status: c.req.query('status') || undefined, q: c.req.query('q') })));
+  r.get('/invoices', async (c) => c.json(await svc(c).listInvoices({ patientId: c.req.query('patient') || undefined, status: c.req.query('status') || undefined, q: c.req.query('q') }, scope(c))));
   r.post('/invoices', async (c) => {
-    const out = await svc(c).createInvoice(invoiceBody.parse(await c.req.json()) as InvoiceInput, who(c));
+    const out = await svc(c).createInvoice(invoiceBody.parse(await c.req.json()) as InvoiceInput, who(c), doctorScope(c));
     return c.json(out, out.duplicate ? 200 : 201);
   });
-  r.get('/invoices/:no', async (c) => c.json(found(await svc(c).getInvoice(c.req.param('no')))));
-  r.post('/invoices/:no/payments', async (c) => c.json(await svc(c).addPayment(c.req.param('no'), paymentBody.extend({ idemKey: z.string().min(8).max(64) }).parse(await c.req.json()), who(c)), 201));
+  r.get('/invoices/:no', async (c) => c.json(found(await svc(c).getInvoice(c.req.param('no'), scope(c)))));
+  r.post('/invoices/:no/payments', async (c) => c.json(await svc(c).addPayment(c.req.param('no'), paymentBody.extend({ idemKey: z.string().min(8).max(64) }).parse(await c.req.json()), who(c), doctorScope(c)), 201));
   r.post('/invoices/:no/void', async (c) => c.json(await svc(c).voidInvoice(c.req.param('no'), z.object({ reason: z.string().max(300) }).parse(await c.req.json()).reason, who(c))));
   r.post('/payments/:id/void', async (c) => c.json(await svc(c).voidPayment(c.req.param('id'), z.object({ reason: z.string().max(300) }).parse(await c.req.json()).reason, who(c))));
 

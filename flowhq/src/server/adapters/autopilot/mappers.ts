@@ -70,6 +70,7 @@ export function toContact(l: GristRecord, conv: GristRecord | null): Contact {
     optedOut: f.Opted_Out === true,
     escalated: f.Escalated === true,
     conversationId: conv ? String(conv.id) : null,
+    automationPaused: c ? c.Automation_Paused === true : null,
     custom: {},
   };
 }

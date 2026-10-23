@@ -11,6 +11,7 @@ import { cn } from '../lib/cn';
 import { Badge, Card, CardHeader } from '../components/ui/primitives';
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/feedback';
 import { fdate, rs } from './common';
+import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
 
 // true when this workspace keeps clinic records (the dashboard then leads with the doctor's view)
 export function useHasDoctorOverview() { return useWs().has('patients'); }
@@ -147,7 +148,8 @@ function AttendanceBars({ data, today }: { data: DoctorSummary['attendance']; to
 
 export function DoctorOverview({ days }: { days: string }) {
   const { ws, has } = useWs();
-  const q = useQuery({ queryKey: ['clinic-summary', ws.id, days], queryFn: () => api<DoctorSummary>(wsPath(ws.id, `/clinic-summary?days=${days}`)), refetchInterval: 60000 });
+  const doc = useDoctorFilter();
+  const q = useQuery({ queryKey: ['clinic-summary', ws.id, days, doc.key], queryFn: () => api<DoctorSummary>(wsPath(ws.id, `/clinic-summary?days=${days}${doc.qs}`)), refetchInterval: 60000 });
   const d = q.data;
   const base = `/w/${ws.id}`;
   if (q.error) return <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card>;
@@ -156,12 +158,39 @@ export function DoctorOverview({ days }: { days: string }) {
   const period = days === '1' ? 'today' : `in the last ${days} days`;
   return (
     <div className="space-y-4">
+      {(doc.show || doc.own) && (
+        <div className="flex flex-wrap items-center gap-2.5">
+          {doc.own ? <span className="text-[12.5px] text-fg-2">Prescriptions and dues shown here are <b className="font-medium text-fg">{doc.own}</b>'s own. Patients and attendance are shared.</span> : <><span className="text-[12.5px] text-fg-2">Prescriptions and dues for</span><DoctorFilter f={doc} /></>}
+        </div>
+      )}
       {!d ? <Card className="p-5"><Skeleton className="h-12 w-64" /></Card> : <Hero d={d} base={base} has={has} />}
 
       <section aria-label="Clinic numbers" className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
         {!d ? Array.from({ length: 8 }, (_, i) => <Card key={i} className="p-[13px]"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /></Card>)
           : SPECS.map((s, i) => <Tile key={s.key} spec={s} tile={d.tiles[s.key]} d={d} vs={vs} range={range} i={i + 1} />)}
       </section>
+
+      {d?.byDoctor && d.byDoctor.length > 0 && (
+        <Card className="fhq-rise" style={delay(8)}>
+          <CardHeader title="By doctor" subtitle={`Dues, collections and prescriptions ${period}, side by side`} icon={<Users className="h-4 w-4" />} />
+          <div className="overflow-x-auto px-5 pb-4 pt-1">
+            <table className="w-full min-w-[420px] text-[13px]">
+              <thead><tr className="text-left text-[11.5px] uppercase tracking-wide text-muted"><th className="py-2 pr-3 font-medium">Doctor</th><th className="px-3 py-2 text-right font-medium">Dues</th><th className="px-3 py-2 text-right font-medium">Collected</th><th className="py-2 pl-3 text-right font-medium">Prescriptions</th></tr></thead>
+              <tbody className="divide-y divide-line">
+                {d.byDoctor.map((r) => (
+                  <tr key={r.name}>
+                    <td className="py-2.5 pr-3 font-medium">{r.name}</td>
+                    <td className={cn('num px-3 py-2.5 text-right', r.outstandingPaise > 0 && TEXT.warn)}>{rs(r.outstandingPaise)}</td>
+                    <td className="num px-3 py-2.5 text-right">{rs(r.collectedPaise)}</td>
+                    <td className="num py-2.5 pl-3 text-right">{r.prescriptions}</td>
+                  </tr>
+                ))}
+                <tr className="font-semibold"><td className="py-2.5 pr-3">All doctors</td><td className="num px-3 py-2.5 text-right">{rs(d.byDoctor.reduce((t, r) => t + r.outstandingPaise, 0))}</td><td className="num px-3 py-2.5 text-right">{rs(d.byDoctor.reduce((t, r) => t + r.collectedPaise, 0))}</td><td className="num py-2.5 pl-3 text-right">{d.byDoctor.reduce((t, r) => t + r.prescriptions, 0)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-3">
         <Card className="fhq-rise xl:col-span-2" style={delay(9)}>

@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, Skeleton, SkeletonRows } from '../components/ui
 import { AreaChart } from '../components/data/charts';
 import { ActivityRow, MetricCard, TaskRow } from '../components/data/widgets';
 import { DoctorOverview, useHasDoctorOverview } from '../clinical/DoctorOverview';
+import { EnquiryOverview } from '../components/data/EnquiryOverview';
 
 const RANGES = [{ value: '1', label: 'Today' }, { value: '7', label: '7 days' }, { value: '30', label: '30 days' }] as const;
 
@@ -34,7 +35,9 @@ export default function Dashboard() {
   // A clinic workspace leads with the doctor's own numbers; enquiries and AI collapse into one slim row.
   const clinical = useHasDoctorOverview();
   const SLIM = ['new_contacts', 'pending_actions', 'ai_handled'];
-  const metrics = d ? (clinical ? ws.dashboardMetrics.filter((k) => SLIM.includes(k)) : ws.dashboardMetrics).map((k) => d.metrics.find((m) => m.key === k)).filter((m): m is NonNullable<typeof m> => !!m) : [];
+  // the enquiry card already carries New and Conversion, so the metric grid does not repeat them
+  const enquiryCard = has('contacts');
+  const metrics = d ? (clinical ? ws.dashboardMetrics.filter((k) => SLIM.includes(k)) : ws.dashboardMetrics).filter((k) => !(enquiryCard && (k === 'new_contacts' || k === 'conversion'))).map((k) => d.metrics.find((m) => m.key === k)).filter((m): m is NonNullable<typeof m> => !!m) : [];
   const labels = d?.series[0]?.points.map((p) => date(f, `${p.date}T12:00:00Z`)) || [];
   return (
     <Page
@@ -46,6 +49,7 @@ export default function Dashboard() {
         <div className="space-y-5">
           {clinical && <DoctorOverview days={days} />}
           {clinical && <h2 className="pt-2 text-[12px] font-semibold uppercase tracking-wide text-muted">Enquiries &amp; messages</h2>}
+          {enquiryCard && <EnquiryOverview d={d} days={days} />}
           <section aria-label="Key metrics" className={clinical ? 'grid grid-cols-2 gap-3 md:grid-cols-3' : 'grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6'}>
             {!d ? Array.from({ length: 8 }, (_, i) => <Card key={i} className="p-4"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /><Skeleton className="mt-3 h-3 w-28" /></Card>)
               : metrics.map((m) => <MetricCard key={m.key} m={m} spark={days !== '1' ? series(m.key) : undefined} emphasis={m.key === 'new_contacts' || m.key === 'ai_handled'} />)}

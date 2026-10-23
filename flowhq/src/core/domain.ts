@@ -96,6 +96,7 @@ export interface Contact {
   optedOut: boolean;
   escalated: boolean;
   conversationId: string | null;
+  automationPaused: boolean | null;    // the linked conversation's Human handling switch; null when the contact has no conversation
   custom: Record<string, string | number | boolean | null>;
 }
 export type Priority = 'urgent' | 'high' | 'normal';
@@ -218,9 +219,15 @@ export interface Task {
 // ---------------------------------------------------------------- dashboard, reports, analytics
 export interface MetricValue { key: MetricKey; value: number | null; unit: 'count' | 'percent' | 'currency'; previous: number | null; hint: string | null }
 export interface Series { key: string; points: Array<{ date: string; value: number }> }
+// Enquiries created in the period. The new count and the conversion rate are the `new_contacts` and `conversion` metrics.
+export interface EnquirySummary {
+  converted: number;       // booked or converted: the same rule as the `conversion` metric
+  awaitingReply: number;   // still New, not opted out, and no outbound message has reached them yet
+}
 export interface Dashboard {
   range: { from: ISODate; to: ISODate; days: number };
   metrics: MetricValue[];
+  enquiries: EnquirySummary;
   series: Series[];
   attention: Task[];
   upcoming: Booking[];

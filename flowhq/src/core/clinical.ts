@@ -58,4 +58,5 @@ export interface DoctorSummary {
   recentPrescriptions: Array<{ rxId: string; patientId: string; patientName: string; rxDate: string | null; diagnosis: string }>;
   owing: Array<{ patientId: string; name: string; outstandingPaise: number }>;
   attendance: Array<{ date: string; attended: number }>;
+  byDoctor?: Array<{ name: string; outstandingPaise: number; collectedPaise: number; prescriptions: number }>;   // admin only, when not looking at one doctor
 }

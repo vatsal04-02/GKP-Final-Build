@@ -196,6 +196,15 @@ class AutopilotWorkspace implements WorkspaceBackend {
     };
     const cur = calc(from, to + 1);
     const prev = calc(prevFrom, from);
+    // Enquiries awaiting a first outbound reply: still New, reachable, and nothing outbound has been delivered or queued for them
+    const repliedConvs = new Set(s.msgs.filter((m) => m.fields.Direction === 'Out' && !['failed', 'needs_template'].includes(String(m.fields.Status))).map((m) => String(m.fields.Conversation ?? '')));
+    const enquiries = {
+      converted: leadsIn(from, to + 1).filter((l) => l.fields.Status === 'Booked' || l.fields.Status === 'Converted').length,
+      awaitingReply: leadsIn(from, to + 1).filter((l) => {
+        const conv = s.ix.convByLead.get(String(l.id));
+        return l.fields.Status === 'New' && l.fields.Opted_Out !== true && !sec(l.fields.First_Response_At) && !(conv && repliedConvs.has(String(conv.id)));
+      }).length,
+    };
     const tasks = await this.tasks(ctx);
     const unit = (k: string): MetricValue['unit'] => (k === 'ai_handled' || k === 'conversion' ? 'percent' : k === 'revenue' ? 'currency' : 'count');
     const metrics: MetricValue[] = (Object.keys(cur) as Array<keyof typeof cur>)
@@ -220,7 +229,7 @@ class AutopilotWorkspace implements WorkspaceBackend {
     ];
     const bookings = (await this.bookings({ view: 'upcoming' }, ctx)).slice(0, 6);
     const recent = (await this.activity({ limit: 12 }, ctx));
-    return { range: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), days }, metrics, series, attention: tasks.slice(0, 6), upcoming: bookings, recent };
+    return { range: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), days }, metrics, enquiries, series, attention: tasks.slice(0, 6), upcoming: bookings, recent };
   }
 
   // ---------------------------------------------------------------- contacts
@@ -313,7 +322,10 @@ class AutopilotWorkspace implements WorkspaceBackend {
     if (!(await this.conversationsRows()).some((c) => String(c.id) === id)) throw new BackendError(404, 'not_found', 'Conversation not found');
     await this.grist.update(this.docId, TABLES.conversations, [{ id: Number(id), fields: fields as GristRecord['fields'] }]);
     this.invalidate(TABLES.conversations);
-    return (await this.conversation(id, ctx))!.conversation;
+    // Grist is the source of truth: read the row back and only report success if it now holds what was asked for
+    const saved = (await this.conversation(id, ctx))!.conversation;
+    if (patch.automationPaused !== undefined && saved.automationPaused !== (patch.automationPaused === true)) throw new BackendError(502, 'not_saved', 'The change was not saved in the CRM. Nothing was changed; please try again.');
+    return saved;
   }
 
   // ---------------------------------------------------------------- bookings

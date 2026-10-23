@@ -12,7 +12,11 @@ import { RT } from './schema';
 
 export interface ClinicConfig extends ClinicProfile { idPrefix: string }
 export interface RecordsOptions { tz: string; clinic: () => ClinicConfig; now?: () => number }
-export interface Actor { email: string; name: string; role: 'admin' | 'staff' }
+export interface Actor { email: string; name: string; role: 'admin' | 'staff'; clinician?: string }
+// Limits prescriptions and money to ONE doctor (the invoice's Created_By / the prescription's Treating_Physio). No `only` = everything.
+// A doctor's login always gets their own name here; an admin may ask for one doctor; the patient register is never scoped.
+export interface Scope { only?: string }
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 const s = (v: unknown) => (v === null || v === undefined ? '' : String(v));
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
@@ -62,7 +66,8 @@ export class RecordsService {
   }
 
   // Patients with money and attendance derived from the finance and visit rows (never stored on the patient).
-  private summarise(patients: Patient[], invRows: GristRecord[], payRows: GristRecord[], visitRows: GristRecord[]): PatientRow[] {
+  private summarise(patients: Patient[], allInvRows: GristRecord[], payRows: GristRecord[], visitRows: GristRecord[], scope?: Scope): PatientRow[] {
+    const invRows = scope?.only ? allInvRows.filter((r) => same(s(r.fields.Created_By), scope.only!)) : allInvRows;   // a doctor's dues: only the invoices they raised (their payments follow the invoice)
     const live = new Set(invRows.filter((r) => s(r.fields.Status) !== 'void').map((r) => s(r.fields.Invoice_No)));
     const billed = new Map<string, number>(); const paid = new Map<string, number>(); const latest = new Map<string, string>();
     for (const r of invRows) if (s(r.fields.Status) !== 'void') billed.set(s(r.fields.Patient_ID), (billed.get(s(r.fields.Patient_ID)) || 0) + n(r.fields.Total_Paise));
@@ -90,9 +95,9 @@ export class RecordsService {
     return { fields: f };
   }
 
-  async listPatients(q: { q?: string; status?: string; followUp?: boolean; owing?: boolean; sort?: string; dir?: 'asc' | 'desc'; page?: number; pageSize?: number; week?: string }): Promise<PatientList> {
+  async listPatients(q: { q?: string; status?: string; followUp?: boolean; owing?: boolean; sort?: string; dir?: 'asc' | 'desc'; page?: number; pageSize?: number; week?: string }, scope?: Scope): Promise<PatientList> {
     const [pr, inv, pay, vis] = await Promise.all([this.rows(RT.patients), this.rows(RT.invoices), this.rows(RT.payments), this.rows(RT.visits)]);
-    let rows = this.summarise(pr.map((r) => this.toPatient(r)).filter((p) => p.patientId), inv, pay, vis);
+    let rows = this.summarise(pr.map((r) => this.toPatient(r)).filter((p) => p.patientId), inv, pay, vis, scope);
     const term = (q.q || '').trim().toLowerCase(); const digits = term.replace(/\D/g, '');
     if (term) rows = rows.filter((p) => p.name.toLowerCase().includes(term) || p.patientId.toLowerCase().includes(term) || p.mainComplaint.toLowerCase().includes(term) || (digits.length >= 3 && p.phone.replace(/\D/g, '').includes(digits)));
     if (q.status) rows = rows.filter((p) => p.status === q.status);
@@ -155,16 +160,16 @@ export class RecordsService {
     });
   }
 
-  private async patientRow(patientId: string): Promise<PatientRow | null> {
+  private async patientRow(patientId: string, scope?: Scope): Promise<PatientRow | null> {
     const [pr, inv, pay, vis] = await Promise.all([this.rows(RT.patients), this.rows(RT.invoices), this.rows(RT.payments), this.rows(RT.visits)]);
     const p = pr.map((r) => this.toPatient(r)).find((x) => x.patientId === patientId);
-    return p ? this.summarise([p], inv, pay, vis)[0]! : null;
+    return p ? this.summarise([p], inv, pay, vis, scope)[0]! : null;
   }
 
-  async profile(patientId: string): Promise<PatientProfile | null> {
-    const patient = await this.patientRow(patientId);
+  async profile(patientId: string, scope?: Scope): Promise<PatientProfile | null> {
+    const patient = await this.patientRow(patientId, scope);
     if (!patient) return null;
-    const [prescriptions, invoices, vis] = await Promise.all([this.listPrescriptions({ patientId }), this.listInvoices({ patientId }), this.rows(RT.visits)]);
+    const [prescriptions, invoices, vis] = await Promise.all([this.listPrescriptions({ patientId }, scope), this.listInvoices({ patientId }, scope), this.rows(RT.visits)]);
     const visits = vis.map((r) => this.toVisit(r)).filter((v): v is Visit & { rowId: number } => !!v && v.patientId === patientId).sort((x, y) => (x.date < y.date ? 1 : -1)).slice(0, 200).map(({ rowId: _r, ...v }) => { void _r; return v; });
     return { patient, prescriptions, invoices, payments: invoices.flatMap((i) => i.payments).sort((x, y) => ((y.paidOn || '') < (x.paidOn || '') ? -1 : 1)), visits };
   }
@@ -187,21 +192,23 @@ export class RecordsService {
     for (const r of rx) { const id = s(r.fields.Rx_ID); const cur = best.get(id); if (id && (!cur || n(r.fields.Version) > n(cur.fields.Version))) best.set(id, r); }
     return [...best.values()].map((r) => this.toRx(r, names, imgs.get(s(r.fields.Rx_ID)) || []));
   }
-  async listPrescriptions(q: { patientId?: string; q?: string } = {}): Promise<Prescription[]> {
+  async listPrescriptions(q: { patientId?: string; q?: string } = {}, scope?: Scope): Promise<Prescription[]> {
     let list = await this.latestRx();
+    if (scope?.only) list = list.filter((x) => same(x.treatingPhysio, scope.only!));
     if (q.patientId) list = list.filter((x) => x.patientId === q.patientId);
     const t = (q.q || '').trim().toLowerCase();
     if (t) list = list.filter((x) => x.patientName.toLowerCase().includes(t) || x.rxId.toLowerCase().includes(t) || x.patientId.toLowerCase().includes(t) || x.diagnosis.toLowerCase().includes(t));
     return list.sort((x, y) => ((y.rxDate || '') < (x.rxDate || '') ? -1 : (y.rxDate || '') > (x.rxDate || '') ? 1 : y.rxId < x.rxId ? -1 : 1));
   }
-  async getPrescription(rxId: string): Promise<(Prescription & { versions: number[] }) | null> {
+  async getPrescription(rxId: string, scope?: Scope): Promise<(Prescription & { versions: number[] }) | null> {
     const rx = (await this.latestRx()).find((x) => x.rxId === rxId);
-    if (!rx) return null;
+    if (!rx || (scope?.only && !same(rx.treatingPhysio, scope.only))) return null;   // somebody else's prescription is simply not found
     const versions = (await this.rows(RT.prescriptions)).filter((r) => r.fields.Rx_ID === rxId).map((r) => n(r.fields.Version)).sort((x, y) => x - y);
     return { ...rx, versions };
   }
-  savePrescription(input: PrescriptionInput, a: Actor): Promise<Prescription> {
+  savePrescription(input: PrescriptionInput, a: Actor, scope?: Scope): Promise<Prescription> {
     return this.lock.run(async () => {
+      if (scope?.only) input = { ...input, treatingPhysio: scope.only };   // a doctor's name goes on their own prescriptions, whatever the form says
       const patients = await this.rows(RT.patients);
       if (!patients.some((r) => r.fields.Patient_ID === input.patientId)) throw bad('unknown_patient', 'Choose a registered patient first', 400);
       if (input.rxDate && !validDate(input.rxDate)) throw bad('invalid_date', 'Enter a valid prescription date');
@@ -212,6 +219,7 @@ export class RecordsService {
         const mine = all.filter((r) => r.fields.Rx_ID === rxId);
         if (!mine.length) throw bad('not_found', 'Prescription not found', 404);
         const latest = Math.max(...mine.map((r) => n(r.fields.Version)));
+        if (scope?.only && !same(s(mine.find((r) => n(r.fields.Version) === latest)!.fields.Treating_Physio), scope.only)) throw bad('not_found', 'Prescription not found', 404);
         if (mine[0]!.fields.Patient_ID !== input.patientId) throw bad('patient_mismatch', 'A prescription cannot be moved to another patient', 409);
         if (input.baseVersion !== latest) throw bad('stale', 'This prescription was changed by someone else. Reload it and apply your edit again.', 409);
         version = latest + 1;
@@ -223,8 +231,12 @@ export class RecordsService {
     });
   }
 
-  addImage(rxId: string, file: { bytes: Uint8Array; name: string; caption?: string }, a: Actor): Promise<RxImage> {
+  // a doctor may only touch the photos of their own prescriptions
+  private async ownsRx(rxId: string, scope?: Scope): Promise<boolean> { return !scope?.only || !!(await this.getPrescription(rxId, scope)); }
+
+  addImage(rxId: string, file: { bytes: Uint8Array; name: string; caption?: string }, a: Actor, scope?: Scope): Promise<RxImage> {
     return this.lock.run(async () => {
+      if (!(await this.ownsRx(rxId, scope))) throw bad('not_found', 'Prescription not found', 404);
       if (file.bytes.length === 0) throw bad('invalid_file', 'The file is empty');
       if (file.bytes.length > MAX_IMAGE_BYTES) throw bad('file_too_large', 'The photo is larger than 5 MB', 413);
       const mime = sniffImage(file.bytes);
@@ -240,15 +252,17 @@ export class RecordsService {
       return { imageId, rxId, mime, bytes: file.bytes.length, caption: (file.caption || '').slice(0, 200), createdAt: new Date(this.now()).toISOString() };
     });
   }
-  removeImage(rxId: string, imageId: string, a: Actor): Promise<void> {
+  removeImage(rxId: string, imageId: string, a: Actor, scope?: Scope): Promise<void> {
     return this.lock.run(async () => {
+      if (!(await this.ownsRx(rxId, scope))) throw bad('not_found', 'Photo not found', 404);
       const row = (await this.rows(RT.rxImages)).find((r) => r.fields.Image_ID === imageId && r.fields.Rx_ID === rxId && r.fields.Removed !== true);
       if (!row) throw bad('not_found', 'Photo not found', 404);
       await this.patch(RT.rxImages, row.id, { Removed: true });   // hidden, not deleted: the file stays in the doc
       await this.audit(a, 'rx.image.remove', rxId, imageId);
     });
   }
-  async readImage(rxId: string, imageId: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  async readImage(rxId: string, imageId: string, scope?: Scope): Promise<{ bytes: Uint8Array; mime: string } | null> {
+    if (!(await this.ownsRx(rxId, scope))) return null;
     const row = (await this.rows(RT.rxImages)).find((r) => r.fields.Image_ID === imageId && r.fields.Rx_ID === rxId && r.fields.Removed !== true);
     const file = row?.fields.File;
     if (!row || !Array.isArray(file) || typeof file[1] !== 'number') return null;
@@ -273,21 +287,22 @@ export class RecordsService {
     const [inv, lines, pay, names] = await Promise.all([this.rows(RT.invoices), this.rows(RT.invoiceLines), this.rows(RT.payments), this.names()]);
     return this.assemble(inv, lines, pay, names);
   }
-  async listInvoices(q: { patientId?: string; status?: string; q?: string } = {}): Promise<Invoice[]> {
+  async listInvoices(q: { patientId?: string; status?: string; q?: string } = {}, scope?: Scope): Promise<Invoice[]> {
     let list = await this.allInvoices();
+    if (scope?.only) list = list.filter((i) => same(i.createdBy, scope.only!));
     if (q.patientId) list = list.filter((i) => i.patientId === q.patientId);
     if (q.status) list = list.filter((i) => i.paymentStatus === q.status);
     const t = (q.q || '').trim().toLowerCase();
     if (t) list = list.filter((i) => i.invoiceNo.toLowerCase().includes(t) || i.patientName.toLowerCase().includes(t) || i.patientId.toLowerCase().includes(t));
     return list.sort((x, y) => ((y.date || '') < (x.date || '') ? -1 : (y.date || '') > (x.date || '') ? 1 : y.invoiceNo < x.invoiceNo ? -1 : 1));
   }
-  async getInvoice(no: string): Promise<Invoice | null> { return (await this.allInvoices()).find((i) => i.invoiceNo === no) || null; }
+  async getInvoice(no: string, scope?: Scope): Promise<Invoice | null> { return (await this.allInvoices()).find((i) => i.invoiceNo === no && (!scope?.only || same(i.createdBy, scope.only))) || null; }
 
-  createInvoice(input: InvoiceInput, a: Actor): Promise<{ invoice: Invoice; duplicate: boolean; paymentError?: string }> {
+  createInvoice(input: InvoiceInput, a: Actor, scope?: Scope): Promise<{ invoice: Invoice; duplicate: boolean; paymentError?: string }> {
     return this.lock.run(async () => {
       const [inv, lineRows, patients] = await Promise.all([this.rows(RT.invoices), this.rows(RT.invoiceLines), this.rows(RT.patients)]);
       const again = inv.find((r) => r.fields.Idem_Key === input.idemKey);
-      if (again) return { invoice: (await this.getInvoice(s(again.fields.Invoice_No)))!, duplicate: true };   // the same form submitted twice: return the first result
+      if (again) { const first = await this.getInvoice(s(again.fields.Invoice_No), scope); if (!first) throw bad('conflict', 'This form was already submitted', 409); return { invoice: first, duplicate: true }; }   // the same form submitted twice: return the first result
       if (!patients.some((r) => r.fields.Patient_ID === input.patientId)) throw bad('unknown_patient', 'Choose a registered patient first');
       if (!validDate(input.date)) throw bad('invalid_date', 'Enter a valid invoice date');
       if (!input.lines.length || input.lines.length > 30) throw bad('invalid_lines', 'Add between 1 and 30 services');
@@ -310,7 +325,7 @@ export class RecordsService {
       // lines first, header last: an invoice exists only once its header is written
       await this.add(RT.invoiceLines, t.lines.map((l, i) => ({ Invoice_No: invoiceNo, Line_No: i + 1, Description: l.description, Qty: l.qty, Unit_Price_Paise: l.unitPaise, Line_Total_Paise: l.totalPaise })));
       await this.add(RT.invoices, [{ Invoice_No: invoiceNo, Patient_ID: input.patientId, Invoice_Date: dateIn(input.date), Status: 'issued', Subtotal_Paise: t.subtotalPaise, Discount_Paise: t.discountPaise, Tax_Paise: t.taxPaise, Total_Paise: t.totalPaise,
-        Tax_Label: rateBp && tax ? tax.label : '', Tax_Rate_Bp: rateBp, Notes: input.notes.trim(), Void_Reason: '', Idem_Key: input.idemKey, Created_At: this.ts(), Created_By: a.name }]);
+        Tax_Label: rateBp && tax ? tax.label : '', Tax_Rate_Bp: rateBp, Notes: input.notes.trim(), Void_Reason: '', Idem_Key: input.idemKey, Created_At: this.ts(), Created_By: a.clinician || a.name }]);   // the doctor who raises an invoice owns its dues
       await this.audit(a, 'invoice.create', invoiceNo, `${input.patientId} total ${t.totalPaise}p`);
       let paymentError: string | undefined;
       if (input.payment) {
@@ -339,8 +354,8 @@ export class RecordsService {
     await this.add(RT.payments, [{ Payment_ID: paymentId, Invoice_No: invoiceNo, Patient_ID: inv.patientId, Paid_On: dateIn(p.paidOn), Amount_Paise: p.amountPaise, Method: p.method, Reference: p.reference.trim(), Notes: '', Voided: false, Void_Reason: '', Idem_Key: idemKey, Created_At: this.ts(), Created_By: a.name }]);
     await this.audit(a, 'payment.add', paymentId, `${invoiceNo} ${p.amountPaise}p ${p.method}`);
   }
-  addPayment(invoiceNo: string, p: NonNullable<InvoiceInput['payment']> & { idemKey: string }, a: Actor): Promise<Invoice> {
-    return this.lock.run(async () => { if (p.idemKey.length < 8) throw bad('invalid', 'Missing duplicate-submission key'); await this.recordPayment(invoiceNo, p, p.idemKey, a); return (await this.getInvoice(invoiceNo))!; });
+  addPayment(invoiceNo: string, p: NonNullable<InvoiceInput['payment']> & { idemKey: string }, a: Actor, scope?: Scope): Promise<Invoice> {
+    return this.lock.run(async () => { if (p.idemKey.length < 8) throw bad('invalid', 'Missing duplicate-submission key'); if (!(await this.getInvoice(invoiceNo, scope))) throw bad('not_found', 'Invoice not found', 404); await this.recordPayment(invoiceNo, p, p.idemKey, a); return (await this.getInvoice(invoiceNo))!; });
   }
   voidPayment(paymentId: string, reason: string, a: Actor): Promise<Invoice> {
     return this.lock.run(async () => {
@@ -370,10 +385,13 @@ export class RecordsService {
 
   // ------------------------------------------------------------------ visits / attendance
   // Doctor's overview: today's clinic, follow-ups, recent prescriptions and money, for the dashboard.
-  async doctorSummary(daysIn: number): Promise<DoctorSummary> {
+  // scope: a doctor's own prescriptions and dues only (attendance, follow-ups and the patient register stay shared). breakdown: the admin's per-doctor split.
+  async doctorSummary(daysIn: number, scope?: Scope, breakdown = false): Promise<DoctorSummary> {
     const R = [1, 7, 30].includes(daysIn) ? daysIn : 7;
     const today = this.today(); const from = addDays(today, -(R - 1)); const prevTo = addDays(from, -1); const prevFrom = addDays(from, -R);
-    const [pr, vis, invoices, rx] = await Promise.all([this.rows(RT.patients), this.rows(RT.visits), this.allInvoices(), this.latestRx()]);
+    const [pr, vis, allInv, allRx] = await Promise.all([this.rows(RT.patients), this.rows(RT.visits), this.allInvoices(), this.latestRx()]);
+    const invoices = scope?.only ? allInv.filter((i) => same(i.createdBy, scope.only!)) : allInv;
+    const rx = scope?.only ? allRx.filter((x) => same(x.treatingPhysio, scope.only!)) : allRx;
     const patients = pr.map((r) => this.toPatient(r)).filter((p) => p.patientId);
     const name = new Map(patients.map((p) => [p.patientId, p.name]));
     const visits = vis.map((r) => this.toVisit(r)).filter((v): v is NonNullable<typeof v> => !!v);
@@ -405,6 +423,18 @@ export class RecordsService {
     const todays = visits.filter((v) => v.date === today);
     const span = Math.max(7, R);
     const prev = (f: (a: string, b: string) => number) => (hasPrev ? f(prevFrom, prevTo) : null);
+    let byDoctor: DoctorSummary['byDoctor'];
+    if (breakdown) {   // admin: each doctor's dues, collections and prescriptions side by side; whatever no doctor raised (front desk / admin) is its own line
+      const names = this.o.clinic().clinicians.map((c) => c.name).filter(Boolean);
+      const liveAll = allInv.filter((i) => i.status !== 'void');
+      const lines = [...names, ''].map((nm) => {
+        const mine = liveAll.filter((i) => (names.find((x) => same(x, i.createdBy)) || '') === nm);
+        return { name: nm || 'Other (front desk / admin)', outstandingPaise: mine.reduce((t, i) => t + i.balancePaise, 0),
+          collectedPaise: mine.flatMap((i) => i.payments).filter((p) => !p.voided && inR(p.paidOn, from, today)).reduce((t, p) => t + p.amountPaise, 0),
+          prescriptions: allRx.filter((x) => (nm ? same(x.treatingPhysio, nm) : !names.some((m) => same(m, x.treatingPhysio))) && inR(x.rxDate, from, today)).length };
+      });
+      byDoctor = lines.filter((l, i) => i < names.length || l.outstandingPaise || l.collectedPaise || l.prescriptions);
+    }
     return {
       today, days: R, seriesDays: days7,
       tiles: {
@@ -424,6 +454,7 @@ export class RecordsService {
         .map((x) => ({ rxId: x.rxId, patientId: x.patientId, patientName: x.patientName, rxDate: x.rxDate, diagnosis: x.diagnosis })),
       owing: [...owingBy.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5).map(([id, v]) => ({ patientId: id, name: name.get(id) || id, outstandingPaise: v })),
       attendance: Array.from({ length: span }, (_, i) => { const d = addDays(today, i - (span - 1)); return { date: d, attended: visitsIn(d, d) }; }),
+      ...(byDoctor ? { byDoctor } : {}),
     };
   }
 

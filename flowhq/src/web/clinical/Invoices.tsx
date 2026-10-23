@@ -13,6 +13,7 @@ import { Page } from '../components/layout/Shell';
 import { Button, Card, CardHeader, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
 import { EmptyState, ErrorState, Modal, SkeletonRows, useToast } from '../components/ui/feedback';
 import { Field, PatientPicker, PaymentBadge, errText, fdate, newKey, rs, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
+import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
 
 export default function Invoices() {
   const { invoiceNo } = useParams();
@@ -21,13 +22,14 @@ export default function Invoices() {
 
 function List() {
   const { ws } = useWs(); const nav = useNavigate();
-  const [q, setQ] = useState(''); const dq = useDebounced(q); const [status, setStatus] = useState<'all' | PaymentStatus>('all');
-  const list = useQuery({ queryKey: ['invoices', ws.id, dq, status], queryFn: () => api<Invoice[]>(wsPath(ws.id, `/invoices?q=${encodeURIComponent(dq)}${status !== 'all' ? `&status=${status}` : ''}`)) });
+  const [q, setQ] = useState(''); const dq = useDebounced(q); const [status, setStatus] = useState<'all' | PaymentStatus>('all'); const doc = useDoctorFilter();
+  const list = useQuery({ queryKey: ['invoices', ws.id, dq, status, doc.key], queryFn: () => api<Invoice[]>(wsPath(ws.id, `/invoices?q=${encodeURIComponent(dq)}${status !== 'all' ? `&status=${status}` : ''}${doc.qs}`)) });
   const due = (list.data || []).reduce((t, i) => t + i.balancePaise, 0);
   return (
     <Page title="Invoices & payments" subtitle={list.data ? `${list.data.length} invoice${list.data.length === 1 ? '' : 's'} · ${rs(due)} outstanding` : ' '} wide actions={<Link to={`/w/${ws.id}/invoices/new`}><Button variant="primary" icon={<Plus className="h-4 w-4" />}>New invoice</Button></Link>}>
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
         <div className="w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search invoice no., patient or ID" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search invoices" /></div>
+        <DoctorFilter f={doc} />
         <Segmented value={status} onChange={setStatus} options={[{ value: 'all', label: 'All' }, { value: 'unpaid', label: 'Unpaid' }, { value: 'partial', label: 'Part paid' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }]} />
       </div>
       <Card className="overflow-hidden">

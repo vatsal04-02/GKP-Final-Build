@@ -7,7 +7,7 @@ import type {
 
 import type { RecordsService } from '../records/service';
 export type Role = 'admin' | 'staff';
-export interface Viewer { email: string; name: string; role: Role }
+export interface Viewer { email: string; name: string; role: Role; clinician?: string }   // clinician: set for a doctor's login
 export interface Ctx { viewer: Viewer; now: number }
 
 export interface BackendWorkspaceInfo {

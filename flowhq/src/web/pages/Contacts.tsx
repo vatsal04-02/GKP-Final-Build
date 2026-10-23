@@ -11,6 +11,7 @@ import { cn } from '../lib/cn';
 import { Page } from '../components/layout/Shell';
 import { Avatar, Badge, Button, Card, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
 import { Drawer, EmptyState, ErrorState, SkeletonRows, useToast } from '../components/ui/feedback';
+import { HumanHandlingToggle } from '../components/data/HumanHandlingToggle';
 import { ActivityRow, AttentionBadge, StageDot } from '../components/data/widgets';
 
 const STATUSES: ContactStatus[] = ['new', 'contacted', 'booked', 'converted', 'lost'];
@@ -99,6 +100,12 @@ function ContactDrawer({ id, onClose }: { id: string | null; onClose: () => void
             {c.attentionRequired && <AttentionBadge priority={c.priority} />}{c.optedOut && <Badge tone="red">Opted out</Badge>}
             {c.conversationId && <Link to={`/w/${ws.id}/inbox/${c.conversationId}`} className="ml-auto"><Button size="sm" variant="subtle" icon={<MessageCircle className="h-4 w-4" />}>Open conversation</Button></Link>}
           </div>
+          {c.conversationId && c.automationPaused !== null && ws.backend.capabilities.conversationEditable.includes('automationPaused') && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-3">
+              <span className="text-[13px] font-medium">Who replies on WhatsApp</span>
+              <HumanHandlingToggle conversationId={c.conversationId} paused={c.automationPaused} />
+            </div>
+          )}
           {has('ai') && (c.aiSummary || c.interest || c.attentionReason) && (
             <section className="ai-tint rounded-xl border p-4">
               <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-blue-soft"><Sparkles className="h-3.5 w-3.5" />{tt('{ai.name} summary')}</div>

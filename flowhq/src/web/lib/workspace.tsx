@@ -5,7 +5,7 @@ import { fmt, term, count as countNoun, type TermPath } from '@core/terminology'
 import { automationDescription, automationName, METRICS } from '@core/registry';
 import type { Fmt } from './format';
 
-export interface Me { user: { email: string; name: string; role: 'admin' | 'staff' }; workspaces: Array<{ id: string; name: string; initials: string; industry: string; logoUrl: string | null }>; demo: boolean; industries: Array<{ key: string; label: string; description: string }> }
+export interface Me { user: { email: string; name: string; role: 'admin' | 'staff'; clinician?: string }; workspaces: Array<{ id: string; name: string; initials: string; industry: string; logoUrl: string | null }>; demo: boolean; industries: Array<{ key: string; label: string; description: string }> }
 interface Value {
   me: Me;
   ws: Workspace;

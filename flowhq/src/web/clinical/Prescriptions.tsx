@@ -11,6 +11,7 @@ import { Page } from '../components/layout/Shell';
 import { Badge, Button, Card, CardHeader, Input, Textarea } from '../components/ui/primitives';
 import { EmptyState, ErrorState, SkeletonRows, useToast } from '../components/ui/feedback';
 import { Field, PatientPicker, errText, fdate, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
+import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
 import { PatientForm } from './Register';
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -41,11 +42,11 @@ export default function Prescriptions() {
 
 function List() {
   const { ws } = useWs(); const nav = useNavigate();
-  const [q, setQ] = useState(''); const dq = useDebounced(q);
-  const list = useQuery({ queryKey: ['rx-list', ws.id, dq], queryFn: () => api<Prescription[]>(wsPath(ws.id, `/prescriptions?q=${encodeURIComponent(dq)}`)) });
+  const [q, setQ] = useState(''); const dq = useDebounced(q); const doc = useDoctorFilter();
+  const list = useQuery({ queryKey: ['rx-list', ws.id, dq, doc.key], queryFn: () => api<Prescription[]>(wsPath(ws.id, `/prescriptions?q=${encodeURIComponent(dq)}${doc.qs}`)) });
   return (
-    <Page title="Prescriptions" subtitle="Treatment sheets written by the clinicians" wide actions={<Link to={`/w/${ws.id}/prescriptions/new`}><Button variant="primary" icon={<Plus className="h-4 w-4" />}>New prescription</Button></Link>}>
-      <div className="mb-3 w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search patient, ID or diagnosis" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search prescriptions" /></div>
+    <Page title="Prescriptions" subtitle={doc.own ? `Your treatment sheets, ${doc.own}` : 'Treatment sheets written by the clinicians'} wide actions={<Link to={`/w/${ws.id}/prescriptions/new`}><Button variant="primary" icon={<Plus className="h-4 w-4" />}>New prescription</Button></Link>}>
+      <div className="mb-3 flex flex-wrap items-center gap-2.5"><div className="w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search patient, ID or diagnosis" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search prescriptions" /></div><DoctorFilter f={doc} /></div>
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="No prescriptions yet" body={q ? 'Try a different search.' : 'Create the first treatment sheet from here or from a patient’s record.'} /> : (
           <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-[13px]">
@@ -67,7 +68,7 @@ const blankForm = (today: string, patient: Form['patient'] = null): Form => ({ p
 const fromRx = (r: Prescription): Form => ({ patient: { id: r.patientId, name: r.patientName }, rxDate: r.rxDate || '', treatingPhysio: r.treatingPhysio, bp: r.bp, vitals: r.vitals, history: r.history, examination: r.examination, diagnosis: r.diagnosis, treatmentPlan: [r.treatmentPlan, r.exercises].filter(Boolean).join('\n\n'), exercises: '', advice: r.advice, followUpOn: r.followUpOn || '' });
 
 function Editor({ rxId }: { rxId: string }) {
-  const { ws } = useWs(); const nav = useNavigate(); const qc = useQueryClient(); const toast = useToast(); const today = useToday();
+  const { ws, me } = useWs(); const nav = useNavigate(); const qc = useQueryClient(); const toast = useToast(); const today = useToday();
   const [sp] = useSearchParams();
   const isNew = rxId === 'new';
   const clinic = useClinic();
@@ -163,7 +164,7 @@ function Editor({ rxId }: { rxId: string }) {
             </Field>
             {info && <div className="sm:col-span-2 -mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-fg-2"><span>Patient ID: <b className="font-medium text-fg">{info.patientId}</b></span>{info.age && <span>Age: {info.age}</span>}{info.sex && <span>Sex: {info.sex}</span>}{info.phone && <span>{info.phone}</span>}</div>}
             <Field label="Date"><Input type="date" value={f.rxDate} onChange={(e) => set('rxDate', e.target.value)} /></Field>
-            <Field label="Treating physiotherapist"><Input list="physios" value={f.treatingPhysio} onChange={(e) => set('treatingPhysio', e.target.value)} maxLength={120} /></Field>
+            <Field label="Treating physiotherapist"><Input list="physios" value={me.user.clinician || f.treatingPhysio} onChange={(e) => set('treatingPhysio', e.target.value)} maxLength={120} readOnly={!!me.user.clinician} title={me.user.clinician ? 'Your name goes on every prescription you write' : undefined} /></Field>
             <datalist id="physios">{physios.map((c) => <option key={c.name} value={c.name} />)}</datalist>
             <Field label="Blood pressure"><Input value={f.bp} onChange={(e) => set('bp', e.target.value)} placeholder="e.g. 120/80" maxLength={40} /></Field>
             <Field label="Other vitals"><Input value={f.vitals} onChange={(e) => set('vitals', e.target.value)} maxLength={300} /></Field>
