@@ -116,7 +116,9 @@ class FakeGrist {
         this.validate(t, rec.fields);
         const key = `${doc}.${t}`;
         this.nextId[key] = (this.nextId[key] || Math.max(0, ...rows.map((r) => r.id))) + 1;
-        rows.push({ id: this.nextId[key], fields: { ...rec.fields } });
+        // like Grist: a Toggle (Bool) column nobody filled in reads back as false, never as a missing value
+        const bools = Object.fromEntries([...TOGGLE].filter((k) => k.startsWith(`${t}.`) && !(k.slice(t.length + 1) in rec.fields)).map((k) => [k.slice(t.length + 1), false]));
+        rows.push({ id: this.nextId[key], fields: { ...bools, ...rec.fields } });
         ids.push({ id: this.nextId[key] });
       }
       return { records: ids };

@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-// Rebuilds the selected workflow from the as-supplied copy, in two documented steps (nothing else changes; each step proves it):
+// Rebuilds the selected workflow from the as-supplied copy, in three documented steps (nothing else changes; each step proves it):
 //   1. apply-openrouter-config.js   OpenRouter as the one AI provider, one AI switch, credentials by role  (16 nodes)
 //   2. patch-w1-race-guard.js       W1 duplicate-lead race guard                                           (6 nodes added, 0 changed)
+//   3. patch-w12-pause-check.js     W12 pre-send Automation_Paused check for W13 patient replies           (5 nodes added, 2 changed: one flag, one result read)
 //   node n8n/final/tools/build-selected.js <as-supplied.json> <out.json>
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const { apply } = require('./apply-openrouter-config');
 const race = require(path.join(__dirname, '..', '..', 'production', 'tools', 'patch-w1-race-guard.js'));
+const pause = require('./patch-w12-pause-check');
 
 function build(supplied) {
   const a = apply(supplied);
@@ -15,7 +17,9 @@ function build(supplied) {
   const had = new Map(a.wf.nodes.map((n) => [n.name, JSON.stringify(n)]));
   const moved = wf.nodes.filter((n) => had.has(n.name) && had.get(n.name) !== JSON.stringify(n)).map((n) => n.name);
   if (moved.length || wf.nodes.length !== a.wf.nodes.length + 6) throw new Error(`race guard changed existing nodes or added the wrong number: ${moved.join(', ')}`);
-  return { wf, log: a.log, changed: a.changed };
+  const withPause = pause.patch(wf);   // proves it adds exactly its 5 nodes and changes only the two named ones
+  if (withPause.nodes.length !== wf.nodes.length + pause.ADDED.length) throw new Error('the W12 pause check added the wrong number of nodes');
+  return { wf: withPause, log: [...a.log, 'W12 pause check: 5 nodes added, 2 changed'], changed: a.changed };
 }
 module.exports = { build };
 

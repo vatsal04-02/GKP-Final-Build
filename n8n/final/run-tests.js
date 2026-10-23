@@ -21,6 +21,7 @@ const TARGETS = {
     file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidatefinal.json'),
     env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }) },
     extraSuites: ['openrouter'],
+    finalSuites: ['w12-pause'],      // n8n/final/tests: only the authoritative file carries the W12 pause check
     known: [
       ['F-ID', /^identity: inactive, own id and name/],
       ['F-CRED-NAMES', /^credentials: only the production credentials/],
@@ -33,8 +34,8 @@ function runTarget(name, t) {
   const file = TARGETS[name] ? t.file : path.resolve(name);
   console.log(`\n=== ${name}: ${path.relative(process.cwd(), file)}`);
   let unexpected = 0; let pass = 0; let known = 0;
-  for (const s of [...SUITES, ...(t.extraSuites || [])]) {
-    const r = cp.spawnSync(process.execPath, [T(s)], { env: { ...process.env, ...t.env, PROD_FILE: file, STOP_ON_FIRST: '0' }, encoding: 'utf8', cwd: ROOT, timeout: 600000 });
+  for (const s of [...SUITES, ...(t.extraSuites || []), ...(t.finalSuites || [])]) {
+    const r = cp.spawnSync(process.execPath, [(t.finalSuites || []).includes(s) ? path.join(__dirname, 'tests', `${s}.test.js`) : T(s)], { env: { ...process.env, ...t.env, PROD_FILE: file, STOP_ON_FIRST: '0' }, encoding: 'utf8', cwd: ROOT, timeout: 600000 });
     const out = `${r.stdout || ''}${r.stderr || ''}`;
     const fails = [...out.matchAll(/^ {2}FAIL (.+)$/gm)].map((m) => m[1]);
     const ok = (out.match(/^ {2}ok /gm) || []).length || (Number((out.match(/(\d+)\/\d+ mutants killed/) || [])[1]) || 0);

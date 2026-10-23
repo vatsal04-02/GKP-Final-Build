@@ -24,7 +24,7 @@ The tool classifies every node **by what it calls** (Grist `/api/docs/…`, the 
 | Credential (name, id) | Role of the node | Nodes | Which |
 |---|---|---|---|
 | `FlowHQ W1 Webhook Auth` (`FhqCredW1Hook001`) | webhook-auth | 1 | W1 – Webhook |
-| `Header Auth account 2` (`9J6XxrIQoFDcQZ0Y`) | grist | 116 | (116 nodes, including the 2 Grist calls of the W1 race guard) |
+| `Header Auth account 2` (`9J6XxrIQoFDcQZ0Y`) | grist | 118 | (118 nodes, including the 2 Grist calls of the W1 race guard and the 2 of the W12 pause check) |
 | `Telegram account` (`NzFVBwmYZTH1K6L8`) | telegram | 1 | W11 – Telegram alert |
 | `WhatsApp Cloud API` (`k01hgCFOtdH5hdiq`) | whatsapp-meta | 1 | W12 – Meta send |
 | `OpenRouter API` (`As1GpZb3W665Na7C`) | ai-provider | 2 | W13 – Ask Model, W9 – Ask Model |

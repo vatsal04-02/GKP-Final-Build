@@ -2853,7 +2853,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js, send-guard.js (inQuietHours) and wa-send.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nconst WA_TEMPLATES = {\n  hello_world: { language: 'en_US', params: [] },          // Meta's sample template on the test number\n  booking_confirmation: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_24h: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_2h: { params: ['name', 'service', 'clinic_name', 'time'] },\n  noshow_rebook: { params: ['name', 'service', 'clinic_name', 'date', 'booking_link'] },\n  followup_day2: { params: ['name', 'clinic_name', 'booking_link'] },\n  new_lead_staff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'enquiry', fallback: '(no message)' }] },\n  lead_escalation: { params: ['clinic_name', 'lead_name', 'lead_phone', 'waiting_minutes'] },\n  human_handoff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'reason', fallback: '(see the Grist inbox)' }] },\n  outcome_check: { params: ['name', 'clinic_name', { key: 'service', fallback: 'visit' }] },                    // W7\n  review_request: { params: ['name', 'clinic_name', 'review_link'] },                                          // W8\n  weekly_owner_report: { params: ['clinic_name', 'week', 'summary', { key: 'action', fallback: 'see the full report in Grist' }] },   // W9\n};\n\n// Free-text replies (message_type 'text', from W13) are only allowed inside WhatsApp's 24-hour customer-service\n// window, i.e. within 24 h of the patient's last message (last_inbound_at). A 5-minute margin keeps clock drift safe.\nconst WA_TEXT_WINDOW_MS = 24 * 3600 * 1000 - 5 * 60 * 1000;\n\n// Short hints for the Meta error codes we are most likely to meet (shown in send_error).\nconst WA_HINTS = {\n  190: 'access token invalid or expired - put a permanent System User token in the \"WhatsApp Cloud API\" credential',\n  10: 'token lacks permission - give the System User whatsapp_business_messaging',\n  200: 'token lacks permission - give the System User whatsapp_business_messaging',\n  100: 'invalid parameter - check wa_phone_number_id and the template',\n  131030: \"recipient is not in the test number's allowed list - add it in Meta > WhatsApp > API Setup\",\n  131026: 'message undeliverable (number not on WhatsApp?)',\n  131047: 'outside the 24h window - only templates can be sent',\n  131056: 'too many messages to this number - try later',\n  130429: 'rate limit hit - try later',\n  132000: 'number of template variables does not match the approved template',\n  132001: 'template not found in this language - check the name and language code',\n  132005: 'template text too long after filling the variables',\n  132007: 'template content policy violation',\n  132012: 'template variable format does not match',\n  133010: 'phone number not registered with the Cloud API',\n  131031: 'WhatsApp account locked',\n  368: 'temporarily blocked for policy violations',\n};\n\n// Meta: a variable may not contain new-lines, tabs or runs of spaces.\nfunction waCleanParam(v) {\n  return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, 250);\n}\n\n// Decide whether to call Meta, and build the request. Never throws.\n// input: the caller's item (decision, template, template_params, wa_phone_number_id, ...); cfg: W12 Config.\nfunction waPrepare(input, cfg, nowMs, h) {\n  const stop = (send_status, send_error) => ({ call_meta: false, send_status, send_error });\n  const d = input && input.decision;\n  if (!d || d.send !== true) return stop('not_requested', d && d.reason ? `guard said no: ${d.reason}` : 'no send decision from the caller');\n\n  const mode = String(cfg.send_mode || '').trim().toLowerCase();\n  if (mode !== 'allowlist' && mode !== 'live') return stop('blocked', `W12 send_mode is \"${cfg.send_mode}\" - only \"allowlist\" or \"live\" send`);\n\n  // 1. Is the message itself sendable? (reported even while testing in allowlist mode or at night)\n  const to = h.normalizeIndianPhone(d.to).phone;\n  if (!to) return stop('invalid', 'decision.to is not a valid phone number (E.164, e.g. +919876543210)');\n  const version = String(cfg.graph_api_version || '').trim();\n  if (!/^v\\d+\\.\\d+$/.test(version)) return stop('invalid', 'graph_api_version is not set in the W12 Config node (e.g. v23.0 - copy it from Meta API Setup)');\n  const phoneId = String(input.wa_phone_number_id || '').trim();\n  if (!/^\\d{5,25}$/.test(phoneId)) return stop('invalid', 'wa_phone_number_id is missing or not a number (Agency Registry > Clinics > WA_Phone_Number_ID)');\n  const isText = input.message_type === 'text';\n  let tpl = null;\n  let textBody = '';\n  const params = [];\n  if (isText) {\n    textBody = String(input.text_body === null || input.text_body === undefined ? '' : input.text_body).replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/g, '').trim().slice(0, 4096);\n    if (!textBody) return stop('invalid', 'text message: text_body is empty');\n    const last = Number(input.last_inbound_at);\n    if (!Number.isFinite(last) || last <= 0) return stop('invalid', 'text message: last_inbound_at (the patient\\'s last message, epoch seconds) is missing');\n    if (nowMs - last * 1000 > WA_TEXT_WINDOW_MS) return stop('blocked', 'outside the 24-hour WhatsApp window: only an approved template may be sent');\n  } else {\n    tpl = WA_TEMPLATES[input.template];\n    if (!tpl) return stop('invalid', `unknown template \"${input.template}\" - add it to WA_TEMPLATES in W12`);\n    if (input.template === 'hello_world' && cfg.allow_hello_world !== true) return stop('invalid', 'template hello_world is Meta\\'s sample (\"Hello World\"): it is not sent to people in production (FLOWHQ_WA_ALLOW_HELLO_WORLD=true allows it for a smoke test)');\n    const values = input.template_params || {};\n    for (const spec of tpl.params) {\n      const key = typeof spec === 'string' ? spec : spec.key;\n      let v = waCleanParam(values[key]);\n      if (!v && typeof spec === 'object') v = spec.fallback;\n      if (!v) return stop('invalid', `template ${input.template}: variable \"${key}\" is empty`);\n      params.push(v);\n    }\n  }\n\n  // 2. May it go out now, to this number?\n  if (mode === 'allowlist') {\n    const allowed = String(cfg.allowlist || '').split(/[,;]+/).map((x) => h.normalizeIndianPhone(x).phone).filter(Boolean);\n    if (!allowed.includes(to)) return stop('blocked', `${to} is not in the W12 allowlist (send_mode = allowlist)`);\n  }\n  if (h.inQuietHours(nowMs)) return stop('blocked', 'quiet hours (21:00-08:00 IST)');\n\n  if (isText) {\n    return {\n      call_meta: true,\n      send_status: 'pending',\n      send_error: '',\n      to,\n      meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n      meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'text', text: { preview_url: /https?:\\/\\//i.test(textBody), body: textBody } },\n    };\n  }\n  const template = { name: input.template, language: { code: String(input.template_language || tpl.language || cfg.default_language || 'en') } };\n  if (params.length) template.components = [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }];\n  return {\n    call_meta: true,\n    send_status: 'pending',\n    send_error: '',\n    to,\n    meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n    meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'template', template },\n  };\n}\n\n// Turn the HTTP node output (fullResponse + neverError, or a \"continue on error\" item) into a result.\n//   accepted  Meta returned a message id                  -> sent: true\n//   rejected  Meta refused, or the request never left     -> sent: false (safe to try again later)\n//   uncertain the request left but no clear answer came   -> sent: false, uncertain: true (PRODUCTION: it may have been delivered, so it is\n//             never re-sent automatically and never reported as sent; the delivery-status webhook or a person settles it)\nfunction waClassify(resp, cfg) {\n  const result = (send_status, extra) => Object.assign({\n    send_status,\n    sent: send_status === 'accepted',   // PRODUCTION: only a message id from Meta counts as sent\n    uncertain: send_status === 'uncertain',   // the call left but no clear answer came: never sent again automatically, never reported as sent\n    wa_message_id: '',\n    send_error: '',\n    send_error_code: null,\n    send_http_status: null,\n  }, extra);\n\n  if (resp && typeof resp.statusCode === 'number') {\n    let body = resp.body;\n    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\n    body = body || {};\n    const id = body.messages && body.messages[0] && body.messages[0].id;\n    if (resp.statusCode >= 200 && resp.statusCode < 300) {\n      return id\n        ? result('accepted', { wa_message_id: String(id), send_http_status: resp.statusCode })\n        : result('uncertain', { send_error: 'Meta answered without a message id', send_http_status: resp.statusCode });\n    }\n    const e = body.error || {};\n    const code = e.code !== undefined && e.code !== null ? Number(e.code) : null;\n    const detail = (e.error_data && e.error_data.details) || e.message || `HTTP ${resp.statusCode}`;\n    const hint = code !== null && WA_HINTS[code] ? ` (${WA_HINTS[code]})` : '';\n    return result('rejected', { send_error_code: code, send_http_status: resp.statusCode, send_error: `${code !== null ? code + ': ' : ''}${detail}${hint}`.slice(0, 500) });\n  }\n\n  // n8n's \"continue on error\" item: { error: '...' } or { error: { message, description, code, ... } }. n8n also\n  // rewrites network errors into friendly text, so match both the raw codes and n8n's wording.\n  const err = resp && resp.error;\n  const msg = String((err && (err.message || err.description)) || (typeof err === 'string' ? err : '') || 'no reply from Meta');\n  const haystack = typeof err === 'string' ? err : JSON.stringify(err || {});\n  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|certificate|self[- ]signed|refused the connection|DNS server returned an error/i.test(haystack)) {\n    return result('rejected', { send_error: `not sent - could not reach Meta: ${msg}`.slice(0, 500) });\n  }\n  return result('uncertain', { send_error: `no clear answer from Meta (it may or may not have been sent): ${msg}`.slice(0, 500) });\n}\n\n// Should this send be written to the Grist Inbox (Conversations + Messages)? Only patient messages that\n// actually reached the point of calling Meta. The conversation is the PATIENT's (lead_phone), even when\n// TEST_MODE sent the message to TEST_PHONE. A message that already has its own Messages row (W10 staff reply:\n// inbox_row_id) is not written again; its caller updates that row.\nfunction waInboxPlan(input, cfg, res, h) {\n  const patient_phone = h.normalizeIndianPhone(input.lead_phone || input.patient_phone).phone;\n  const attempted = ['accepted', 'uncertain', 'rejected'].includes(res.send_status);\n  const own = Number(input.inbox_row_id) > 0;\n  const log = cfg.log_to_inbox !== false && input.audience === 'patient' && attempted && !own && !!patient_phone && !!input.grist_base_url && !!input.doc_id;\n  return { log, patient_phone };\n}\n\n// The Messages row. Send stays false: W10 sends rows whose Send is ticked, and this one is already out.\nfunction waInboxRow(input, res, nowSec) {\n  const d = input.decision || {};\n  const via = d.test_mode ? ` (TEST_MODE: sent to ${d.to})` : '';\n  return {\n    Direction: 'Out',\n    Body: String(input.message_text || input.text_body || `[template ${input.template}]`).slice(0, 2000),\n    Template: input.message_type === 'text' ? '' : String(input.template || ''),\n    Sent_By: `${input.source_workflow || 'W12'}${via}`.slice(0, 200),\n    WA_Message_ID: res.wa_message_id || '',\n    Status: res.send_status === 'rejected' ? 'failed' : 'queued',\n    Send: false,\n    Created_At: nowSec,\n  };\n}\n\n// ---- TEMPORARY TEST SWITCH: quiet hours (pasted from n8n/snippets/quiet-hours-switch.js - keep identical) ----\nconst DISABLE_QUIET_HOURS_FOR_TEST = false;   // true = skip ONLY the 21:00-08:00 IST quiet-hours check; false = the original rule\nconst originalInQuietHours = inQuietHours;   // the original rule from send-guard.js, unchanged\ninQuietHours = (nowMs) => (DISABLE_QUIET_HOURS_FOR_TEST ? false : originalInQuietHours(nowMs));   // eslint-disable-line no-func-assign\n// ---- end of the test switch ----\n\n  // PRODUCTION: idempotency key of one logical message. Callers should send idem_key; the fallbacks cover the ones that identify the message by their own id.\n  function waIdemKey(input) {\n    const clean = (v) => String(v === null || v === undefined ? '' : v).replace(/[^A-Za-z0-9:_.\\-]/g, '').slice(0, 100);\n    const explicit = clean(input.idem_key);\n    if (explicit) return explicit;\n    const src = clean(input.source_workflow) || 'W12';\n    const tpl = input.message_type === 'text' ? 'text' : clean(input.template);\n    const w13 = input.message_row_id ? `${clean(input.w13_kind)}${clean(input.message_row_id)}` : '';\n    const id = [clean(input.booking_uid), clean(input.inbox_row_id), w13, clean(input.week)].filter(Boolean)[0];\n    return id ? `${src}:${tpl}:${id}`.slice(0, 200) : '';\n  }\n  const cfg = {\n    send_mode: $json.w12_send_mode,\n    allowlist: $json.w12_allowlist,\n    graph_api_version: $json.w12_graph_api_version,\n    default_language: $json.w12_default_language,\n    uncertain_counts_as_sent: $json.w12_uncertain_counts_as_sent,\n    log_to_inbox: $json.w12_log_to_inbox,\n    allow_hello_world: $json.w12_allow_hello_world === true,\n    graph_base_url: String($json.w12_graph_base_url || 'https://graph.facebook.com').replace(/\\/+$/, ''),\n  };\n  const input = {};\n  for (const [k, v] of Object.entries($json)) if (!k.startsWith('w12_')) input[k] = v;   // the caller's item, untouched\n  const prep = waPrepare(\n  input,\n  cfg,\n  Date.now(),\n  { normalizeIndianPhone, inQuietHours }\n  );\n  // PRODUCTION: every send needs an idempotency key (the send ledger refuses a second send of the same key) and a place for the ledger.\n  const idem_key = waIdemKey(input);\n  if (prep.call_meta) {\n    if (!idem_key) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no idempotency key: the caller must send idem_key (or booking_uid / inbox_row_id / message_row_id / week)'; }\n    else if (!/^https?:\\/\\/[^\\s/]+/i.test(String(input.grist_base_url || '')) || !String(input.doc_id || '').trim()) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no send-ledger location: grist_base_url and doc_id are required'; }\n    else prep.meta_request.biz_opaque_callback_data = `fhq:${idem_key}`.slice(0, 500);   // Meta echoes it in the delivery-status webhook\n  }\n  // PRODUCTION consent gate: business-initiated templates to a patient need Consent_WhatsApp on the lead (a TEST_MODE send goes to the clinic's own phone: no check)\n  const needs_consent = prep.call_meta === true && input.audience === 'patient' && input.message_type !== 'text' && !((input.decision || {}).test_mode === true);\n  const consent_phone = normalizeIndianPhone(input.lead_phone || input.patient_phone).phone || '';\n  return { json: { input, cfg, prep: { ...prep, idem_key, needs_consent, consent_phone } } };\n"
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js, send-guard.js (inQuietHours) and wa-send.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nconst WA_TEMPLATES = {\n  hello_world: { language: 'en_US', params: [] },          // Meta's sample template on the test number\n  booking_confirmation: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_24h: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_2h: { params: ['name', 'service', 'clinic_name', 'time'] },\n  noshow_rebook: { params: ['name', 'service', 'clinic_name', 'date', 'booking_link'] },\n  followup_day2: { params: ['name', 'clinic_name', 'booking_link'] },\n  new_lead_staff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'enquiry', fallback: '(no message)' }] },\n  lead_escalation: { params: ['clinic_name', 'lead_name', 'lead_phone', 'waiting_minutes'] },\n  human_handoff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'reason', fallback: '(see the Grist inbox)' }] },\n  outcome_check: { params: ['name', 'clinic_name', { key: 'service', fallback: 'visit' }] },                    // W7\n  review_request: { params: ['name', 'clinic_name', 'review_link'] },                                          // W8\n  weekly_owner_report: { params: ['clinic_name', 'week', 'summary', { key: 'action', fallback: 'see the full report in Grist' }] },   // W9\n};\n\n// Free-text replies (message_type 'text', from W13) are only allowed inside WhatsApp's 24-hour customer-service\n// window, i.e. within 24 h of the patient's last message (last_inbound_at). A 5-minute margin keeps clock drift safe.\nconst WA_TEXT_WINDOW_MS = 24 * 3600 * 1000 - 5 * 60 * 1000;\n\n// Short hints for the Meta error codes we are most likely to meet (shown in send_error).\nconst WA_HINTS = {\n  190: 'access token invalid or expired - put a permanent System User token in the \"WhatsApp Cloud API\" credential',\n  10: 'token lacks permission - give the System User whatsapp_business_messaging',\n  200: 'token lacks permission - give the System User whatsapp_business_messaging',\n  100: 'invalid parameter - check wa_phone_number_id and the template',\n  131030: \"recipient is not in the test number's allowed list - add it in Meta > WhatsApp > API Setup\",\n  131026: 'message undeliverable (number not on WhatsApp?)',\n  131047: 'outside the 24h window - only templates can be sent',\n  131056: 'too many messages to this number - try later',\n  130429: 'rate limit hit - try later',\n  132000: 'number of template variables does not match the approved template',\n  132001: 'template not found in this language - check the name and language code',\n  132005: 'template text too long after filling the variables',\n  132007: 'template content policy violation',\n  132012: 'template variable format does not match',\n  133010: 'phone number not registered with the Cloud API',\n  131031: 'WhatsApp account locked',\n  368: 'temporarily blocked for policy violations',\n};\n\n// Meta: a variable may not contain new-lines, tabs or runs of spaces.\nfunction waCleanParam(v) {\n  return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, 250);\n}\n\n// Decide whether to call Meta, and build the request. Never throws.\n// input: the caller's item (decision, template, template_params, wa_phone_number_id, ...); cfg: W12 Config.\nfunction waPrepare(input, cfg, nowMs, h) {\n  const stop = (send_status, send_error) => ({ call_meta: false, send_status, send_error });\n  const d = input && input.decision;\n  if (!d || d.send !== true) return stop('not_requested', d && d.reason ? `guard said no: ${d.reason}` : 'no send decision from the caller');\n\n  const mode = String(cfg.send_mode || '').trim().toLowerCase();\n  if (mode !== 'allowlist' && mode !== 'live') return stop('blocked', `W12 send_mode is \"${cfg.send_mode}\" - only \"allowlist\" or \"live\" send`);\n\n  // 1. Is the message itself sendable? (reported even while testing in allowlist mode or at night)\n  const to = h.normalizeIndianPhone(d.to).phone;\n  if (!to) return stop('invalid', 'decision.to is not a valid phone number (E.164, e.g. +919876543210)');\n  const version = String(cfg.graph_api_version || '').trim();\n  if (!/^v\\d+\\.\\d+$/.test(version)) return stop('invalid', 'graph_api_version is not set in the W12 Config node (e.g. v23.0 - copy it from Meta API Setup)');\n  const phoneId = String(input.wa_phone_number_id || '').trim();\n  if (!/^\\d{5,25}$/.test(phoneId)) return stop('invalid', 'wa_phone_number_id is missing or not a number (Agency Registry > Clinics > WA_Phone_Number_ID)');\n  const isText = input.message_type === 'text';\n  let tpl = null;\n  let textBody = '';\n  const params = [];\n  if (isText) {\n    textBody = String(input.text_body === null || input.text_body === undefined ? '' : input.text_body).replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/g, '').trim().slice(0, 4096);\n    if (!textBody) return stop('invalid', 'text message: text_body is empty');\n    const last = Number(input.last_inbound_at);\n    if (!Number.isFinite(last) || last <= 0) return stop('invalid', 'text message: last_inbound_at (the patient\\'s last message, epoch seconds) is missing');\n    if (nowMs - last * 1000 > WA_TEXT_WINDOW_MS) return stop('blocked', 'outside the 24-hour WhatsApp window: only an approved template may be sent');\n  } else {\n    tpl = WA_TEMPLATES[input.template];\n    if (!tpl) return stop('invalid', `unknown template \"${input.template}\" - add it to WA_TEMPLATES in W12`);\n    if (input.template === 'hello_world' && cfg.allow_hello_world !== true) return stop('invalid', 'template hello_world is Meta\\'s sample (\"Hello World\"): it is not sent to people in production (FLOWHQ_WA_ALLOW_HELLO_WORLD=true allows it for a smoke test)');\n    const values = input.template_params || {};\n    for (const spec of tpl.params) {\n      const key = typeof spec === 'string' ? spec : spec.key;\n      let v = waCleanParam(values[key]);\n      if (!v && typeof spec === 'object') v = spec.fallback;\n      if (!v) return stop('invalid', `template ${input.template}: variable \"${key}\" is empty`);\n      params.push(v);\n    }\n  }\n\n  // 2. May it go out now, to this number?\n  if (mode === 'allowlist') {\n    const allowed = String(cfg.allowlist || '').split(/[,;]+/).map((x) => h.normalizeIndianPhone(x).phone).filter(Boolean);\n    if (!allowed.includes(to)) return stop('blocked', `${to} is not in the W12 allowlist (send_mode = allowlist)`);\n  }\n  if (h.inQuietHours(nowMs)) return stop('blocked', 'quiet hours (21:00-08:00 IST)');\n\n  if (isText) {\n    return {\n      call_meta: true,\n      send_status: 'pending',\n      send_error: '',\n      to,\n      meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n      meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'text', text: { preview_url: /https?:\\/\\//i.test(textBody), body: textBody } },\n    };\n  }\n  const template = { name: input.template, language: { code: String(input.template_language || tpl.language || cfg.default_language || 'en') } };\n  if (params.length) template.components = [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }];\n  return {\n    call_meta: true,\n    send_status: 'pending',\n    send_error: '',\n    to,\n    meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n    meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'template', template },\n  };\n}\n\n// Turn the HTTP node output (fullResponse + neverError, or a \"continue on error\" item) into a result.\n//   accepted  Meta returned a message id                  -> sent: true\n//   rejected  Meta refused, or the request never left     -> sent: false (safe to try again later)\n//   uncertain the request left but no clear answer came   -> sent: false, uncertain: true (PRODUCTION: it may have been delivered, so it is\n//             never re-sent automatically and never reported as sent; the delivery-status webhook or a person settles it)\nfunction waClassify(resp, cfg) {\n  const result = (send_status, extra) => Object.assign({\n    send_status,\n    sent: send_status === 'accepted',   // PRODUCTION: only a message id from Meta counts as sent\n    uncertain: send_status === 'uncertain',   // the call left but no clear answer came: never sent again automatically, never reported as sent\n    wa_message_id: '',\n    send_error: '',\n    send_error_code: null,\n    send_http_status: null,\n  }, extra);\n\n  if (resp && typeof resp.statusCode === 'number') {\n    let body = resp.body;\n    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\n    body = body || {};\n    const id = body.messages && body.messages[0] && body.messages[0].id;\n    if (resp.statusCode >= 200 && resp.statusCode < 300) {\n      return id\n        ? result('accepted', { wa_message_id: String(id), send_http_status: resp.statusCode })\n        : result('uncertain', { send_error: 'Meta answered without a message id', send_http_status: resp.statusCode });\n    }\n    const e = body.error || {};\n    const code = e.code !== undefined && e.code !== null ? Number(e.code) : null;\n    const detail = (e.error_data && e.error_data.details) || e.message || `HTTP ${resp.statusCode}`;\n    const hint = code !== null && WA_HINTS[code] ? ` (${WA_HINTS[code]})` : '';\n    return result('rejected', { send_error_code: code, send_http_status: resp.statusCode, send_error: `${code !== null ? code + ': ' : ''}${detail}${hint}`.slice(0, 500) });\n  }\n\n  // n8n's \"continue on error\" item: { error: '...' } or { error: { message, description, code, ... } }. n8n also\n  // rewrites network errors into friendly text, so match both the raw codes and n8n's wording.\n  const err = resp && resp.error;\n  const msg = String((err && (err.message || err.description)) || (typeof err === 'string' ? err : '') || 'no reply from Meta');\n  const haystack = typeof err === 'string' ? err : JSON.stringify(err || {});\n  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|certificate|self[- ]signed|refused the connection|DNS server returned an error/i.test(haystack)) {\n    return result('rejected', { send_error: `not sent - could not reach Meta: ${msg}`.slice(0, 500) });\n  }\n  return result('uncertain', { send_error: `no clear answer from Meta (it may or may not have been sent): ${msg}`.slice(0, 500) });\n}\n\n// Should this send be written to the Grist Inbox (Conversations + Messages)? Only patient messages that\n// actually reached the point of calling Meta. The conversation is the PATIENT's (lead_phone), even when\n// TEST_MODE sent the message to TEST_PHONE. A message that already has its own Messages row (W10 staff reply:\n// inbox_row_id) is not written again; its caller updates that row.\nfunction waInboxPlan(input, cfg, res, h) {\n  const patient_phone = h.normalizeIndianPhone(input.lead_phone || input.patient_phone).phone;\n  const attempted = ['accepted', 'uncertain', 'rejected'].includes(res.send_status);\n  const own = Number(input.inbox_row_id) > 0;\n  const log = cfg.log_to_inbox !== false && input.audience === 'patient' && attempted && !own && !!patient_phone && !!input.grist_base_url && !!input.doc_id;\n  return { log, patient_phone };\n}\n\n// The Messages row. Send stays false: W10 sends rows whose Send is ticked, and this one is already out.\nfunction waInboxRow(input, res, nowSec) {\n  const d = input.decision || {};\n  const via = d.test_mode ? ` (TEST_MODE: sent to ${d.to})` : '';\n  return {\n    Direction: 'Out',\n    Body: String(input.message_text || input.text_body || `[template ${input.template}]`).slice(0, 2000),\n    Template: input.message_type === 'text' ? '' : String(input.template || ''),\n    Sent_By: `${input.source_workflow || 'W12'}${via}`.slice(0, 200),\n    WA_Message_ID: res.wa_message_id || '',\n    Status: res.send_status === 'rejected' ? 'failed' : 'queued',\n    Send: false,\n    Created_At: nowSec,\n  };\n}\n\n// ---- TEMPORARY TEST SWITCH: quiet hours (pasted from n8n/snippets/quiet-hours-switch.js - keep identical) ----\nconst DISABLE_QUIET_HOURS_FOR_TEST = false;   // true = skip ONLY the 21:00-08:00 IST quiet-hours check; false = the original rule\nconst originalInQuietHours = inQuietHours;   // the original rule from send-guard.js, unchanged\ninQuietHours = (nowMs) => (DISABLE_QUIET_HOURS_FOR_TEST ? false : originalInQuietHours(nowMs));   // eslint-disable-line no-func-assign\n// ---- end of the test switch ----\n\n  // PRODUCTION: idempotency key of one logical message. Callers should send idem_key; the fallbacks cover the ones that identify the message by their own id.\n  function waIdemKey(input) {\n    const clean = (v) => String(v === null || v === undefined ? '' : v).replace(/[^A-Za-z0-9:_.\\-]/g, '').slice(0, 100);\n    const explicit = clean(input.idem_key);\n    if (explicit) return explicit;\n    const src = clean(input.source_workflow) || 'W12';\n    const tpl = input.message_type === 'text' ? 'text' : clean(input.template);\n    const w13 = input.message_row_id ? `${clean(input.w13_kind)}${clean(input.message_row_id)}` : '';\n    const id = [clean(input.booking_uid), clean(input.inbox_row_id), w13, clean(input.week)].filter(Boolean)[0];\n    return id ? `${src}:${tpl}:${id}`.slice(0, 200) : '';\n  }\n  const cfg = {\n    send_mode: $json.w12_send_mode,\n    allowlist: $json.w12_allowlist,\n    graph_api_version: $json.w12_graph_api_version,\n    default_language: $json.w12_default_language,\n    uncertain_counts_as_sent: $json.w12_uncertain_counts_as_sent,\n    log_to_inbox: $json.w12_log_to_inbox,\n    allow_hello_world: $json.w12_allow_hello_world === true,\n    graph_base_url: String($json.w12_graph_base_url || 'https://graph.facebook.com').replace(/\\/+$/, ''),\n  };\n  const input = {};\n  for (const [k, v] of Object.entries($json)) if (!k.startsWith('w12_')) input[k] = v;   // the caller's item, untouched\n  const prep = waPrepare(\n  input,\n  cfg,\n  Date.now(),\n  { normalizeIndianPhone, inQuietHours }\n  );\n  // PRODUCTION: every send needs an idempotency key (the send ledger refuses a second send of the same key) and a place for the ledger.\n  const idem_key = waIdemKey(input);\n  if (prep.call_meta) {\n    if (!idem_key) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no idempotency key: the caller must send idem_key (or booking_uid / inbox_row_id / message_row_id / week)'; }\n    else if (!/^https?:\\/\\/[^\\s/]+/i.test(String(input.grist_base_url || '')) || !String(input.doc_id || '').trim()) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no send-ledger location: grist_base_url and doc_id are required'; }\n    else prep.meta_request.biz_opaque_callback_data = `fhq:${idem_key}`.slice(0, 500);   // Meta echoes it in the delivery-status webhook\n  }\n  // PRODUCTION consent gate: business-initiated templates to a patient need Consent_WhatsApp on the lead (a TEST_MODE send goes to the clinic's own phone: no check)\n  const needs_consent = prep.call_meta === true && input.audience === 'patient' && input.message_type !== 'text' && !((input.decision || {}).test_mode === true);\n  const consent_phone = normalizeIndianPhone(input.lead_phone || input.patient_phone).phone || '';\n  // PAUSE re-check: only a W13 patient reply asks W12 to re-read Conversations.Automation_Paused right before sending\n  const needs_pause_check = prep.call_meta === true && input.w13_kind === 'patient_reply';\n  return { json: { input, cfg, prep: { ...prep, idem_key, needs_consent, consent_phone, needs_pause_check } } };\n"
       },
       "id": "1844b477-1671-4fc9-a9b6-e6cc925a8696",
       "name": "W12 – Prepare request",
@@ -3123,7 +3123,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "  const from = (name) => {\n    try { return $(name).first().json; } catch (e) { return null; }   // throws if that branch did not run\n  };\n  const ran = from('W12 – Read reply');   // Meta was called\n  const stopped = ran ? null : ((from('W12 – Ledger winner') || from('W12 – Ledger decide') || from('W12 – Consent decide') || {}).early || null);   // the ledger said duplicate / could not be used: Meta was NOT called\n  const p = ran || from('W12 – Prepare request');\n  const res = ran ? ran.res : {\n    send_status: stopped ? stopped.send_status : p.prep.send_status, sent: false, uncertain: false, wa_message_id: '', send_error: stopped ? stopped.send_error : p.prep.send_error, send_error_code: null, send_http_status: null,\n  };\n  const added = from('W12 – Add message');\n  const inbox_logged = !!(added && !added.error && Array.isArray(added.records) && added.records.length);\n  const inbox_error = added && added.error ? String(added.error.message || added.error) : '';\n  return {\n    json: {\n      ...p.input,\n      sent: res.sent === true,\n      uncertain: res.uncertain === true,\n      duplicate: res.send_status === 'duplicate',\n      idem_key: (p.prep && p.prep.idem_key) || '',\n      send_status: res.send_status,\n      wa_message_id: res.wa_message_id || '',\n      send_error: res.send_error || '',\n      send_error_code: res.send_error_code === undefined ? null : res.send_error_code,\n      send_http_status: res.send_http_status === undefined ? null : res.send_http_status,\n      inbox_logged,\n      inbox_error,\n    },\n  };\n"
+        "jsCode": "  const from = (name) => {\n    try { return $(name).first().json; } catch (e) { return null; }   // throws if that branch did not run\n  };\n  const ran = from('W12 – Read reply');   // Meta was called\n  const stopped = ran ? null : ((from('W12 – Ledger winner') || from('W12 – Ledger decide') || from('W12 – Pause decide') || from('W12 – Consent decide') || {}).early || null);   // the ledger said duplicate / could not be used: Meta was NOT called\n  const p = ran || from('W12 – Prepare request');\n  const res = ran ? ran.res : {\n    send_status: stopped ? stopped.send_status : p.prep.send_status, sent: false, uncertain: false, wa_message_id: '', send_error: stopped ? stopped.send_error : p.prep.send_error, send_error_code: null, send_http_status: null,\n  };\n  const added = from('W12 – Add message');\n  const inbox_logged = !!(added && !added.error && Array.isArray(added.records) && added.records.length);\n  const inbox_error = added && added.error ? String(added.error.message || added.error) : '';\n  return {\n    json: {\n      ...p.input,\n      sent: res.sent === true,\n      uncertain: res.uncertain === true,\n      duplicate: res.send_status === 'duplicate',\n      idem_key: (p.prep && p.prep.idem_key) || '',\n      send_status: res.send_status,\n      wa_message_id: res.wa_message_id || '',\n      send_error: res.send_error || '',\n      send_error_code: res.send_error_code === undefined ? null : res.send_error_code,\n      send_http_status: res.send_http_status === undefined ? null : res.send_http_status,\n      inbox_logged,\n      inbox_error,\n    },\n  };\n"
       },
       "id": "64bce2f0-ec83-4696-bc41-c33c0e37ee2e",
       "name": "W12 – Return result",
@@ -9975,6 +9975,159 @@
         2056
       ],
       "id": "299cf9f7-f651-49ae-a658-49cc7f1b6fa3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a557d5a8-e5af-49b6-a2d1-097e08a1fcef",
+              "leftValue": "={{ $('W12 – Prepare request').first().json.prep.needs_pause_check === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "W12 – Pause check needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2208,
+        21520
+      ],
+      "id": "a72dea7e-ba30-47fd-adf7-dfeadff12acb"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('W12 – Prepare request').first().json.input.grist_base_url }}/api/docs/{{ $('W12 – Prepare request').first().json.input.doc_id }}/tables/Messages/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ id: [Number((String($('W12 – Prepare request').first().json.input.idem_key || '').match(/^W13:patient_reply:(\\d+)$/) || [])[1] || 0)] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "W12 – Pause message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2432,
+        21520
+      ],
+      "id": "ecd85589-6e3f-434b-a3a1-7c4d82b8cb89",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('W12 – Prepare request').first().json.input.grist_base_url }}/api/docs/{{ $('W12 – Prepare request').first().json.input.doc_id }}/tables/Conversations/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ id: [Number((($('W12 – Pause message').first().json.records || [])[0] || { fields: {} }).fields.Conversation) || 0] }) }}"
+            },
+            {
+              "name": "limit",
+              "value": "2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "W12 – Conversation pause",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2656,
+        21520
+      ],
+      "id": "99d8c655-4eec-4386-a937-ff1b398d17b2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pause re-check (W13 patient replies only). Only an explicit Automation_Paused === false lets the reply continue.\n// Every other answer (a read error, no or several rows, the wrong row, another lead's conversation, a missing or non-boolean value) blocks the send.\nconst p = $('W12 – Prepare request').first().json;\nconst stop = (why) => ({ json: { ...p, early: { send_status: 'blocked', send_error: why, ledger_status: '' } } });\nconst err = (r) => String((r && r.error && (r.error.message || r.error)) || 'no answer').replace(/\\s+/g, ' ').slice(0, 150);\nconst want = Number((String((p.input && p.input.idem_key) || '').match(/^W13:patient_reply:(\\d+)$/) || [])[1] || 0);\n\nif (!p.prep || p.prep.needs_pause_check !== true) return stop('pause check: it ran without being requested; nothing was sent');\nif (!(want > 0)) return stop('pause check: this reply does not say which patient message it answers (idem_key); nothing was sent');\n\nconst msgRes = $('W12 – Pause message').first().json;\nif (!Array.isArray(msgRes && msgRes.records)) return stop('pause check: could not read the patient message (' + err(msgRes) + '); nothing was sent');\nif (msgRes.records.length !== 1 || !msgRes.records[0] || msgRes.records[0].id !== want || !msgRes.records[0].fields) return stop('pause check: the patient message ' + want + ' was not found exactly once; nothing was sent');\nconst convId = Number(msgRes.records[0].fields.Conversation);\nif (!Number.isInteger(convId) || convId <= 0) return stop('pause check: the patient message has no conversation; nothing was sent');\n\nconst res = $json;\nif (!Array.isArray(res && res.records)) return stop('pause check: could not read the conversation (' + err(res) + '); nothing was sent');\nconst conv = res.records.length === 1 ? res.records[0] : null;\nif (!conv || conv.id !== convId || !conv.fields || typeof conv.fields !== 'object') return stop('pause check: conversation ' + convId + ' was not found exactly once; nothing was sent');\n\n// it must be this patient's conversation: the lead and the phone must agree wherever both sides say something\nconst lead = Number(p.input.lead_row_id) || 0;\nconst cLead = Number(conv.fields.Lead) || 0;\nif (lead > 0 && cLead > 0 && lead !== cLead) return stop('pause check: the conversation belongs to another lead; nothing was sent');\nconst digits = (v) => String(v === null || v === undefined ? '' : v).replace(/\\D/g, '').slice(-10);\nconst want10 = digits(p.prep.consent_phone);\nconst have10 = digits(conv.fields.Phone);\nif (want10 && have10 && want10 !== have10) return stop('pause check: the conversation belongs to another phone number; nothing was sent');\n\nconst paused = conv.fields.Automation_Paused;\nif (paused === true) return stop('paused by staff: Human handling is on for this conversation, so the AI reply was not sent');\nif (paused !== false) return stop('pause check: Automation_Paused is missing or is not true/false; nothing was sent');\nreturn { json: { ...p, pause_ok: true } };\n"
+      },
+      "name": "W12 – Pause decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        21520
+      ],
+      "id": "2ec837c3-0b3d-4d58-a6fa-2b60486d4de1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "46939fec-c260-4a59-a457-7e3d496c60cc",
+              "leftValue": "={{ !!$json.early }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "W12 – Pause stop?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3104,
+        21520
+      ],
+      "id": "c8296498-86be-47e7-a29b-f9c15c512f9d"
     }
   ],
   "pinData": {},
@@ -14197,7 +14350,7 @@
         ],
         [
           {
-            "node": "W12 – Ledger lookup",
+            "node": "W12 – Pause check needed?",
             "type": "main",
             "index": 0
           }
@@ -14432,6 +14585,75 @@
         [
           {
             "node": "W1 – Log skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W12 – Pause check needed?": {
+      "main": [
+        [
+          {
+            "node": "W12 – Pause message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W12 – Ledger lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W12 – Pause message": {
+      "main": [
+        [
+          {
+            "node": "W12 – Conversation pause",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W12 – Conversation pause": {
+      "main": [
+        [
+          {
+            "node": "W12 – Pause decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W12 – Pause decide": {
+      "main": [
+        [
+          {
+            "node": "W12 – Pause stop?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W12 – Pause stop?": {
+      "main": [
+        [
+          {
+            "node": "W12 – Return result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W12 – Ledger lookup",
             "type": "main",
             "index": 0
           }
