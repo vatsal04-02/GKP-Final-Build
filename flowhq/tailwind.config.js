@@ -21,11 +21,11 @@ export default {
         pop: 'var(--shadow-pop)',
       },
       keyframes: {
-        'fade-up': { from: { opacity: 0, transform: 'translateY(4px)' }, to: { opacity: 1, transform: 'none' } },
+        'fade-up': { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'none' } },
         shimmer: { from: { backgroundPosition: '-400px 0' }, to: { backgroundPosition: '400px 0' } },
         'pulse-dot': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.45 } },
       },
-      animation: { 'fade-up': 'fade-up 200ms ease-out both', shimmer: 'shimmer 1.4s linear infinite', 'pulse-dot': 'pulse-dot 1.8s ease-in-out infinite' },
+      animation: { 'fade-up': 'fade-up 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both', shimmer: 'shimmer 1.4s linear infinite', 'pulse-dot': 'pulse-dot 1.8s ease-in-out infinite' },
     },
   },
   plugins: [],

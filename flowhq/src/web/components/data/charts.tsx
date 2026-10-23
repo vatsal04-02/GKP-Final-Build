@@ -60,7 +60,7 @@ export function Sparkline({ values, className }: { values: number[]; className?:
   return (
     <svg width={W} height={H} className={cn('overflow-visible', className)} aria-hidden="true">
       <polyline points={`0,${H} ${pts} ${W},${H}`} fill="rgb(var(--blue) / 0.12)" stroke="none" />
-      <polyline points={pts} fill="none" stroke="rgb(var(--blue-bright))" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} pathLength={1} className="fhq-draw" fill="none" stroke="rgb(var(--blue-bright))" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }

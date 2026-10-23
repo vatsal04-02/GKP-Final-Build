@@ -8,7 +8,8 @@ import type { DoctorSummary, DoctorTile, TileKey } from '@core/clinical';
 import { api, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { cn } from '../lib/cn';
-import { Badge, Card, CardHeader } from '../components/ui/primitives';
+import { initials } from '../lib/format';
+import { Avatar, Badge, Card, CardHeader } from '../components/ui/primitives';
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/feedback';
 import { fdate, rs } from './common';
 import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
@@ -43,7 +44,7 @@ function Spark({ values, tone }: { values: number[]; tone?: Status }) {
   const cls = cn('h-5 w-16 shrink-0', tone ? TEXT[tone] : 'text-fg-2');
   if (!values.length || max === 0) return <svg viewBox={`0 0 ${W} ${H}`} className={cn(cls, 'opacity-40')} aria-hidden="true"><line x1="1" y1={H - 2} x2={W - 1} y2={H - 2} stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" strokeLinecap="round" /></svg>;
   const pts = values.map((v, i) => `${(1 + (i * (W - 2)) / Math.max(1, values.length - 1)).toFixed(1)},${(H - 2 - (v / max) * (H - 5)).toFixed(1)}`).join(' ');
-  return <svg viewBox={`0 0 ${W} ${H}`} className={cls} aria-hidden="true"><polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>;
+  return <svg viewBox={`0 0 ${W} ${H}`} className={cls} aria-hidden="true"><polyline points={pts} pathLength={1} className="fhq-draw" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>;
 };
 
 interface TileSpec { key: TileKey; label: string; icon: ReactNode; money?: boolean; empty: string; emptyTone?: 'ok'; goodWhen?: 'up' | 'down'; status: (t: DoctorTile, d: DoctorSummary) => Status; sub: (range: string) => string }
@@ -97,7 +98,7 @@ function Hero({ d, base, has }: { d: DoctorSummary; base: string; has: (m: strin
   const cta = 'inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all btn-primary text-white hover:brightness-110';
   return (
     <Card className="fhq-rise relative overflow-hidden" style={delay(0)}>
-      <span className={cn('absolute inset-y-0 left-0 w-1', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/60' : 'bg-warn/60') : 'bg-ok/60')} aria-hidden="true" />
+      <span className={cn('absolute inset-y-0 left-0 w-1', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/60 fhq-breathe' : 'bg-warn/60') : 'bg-ok/60')} aria-hidden="true" />
       <div className="flex flex-wrap items-center justify-between gap-4 py-4 pl-6 pr-5">
         <div className="min-w-0">
           <div className="text-[12px] font-semibold uppercase tracking-wide text-muted">{showDue ? 'Needs your call today' : 'Today so far'}</div>
@@ -179,7 +180,7 @@ export function DoctorOverview({ days }: { days: string }) {
               <tbody className="divide-y divide-line">
                 {d.byDoctor.map((r) => (
                   <tr key={r.name}>
-                    <td className="py-2.5 pr-3 font-medium">{r.name}</td>
+                    <td className="py-2.5 pr-3 font-medium"><span className="inline-flex items-center gap-2.5"><Avatar text={r.name.startsWith('Other') ? 'FD' : initials(r.name.replace(/^Dr\.?\s+/i, ''))} size={24} tone={r.name.startsWith('Other') ? 'neutral' : 'blue'} />{r.name}</span></td>
                     <td className={cn('num px-3 py-2.5 text-right', r.outstandingPaise > 0 && TEXT.warn)}>{rs(r.outstandingPaise)}</td>
                     <td className="num px-3 py-2.5 text-right">{rs(r.collectedPaise)}</td>
                     <td className="num py-2.5 pl-3 text-right">{r.prescriptions}</td>

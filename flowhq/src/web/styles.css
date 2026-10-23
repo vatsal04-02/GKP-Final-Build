@@ -27,7 +27,8 @@
   --ok: 22 133 74;
   --warn: 180 105 6;
   --bad: 200 38 38;
-  --shadow-card: 0 1px 2px rgb(13 64 56 / 0.05), 0 4px 14px -6px rgb(13 64 56 / 0.10);
+  --shadow-card: 0 1px 1px rgb(13 64 56 / 0.04), 0 2px 4px rgb(13 64 56 / 0.04), 0 10px 24px -14px rgb(13 64 56 / 0.16);
+  --shadow-lift: 0 1px 1px rgb(13 64 56 / 0.05), 0 6px 12px -4px rgb(13 64 56 / 0.10), 0 18px 32px -18px rgb(13 64 56 / 0.22);
   --shadow-pop: 0 18px 48px -14px rgb(13 64 56 / 0.28), 0 0 0 1px rgb(var(--line));
   color-scheme: light;
 }
@@ -53,6 +54,7 @@
   --warn: 245 158 11;
   --bad: 240 90 90;
   --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.02) inset, 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  --shadow-lift: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 12px 28px -12px rgb(0 0 0 / 0.65);
   --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(var(--line));
   color-scheme: dark;
 }
@@ -69,17 +71,20 @@
 }
 
 @layer components {
-  .card { @apply rounded-xl border border-line bg-surface shadow-card transition-colors duration-200; }
-  .card-hover { @apply hover:border-line-2 hover:bg-surface-2; }
+  .card { @apply rounded-xl border border-line bg-surface shadow-card transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out; }
+  .card-hover { @apply hover:-translate-y-px hover:border-line-2 hover:bg-surface-2; }
+  .card-hover:hover { box-shadow: var(--shadow-lift); }
   .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
   .label { @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted; }
   .glow-blue { box-shadow: 0 0 0 1px rgb(var(--blue) / 0.28), 0 6px 20px -8px rgb(var(--blue) / 0.35); }
   .ai-tint { background: linear-gradient(180deg, rgb(var(--blue) / 0.10), rgb(var(--blue) / 0.04)); border-color: rgb(var(--blue) / 0.28); }
-  .skeleton { background: linear-gradient(90deg, rgb(var(--surface-2)) 0%, rgb(var(--elevated)) 40%, rgb(var(--surface-2)) 80%); background-size: 800px 100%; @apply animate-shimmer rounded-md; }
+  .skeleton { background: linear-gradient(90deg, rgb(var(--surface-2)) 0%, rgb(var(--elevated)) 45%, rgb(var(--surface-2)) 90%); background-size: 800px 100%; animation: shimmer 1.7s ease-in-out infinite; @apply rounded-md; }
   .btn-primary { background-color: rgb(var(--accent-strong)); }
   .bg-grid { background-image: radial-gradient(rgb(var(--line)) 1px, transparent 1px); background-size: 22px 22px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* Form fields: a soft halo on focus (the outline above stays for keyboard users). */
+input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 4px rgb(var(--blue) / 0.12); }
 
 /* ---- Printing: A4 documents (prescription, invoice) and the register ---- */
 .paper { background: #fff; color: #111; }
@@ -99,3 +104,50 @@
 @keyframes fhq-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .fhq-rise { animation: fhq-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
 .fhq-grow { transform-origin: bottom; animation: fhq-grow 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+
+/* ---------------------------------------------------------------------------------------------------------------------------------
+   Motion system. Subtle on purpose: 150-300 ms, ease-out, transform and opacity only, nothing bounces. Every rule here is switched off by
+   the prefers-reduced-motion rule above (and for print). Elements never start hidden in CSS: the "from" state lives in the keyframes, so
+   with animations off everything is simply visible.
+   --------------------------------------------------------------------------------------------------------------------------------- */
+:root { --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1); }
+@keyframes fhq-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fhq-slide-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes fhq-scale-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes fhq-toast-in { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes fhq-toast-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(18px); } }
+@keyframes fhq-bar-in { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes fhq-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fhq-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes fhq-glow { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(40px, -18px) scale(1.06); } }
+@keyframes fhq-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.fhq-fade { animation: fhq-fade 0.2s ease-out both; }
+.fhq-slide-in { animation: fhq-slide-in 0.26s var(--ease-out) both; }
+.fhq-scale-in { animation: fhq-scale-in 0.24s var(--ease-out) both; animation-delay: var(--d, 0ms); }
+.fhq-toast-in { animation: fhq-toast-in 0.26s var(--ease-out) both; }
+.fhq-toast-out { animation: fhq-toast-out 0.28s ease-in both; }
+.fhq-bar-in { transform-origin: center; animation: fhq-bar-in 0.28s var(--ease-out) both; }
+.fhq-draw { stroke-dasharray: 1; animation: fhq-draw 0.9s var(--ease-out) both; animation-delay: var(--d, 0ms); }
+.fhq-float { animation: fhq-float 4s ease-in-out infinite; }
+.fhq-glow { animation: fhq-glow 18s ease-in-out infinite; }
+.fhq-breathe { animation: fhq-breathe 2.4s ease-in-out infinite; }
+
+/* Rows and list items glide in one after another (first 12; the rest arrive together). Existing rows keep their DOM node, so a refresh
+   does not replay it. */
+main tbody tr, main ul.divide-y > li { animation: fhq-rise 0.32s var(--ease-out) both; }
+main tbody tr:nth-child(2), main ul.divide-y > li:nth-child(2) { animation-delay: 30ms; }
+main tbody tr:nth-child(3), main ul.divide-y > li:nth-child(3) { animation-delay: 60ms; }
+main tbody tr:nth-child(4), main ul.divide-y > li:nth-child(4) { animation-delay: 90ms; }
+main tbody tr:nth-child(5), main ul.divide-y > li:nth-child(5) { animation-delay: 120ms; }
+main tbody tr:nth-child(6), main ul.divide-y > li:nth-child(6) { animation-delay: 150ms; }
+main tbody tr:nth-child(7), main ul.divide-y > li:nth-child(7) { animation-delay: 180ms; }
+main tbody tr:nth-child(8), main ul.divide-y > li:nth-child(8) { animation-delay: 210ms; }
+main tbody tr:nth-child(9), main ul.divide-y > li:nth-child(9) { animation-delay: 240ms; }
+main tbody tr:nth-child(10), main ul.divide-y > li:nth-child(10) { animation-delay: 270ms; }
+main tbody tr:nth-child(11), main ul.divide-y > li:nth-child(11) { animation-delay: 300ms; }
+main tbody tr:nth-child(n+12), main ul.divide-y > li:nth-child(n+12) { animation-delay: 330ms; }
+
+/* Light/dark switch: colours cross-fade instead of snapping (only while the class is on, only when motion is allowed). */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after { transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, fill 0.3s ease, stroke 0.3s ease, box-shadow 0.3s ease !important; }
+}

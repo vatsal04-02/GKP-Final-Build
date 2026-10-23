@@ -5,7 +5,12 @@ const read = (): Theme => { try { return localStorage.getItem('fhq-theme') === '
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(read);
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme); try { localStorage.setItem('fhq-theme', theme); } catch { /* private mode */ } }, [theme]);
-  const toggle = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
+  const toggle = useCallback(() => {
+    const root = document.documentElement;
+    root.classList.add('theme-anim');   // cross-fade the colours for a moment (styles.css; off for reduced motion)
+    window.setTimeout(() => root.classList.remove('theme-anim'), 400);
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  }, []);
   return <Ctx.Provider value={{ theme, toggle }}>{children}</Ctx.Provider>;
 }
 export const useTheme = () => useContext(Ctx);

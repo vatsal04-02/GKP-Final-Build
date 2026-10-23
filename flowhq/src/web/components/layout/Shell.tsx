@@ -12,6 +12,7 @@ import { icon } from '../../lib/icons';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { Avatar, Badge, Kbd } from '../ui/primitives';
+import { initials } from '../../lib/format';
 import { CommandPalette } from './CommandPalette';
 
 export function Logo({ compact, large }: { compact?: boolean; large?: boolean }) {
@@ -99,8 +100,8 @@ function NavItem({ to, label, iconName, end, onNavigate, shortcut }: { to: strin
         className={({ isActive }) => cn('group relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-[13.5px] font-medium transition-all duration-150',
           isActive ? 'bg-blue/[0.12] text-fg shadow-[inset_0_0_0_1px_rgb(var(--blue)/0.25),0_0_24px_-10px_rgb(var(--blue)/0.6)]' : 'text-fg-2 hover:bg-surface hover:text-fg')}>
         {({ isActive }) => (<>
-          {isActive && <span className="absolute -left-3 top-2 h-5 w-[3px] rounded-r bg-blue-bright shadow-[0_0_10px_rgb(var(--blue-bright))]" />}
-          <Icon className={cn('h-[17px] w-[17px] transition-colors', isActive ? 'text-blue-bright' : 'text-muted group-hover:text-fg-2')} />
+          {isActive && <span className="fhq-bar-in absolute -left-3 top-2 h-5 w-[3px] rounded-r bg-blue-bright shadow-[0_0_10px_rgb(var(--blue-bright))]" />}
+          <Icon className={cn('h-[17px] w-[17px] transition-[color,transform] duration-200 group-hover:translate-x-0.5', isActive ? 'text-blue-bright' : 'text-muted group-hover:text-fg-2')} />
           <span className="truncate">{label}</span>
         </>)}
       </NavLink>
@@ -156,7 +157,7 @@ export function Shell({ children }: { children: ReactNode }) {
               {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
             </button>
             <div className="hidden items-center gap-2 border-l border-line pl-3 sm:flex">
-              <Avatar text={me.user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()} size={28} />
+              <Avatar text={initials(me.user.name)} size={28} />
               <div className="leading-tight"><div className="text-[13px] font-medium">{me.user.name}</div><div className="text-[11px] capitalize text-muted">{me.user.role}</div></div>
             </div>
             <button onClick={signOut} className="rounded-lg p-2 text-fg-2 transition-colors hover:bg-surface hover:text-fg" aria-label="Sign out"><LogOut className="h-[18px] w-[18px]" /></button>

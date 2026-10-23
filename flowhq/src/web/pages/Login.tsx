@@ -25,13 +25,13 @@ export function Login() {
   return (
     <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-bg px-4">
       <div className="bg-grid pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
-      <div className="pointer-events-none absolute left-1/2 top-1/3 h-[420px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue/20 blur-[120px]" />
-      <div className="relative w-full max-w-[380px] animate-fade-up">
-        <div className="mb-8 flex flex-col items-center gap-3 text-center">
+      <div className="pointer-events-none absolute left-1/2 top-1/3 h-[420px] w-[620px] -translate-x-1/2 -translate-y-1/2"><div className="fhq-glow h-full w-full rounded-full bg-blue/20 blur-[120px]" /></div>
+      <div className="relative w-full max-w-[380px]">
+        <div className="fhq-scale-in mb-8 flex flex-col items-center gap-3 text-center">
           <Logo large />
           <p className="text-sm text-fg-2">The automation OS for your business</p>
         </div>
-        <form onSubmit={submit} className="card space-y-4 p-6 shadow-pop">
+        <form onSubmit={submit} className="card fhq-scale-in space-y-4 p-6 shadow-pop" style={{ '--d': '120ms' } as React.CSSProperties}>
           <div><label htmlFor="email" className="mb-1.5 block text-[13px] font-medium text-fg-2">Email</label><Input id="email" type="email" autoComplete="username" required icon={<Mail className="h-4 w-4" />} value={email} onChange={(e) => setEmail(e.target.value)} /></div>
           <div><label htmlFor="password" className="mb-1.5 block text-[13px] font-medium text-fg-2">Password</label><Input id="password" type="password" autoComplete="current-password" required icon={<Lock className="h-4 w-4" />} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
           {error && <p className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-[13px] text-bad" role="alert">{error}</p>}

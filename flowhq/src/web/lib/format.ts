@@ -26,4 +26,4 @@ export function relative(iso: string | null, now = Date.now()): string {
 export const number = (f: Fmt, n: number | null | undefined, digits = 0) => (n === null || n === undefined ? '—' : n.toLocaleString(f.locale, { maximumFractionDigits: digits }));
 export const percent = (f: Fmt, n: number | null | undefined) => (n === null || n === undefined ? '—' : `${n.toLocaleString(f.locale, { maximumFractionDigits: 1 })}%`);
 export const money = (f: Fmt, n: number | null | undefined) => (n === null || n === undefined ? '—' : f.currency ? n.toLocaleString(f.locale, { style: 'currency', currency: f.currency, maximumFractionDigits: 0 }) : n.toLocaleString(f.locale));
-export const initials = (name: string | null | undefined) => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?';
+export const initials = (name: string | null | undefined) => (name || '?').split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?';

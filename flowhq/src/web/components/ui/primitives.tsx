@@ -10,9 +10,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-[background-color,border-color,color,box-shadow,transform,filter] duration-150 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
         size === 'sm' ? 'h-8 px-3 text-[13px]' : 'h-9 px-3.5 text-sm',
-        variant === 'primary' && 'btn-primary text-white shadow-[0_6px_16px_-8px_rgb(var(--accent)/0.7)] hover:brightness-110 active:brightness-95',
+        variant === 'primary' && 'btn-primary text-white shadow-[0_6px_16px_-8px_rgb(var(--accent)/0.7)] hover:-translate-y-px hover:shadow-[0_10px_20px_-8px_rgb(var(--accent)/0.75)] hover:brightness-110 active:translate-y-0 active:brightness-95',
         variant === 'secondary' && 'border border-line bg-surface-2 text-fg hover:border-line-2 hover:bg-elevated',
         variant === 'ghost' && 'text-fg-2 hover:bg-surface-2 hover:text-fg',
         variant === 'subtle' && 'bg-blue/10 text-blue-soft hover:bg-blue/15',
@@ -79,8 +79,8 @@ export function Select({ className, children, ...p }: SelectHTMLAttributes<HTMLS
 export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
   return (
     <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
-      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue/60 bg-blue glow-blue' : 'border-line-2 bg-surface-2')}>
-      <span className={cn('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform duration-200', checked ? 'translate-x-[18px]' : 'translate-x-[3px]')} />
+      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-[background-color,border-color,box-shadow,opacity] duration-200 disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue/60 bg-blue glow-blue' : 'border-line-2 bg-surface-2')}>
+      <span className={cn('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform duration-[260ms] ease-[cubic-bezier(0.3,1.25,0.5,1)]', checked ? 'translate-x-[18px]' : 'translate-x-[3px]')} />
     </button>
   );
 }
