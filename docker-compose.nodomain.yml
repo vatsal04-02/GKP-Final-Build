@@ -15,7 +15,7 @@
 
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.41.6}
     restart: unless-stopped
     ports:
       - "127.0.0.1:5678:5678"     # only reachable through Tailscale, not your Wi-Fi
@@ -35,7 +35,7 @@ services:
       - n8n_data:/home/node/.n8n
 
   grist:
-    image: gristlabs/grist:${GRIST_VERSION:-latest}
+    image: gristlabs/grist:${GRIST_VERSION:-1.7.20}
     restart: unless-stopped
     ports:
       - "127.0.0.1:8484:8484"

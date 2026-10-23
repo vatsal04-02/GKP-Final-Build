@@ -1,0 +1,44 @@
+# Runs on every push to main and on every pull request: type check, unit/API tests and build for FLOW HQ, and the n8n suites
+# (simulator with fake Grist / Meta / AI / SMTP: nothing leaves the runner, no secrets are used).
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  flowhq:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flowhq
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: flowhq/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+  n8n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Selected workflow: build is reproducible and every simulator suite passes (reference + authoritative)
+        run: node n8n/final/run-tests.js
+      - name: Shared snippets (rule 10 in CLAUDE.md)
+        run: |
+          set -e
+          for f in n8n/snippets/*.test.js; do echo "== $f"; node "$f"; done
+      - name: W13 AI receptionist
+        run: node n8n/w13/w13.test.js

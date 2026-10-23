@@ -23,7 +23,7 @@ services:
 
   n8n:
     # Pin a specific version before going live, e.g. docker.n8n.io/n8nio/n8n:1.xx.x
-    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.41.6}
     restart: unless-stopped
     environment:
       - N8N_HOST=${N8N_DOMAIN}
@@ -67,7 +67,7 @@ services:
 
   grist:
     # Pin a specific version before going live, e.g. gristlabs/grist:1.x.x
-    image: gristlabs/grist:${GRIST_VERSION:-latest}
+    image: gristlabs/grist:${GRIST_VERSION:-1.7.20}
     restart: unless-stopped
     environment:
       - APP_HOME_URL=https://${GRIST_DOMAIN}

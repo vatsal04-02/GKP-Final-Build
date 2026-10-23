@@ -22,7 +22,7 @@ services:
       - grist
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.41.6}
     restart: unless-stopped
     environment:
       - N8N_HOST=${N8N_DOMAIN}
@@ -40,7 +40,7 @@ services:
       - n8n_data:/home/node/.n8n
 
   grist:
-    image: gristlabs/grist:${GRIST_VERSION:-latest}
+    image: gristlabs/grist:${GRIST_VERSION:-1.7.20}
     restart: unless-stopped
     environment:
       - APP_HOME_URL=https://${GRIST_DOMAIN}
