@@ -23,6 +23,9 @@ const Ai = lazy(() => import('./pages/Ai'));
 const Settings = lazy(() => import('./pages/Settings'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
+// Fetch every page's code once the browser is idle, so the first click on a page does not wait for a download.
+const preloadPages = () => { void Promise.allSettled([import('./pages/Inbox'), import('./pages/Contacts'), import('./pages/Bookings'), import('./pages/Automations'), import('./pages/Tasks'), import('./pages/Reports'), import('./pages/Activity'), import('./pages/Ai'), import('./pages/Settings'), import('./clinical/routes')]); };
+
 const PAGES: Array<{ module: ModuleKey; path: string; el: ReactElement }> = [
   { module: 'dashboard', path: '', el: <Dashboard /> },
   { module: 'inbox', path: 'inbox/:conversationId?', el: <Inbox /> },
@@ -49,6 +52,7 @@ function WorkspaceRoot() {
   const me = useMe();
   const wsq = useQuery({ queryKey: ['workspace', wsId], queryFn: () => api<Workspace>(wsPath(wsId, '/workspace')), enabled: !!me.data, staleTime: 60000 });
   useEffect(() => { if (wsq.data) { try { localStorage.setItem('fhq-ws', wsq.data.id); } catch { /* ignore */ } document.title = `${wsq.data.name} · ${BRAND.short}`; } }, [wsq.data]);
+  useEffect(() => { if (!wsq.data) return; const w = window as Window & { requestIdleCallback?: (f: () => void) => number }; if (w.requestIdleCallback) w.requestIdleCallback(preloadPages); else setTimeout(preloadPages, 1500); }, [!!wsq.data]);
   if (me.isLoading || wsq.isLoading) return <Splash />;
   if (me.error) return <Navigate to="/login" replace />;
   if (wsq.error) return (wsq.error as ApiError).status === 404 ? <Navigate to="/" replace /> : <ErrorState error={wsq.error} retry={() => wsq.refetch()} className="h-full" />;

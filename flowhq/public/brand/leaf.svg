@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 520" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6E9A86" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#A9C4B4" stop-opacity="0.25"/>
+    </linearGradient>
+    <path id="leaf" d="M0 0 C 26 -34 74 -46 118 -34 C 100 14 52 34 0 0 Z"/>
+    <path id="vein" d="M4 -2 C 36 -14 70 -22 108 -30"/>
+  </defs>
+  <g stroke="#6E9A86" stroke-opacity="0.5" stroke-width="1.4" stroke-linecap="round">
+    <path d="M412 8 C 340 70 280 150 236 250 C 210 310 196 400 196 500" stroke-width="2"/>
+    <g fill="url(#g)">
+      <use href="#leaf" transform="translate(372 40) rotate(150) scale(0.8)"/>
+      <use href="#leaf" transform="translate(340 78) rotate(25) scale(0.95)"/>
+      <use href="#leaf" transform="translate(318 104) rotate(160) scale(0.95)"/>
+      <use href="#leaf" transform="translate(290 142) rotate(30) scale(1.05)"/>
+      <use href="#leaf" transform="translate(270 172) rotate(165) scale(1.05)"/>
+      <use href="#leaf" transform="translate(250 214) rotate(35) scale(1.1)"/>
+      <use href="#leaf" transform="translate(236 252) rotate(170) scale(1.1)"/>
+      <use href="#leaf" transform="translate(222 300) rotate(40) scale(1.1)"/>
+      <use href="#leaf" transform="translate(208 346) rotate(172) scale(1.05)"/>
+      <use href="#leaf" transform="translate(200 398) rotate(45) scale(1)"/>
+    </g>
+    <g stroke-width="1" stroke-opacity="0.45">
+      <use href="#vein" transform="translate(372 40) rotate(150) scale(0.8)"/>
+      <use href="#vein" transform="translate(340 78) rotate(25) scale(0.95)"/>
+      <use href="#vein" transform="translate(318 104) rotate(160) scale(0.95)"/>
+      <use href="#vein" transform="translate(290 142) rotate(30) scale(1.05)"/>
+      <use href="#vein" transform="translate(270 172) rotate(165) scale(1.05)"/>
+      <use href="#vein" transform="translate(250 214) rotate(35) scale(1.1)"/>
+      <use href="#vein" transform="translate(236 252) rotate(170) scale(1.1)"/>
+      <use href="#vein" transform="translate(222 300) rotate(40) scale(1.1)"/>
+      <use href="#vein" transform="translate(208 346) rotate(172) scale(1.05)"/>
+      <use href="#vein" transform="translate(200 398) rotate(45) scale(1)"/>
+    </g>
+  </g>
+</svg>

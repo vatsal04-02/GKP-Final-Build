@@ -10,7 +10,6 @@ import { MODULES } from '@core/registry';
 import { EDITABLE_NOUNS, fmt, mergeTerminology, type TerminologyOverrides } from '@core/terminology';
 import { api, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
-import { useTheme } from '../lib/theme';
 import { icon } from '../lib/icons';
 import { cn } from '../lib/cn';
 import { Page } from '../components/layout/Shell';
@@ -220,7 +219,6 @@ function ModulesCard() {
 
 function BrandingCard() {
   const { ws, isAdmin } = useWs();
-  const { theme, toggle } = useTheme();
   const save = useProfile();
   const [logo, setLogo] = useState(ws.logoUrl || '');
   useEffect(() => setLogo(ws.logoUrl || ''), [ws.logoUrl]);
@@ -234,13 +232,6 @@ function BrandingCard() {
           <label className="block min-w-[240px] flex-1"><span className="mb-1.5 block text-[12.5px] text-fg-2">Logo URL</span><Input value={logo} onChange={(e) => setLogo(e.target.value)} disabled={!isAdmin} placeholder="https://" maxLength={500} aria-invalid={!valid} /></label>
           {isAdmin && <Button type="submit" variant="primary" disabled={!valid || logo === (ws.logoUrl || '')} loading={save.isPending}>Save</Button>}
         </form>
-      </Card>
-      <Card>
-        <CardHeader title="Appearance" subtitle="Saved on this device only" />
-        <div className="flex items-center justify-between gap-3 p-5">
-          <span className="text-[13px] text-fg-2">Theme</span>
-          <Segmented value={theme} onChange={(v) => v !== theme && toggle()} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]} />
-        </div>
       </Card>
     </>
   );

@@ -52,6 +52,9 @@ export function buildServer(env: NodeJS.ProcessEnv = process.env) {
   });
   root.route('/', api);
   if (existsSync(cfg.staticDir)) {
+    // built files have a content hash in their name: the browser may keep them for good. Logos keep their name, so a day only.
+    root.use('/assets/*', async (c, next) => { await next(); if (c.res.status === 200) c.header('Cache-Control', 'public, max-age=31536000, immutable'); });
+    root.use('/brand/*', async (c, next) => { await next(); if (c.res.status === 200) c.header('Cache-Control', 'public, max-age=86400'); });
     root.use('/assets/*', serveStatic({ root: path.relative(process.cwd(), cfg.staticDir) }));
     root.use('/brand/*', serveStatic({ root: path.relative(process.cwd(), cfg.staticDir) }));
     root.get('/favicon.svg', serveStatic({ path: path.relative(process.cwd(), path.join(cfg.staticDir, 'favicon.svg')) }));

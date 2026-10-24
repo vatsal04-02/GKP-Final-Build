@@ -2,12 +2,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronsUpDown, LogOut, Menu, Moon, Search, Sun, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronsUpDown, LogOut, Menu, Search, X } from 'lucide-react';
 import { MODULES, NAV_GROUPS } from '@core/registry';
 import { BRAND } from '@core/brand';
 import type { ModuleKey } from '@core/domain';
 import { useWs } from '../../lib/workspace';
-import { useTheme } from '../../lib/theme';
 import { icon } from '../../lib/icons';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
@@ -15,10 +14,9 @@ import { Avatar, Badge, Kbd } from '../ui/primitives';
 import { initials } from '../../lib/format';
 import { CommandPalette } from './CommandPalette';
 
-export function Logo({ compact, large }: { compact?: boolean; large?: boolean }) {
-  const { theme } = useTheme();
-  // The clinic's own artwork: cream lettering for the dark theme, deep-green lettering for the light theme.
-  return <img src={`/brand/gkp-logo-${theme}.png`} alt={BRAND.name} width={1200} height={694} className={cn('w-auto select-none', large ? 'h-28' : compact ? 'h-9' : 'h-[72px]')} draggable={false} />;
+export function Logo({ compact, large, onDark }: { compact?: boolean; large?: boolean; onDark?: boolean }) {
+  // The clinic's own artwork: cream lettering on the green sidebar, deep-green lettering on the light pages.
+  return <img src={`/brand/gkp-logo-${onDark ? 'dark' : 'light'}.png`} alt={BRAND.name} width={1200} height={694} className={cn('w-auto select-none', large ? 'h-28' : compact ? 'h-9' : 'h-[72px]')} draggable={false} />;
 }
 
 export function pagePath(wsId: string, m: ModuleKey) { const p = MODULES[m].page; return p === '/' ? `/w/${wsId}` : `/w/${wsId}${p}`; }
@@ -32,10 +30,10 @@ function WorkspaceSwitcher() {
   const industryLabel = (k: string) => me.industries.find((i) => i.key === k)?.label || k;
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-surface/60 p-2 text-left transition-colors hover:border-line-2 hover:bg-surface" aria-haspopup="listbox" aria-expanded={open}>
-        <Avatar text={ws.initials} src={ws.logoUrl} size={30} tone="blue" />
-        <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold">{ws.name}</div><div className="truncate text-[11px] text-muted">{industryLabel(ws.industry)}</div></div>
-        <ChevronsUpDown className="h-4 w-4 text-muted" />
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.07] p-2 text-left text-white transition-colors hover:border-white/20 hover:bg-white/[0.12]" aria-haspopup="listbox" aria-expanded={open}>
+        <Avatar text={ws.initials} src={ws.logoUrl} size={34} tone="neutral" />
+        <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold">{ws.name}</div><div className="truncate text-[11px] text-side-muted">{industryLabel(ws.industry)}</div></div>
+        <ChevronsUpDown className="h-4 w-4 text-side-muted" />
       </button>
       {open && (
         <div role="listbox" className="absolute bottom-full left-0 z-30 mb-2 w-full rounded-xl border border-line bg-elevated p-1 shadow-pop animate-fade-up">
@@ -71,17 +69,17 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const strays = ws.modules.filter((m) => on(m) && m !== 'dashboard' && !grouped.has(m)).sort(byOrder);
   const item = (m: ModuleKey) => <NavItem key={m} to={pagePath(ws.id, m)} label={tt(MODULES[m].label)} iconName={MODULES[m].icon} end={m === 'dashboard'} onNavigate={onNavigate} shortcut={MODULES[m].shortcut} />;
   return (
-    <nav className="flex h-full flex-col gap-3 overflow-y-auto border-r border-line bg-bg-2 px-3 py-4" aria-label="Main">
-      <div className="px-2 pt-1"><Logo /></div>
+    <nav className="relative flex h-full flex-col gap-2 overflow-y-auto bg-[radial-gradient(120%_50%_at_0%_0%,rgb(var(--side-1)),rgb(var(--side-2))_70%)] px-3 py-4 text-side-fg [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-white/15" aria-label="Main">
+      <div className="px-2 pb-2 pt-1"><Logo onDark /></div>
       {on('dashboard') && <ul className="mt-1">{item('dashboard')}</ul>}
       {NAV_GROUPS.map((grp) => {
         const mods = [...grp.modules.filter(on), ...(grp.key === 'system' ? strays : [])];   // the section's own order, as listed
         if (!mods.length) return null;
         const open = g.isOpen(grp.key);
         return (
-          <div key={grp.key}>
+          <div key={grp.key} className="mt-2">
             <button type="button" onClick={() => g.toggle(grp.key)} aria-expanded={open} aria-controls={`nav-${grp.key}`}
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted transition-colors hover:text-fg-2">
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-side-muted transition-colors hover:text-white">
               <span>{grp.label}</span><ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', !open && '-rotate-90')} />
             </button>
             {open && <ul id={`nav-${grp.key}`} className="mt-0.5 space-y-0.5">{mods.map(item)}</ul>}
@@ -97,11 +95,11 @@ function NavItem({ to, label, iconName, end, onNavigate, shortcut }: { to: strin
   return (
     <li>
       <NavLink to={to} end={end} onClick={onNavigate} title={shortcut ? `${label} (${shortcut})` : label}
-        className={({ isActive }) => cn('group relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-[13.5px] font-medium transition-all duration-150',
-          isActive ? 'bg-blue/[0.12] text-fg shadow-[inset_0_0_0_1px_rgb(var(--blue)/0.25),0_0_24px_-10px_rgb(var(--blue)/0.6)]' : 'text-fg-2 hover:bg-surface hover:text-fg')}>
+        className={({ isActive }) => cn('group relative flex h-10 items-center gap-3 rounded-xl px-3 text-[13.5px] font-medium transition-all duration-150',
+          isActive ? 'bg-white/[0.14] text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.10),0_6px_16px_-8px_rgb(0_0_0/0.5)]' : 'text-side-fg/80 hover:bg-white/[0.07] hover:text-white')}>
         {({ isActive }) => (<>
-          {isActive && <span className="fhq-bar-in absolute -left-3 top-2 h-5 w-[3px] rounded-r bg-blue-bright shadow-[0_0_10px_rgb(var(--blue-bright))]" />}
-          <Icon className={cn('h-[17px] w-[17px] transition-[color,transform] duration-200 group-hover:translate-x-0.5', isActive ? 'text-blue-bright' : 'text-muted group-hover:text-fg-2')} />
+          {isActive && <span className="fhq-bar-in absolute -left-3 top-2.5 h-5 w-[3px] rounded-r bg-accent shadow-[0_0_10px_rgb(var(--accent)/0.7)]" />}
+          <Icon className={cn('h-[18px] w-[18px] transition-[color,transform] duration-200 group-hover:translate-x-0.5', isActive ? 'text-white' : 'text-side-muted group-hover:text-white')} />
           <span className="truncate">{label}</span>
         </>)}
       </NavLink>
@@ -111,7 +109,6 @@ function NavItem({ to, label, iconName, end, onNavigate, shortcut }: { to: strin
 
 export function Shell({ children }: { children: ReactNode }) {
   const { ws, me, tt } = useWs();
-  const { theme, toggle } = useTheme();
   const [palette, setPalette] = useState(false);
   const [mobile, setMobile] = useState(false);
   const nav = useNavigate();
@@ -142,7 +139,9 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="absolute left-0 top-0 h-full w-[264px] animate-fade-up"><Sidebar onNavigate={() => setMobile(false)} /></div>
         </div>
       )}
-      <div className="flex min-w-0 flex-1 flex-col print:block">
+      <div className="relative flex min-w-0 flex-1 flex-col print:block">
+        {/* Soft leaf imprint behind the page, top right. Decorative only. */}
+        <div aria-hidden="true" className="pointer-events-none absolute right-0 top-14 z-0 hidden h-[460px] w-[370px] bg-[url('/brand/leaf.svg')] bg-contain bg-right-top bg-no-repeat opacity-70 md:block print:hidden" />
         <header className="sticky top-0 z-20 flex h-14 print:hidden shrink-0 items-center gap-3 border-b border-line bg-bg/80 px-4 backdrop-blur-xl md:px-6">
           <button className="rounded-lg p-1.5 text-fg-2 hover:bg-surface lg:hidden" onClick={() => setMobile(true)} aria-label="Open menu">{mobile ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
           <div className="lg:hidden"><Logo compact /></div>
@@ -153,9 +152,6 @@ export function Shell({ children }: { children: ReactNode }) {
           </button>
           <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             {ws.demo && <Badge tone="blue" className="hidden sm:inline-flex">Demo data</Badge>}
-            <button onClick={toggle} className="rounded-lg p-2 text-fg-2 transition-colors hover:bg-surface hover:text-fg" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-              {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
-            </button>
             <div className="hidden items-center gap-2 border-l border-line pl-3 sm:flex">
               <Avatar text={initials(me.user.name)} size={28} />
               <div className="leading-tight"><div className="text-[13px] font-medium">{me.user.name}</div><div className="text-[11px] capitalize text-muted">{me.user.role}</div></div>
@@ -163,7 +159,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <button onClick={signOut} className="rounded-lg p-2 text-fg-2 transition-colors hover:bg-surface hover:text-fg" aria-label="Sign out"><LogOut className="h-[18px] w-[18px]" /></button>
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">{children}</main>
+        <main className="relative z-10 min-h-0 flex-1 overflow-y-auto print:overflow-visible">{children}</main>
       </div>
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </div>

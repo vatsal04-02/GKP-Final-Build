@@ -1,11 +1,11 @@
-/** Design tokens live in src/web/styles.css (CSS variables, dark + light); Tailwind only points at them. */
+/** Design tokens live in src/web/styles.css (CSS variables, light only); Tailwind only points at them. */
 const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 export default {
   content: ['./index.html', './src/web/**/*.{ts,tsx}'],
-  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
+        'side-fg': v('side-fg'), 'side-muted': v('side-muted'),
         bg: v('bg'), 'bg-2': v('bg-2'), surface: v('surface'), field: v('field'), 'surface-2': v('surface-2'), elevated: v('elevated'),
         line: v('line'), 'line-2': v('line-2'),
         fg: v('fg'), 'fg-2': v('fg-2'), muted: v('muted'),

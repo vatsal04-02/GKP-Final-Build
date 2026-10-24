@@ -15,6 +15,8 @@ import { fdate, rs } from './common';
 import type { Invoice } from '@core/clinical';
 import { FollowUpList } from './FollowUpList';
 import { TodaysAppointments } from './TodaysAppointments';
+import { QuickActions } from './QuickActions';
+import { PatientsToReview } from './PatientsToReview';
 import { moneyNote, moneyState, type MoneyState } from './dashboardLogic';
 import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
 
@@ -26,7 +28,7 @@ type Status = 'ok' | 'warn' | 'bad' | undefined;
 // one muted palette for status, used for accents only: soft green = healthy, soft amber = needs attention, soft red = overdue
 const TEXT: Record<'ok' | 'warn' | 'bad', string> = { ok: 'text-ok', warn: 'text-warn', bad: 'text-bad' };
 const CHIP: Record<'ok' | 'warn' | 'bad', string> = { ok: 'border-ok/25 bg-ok/10 text-ok', warn: 'border-warn/25 bg-warn/10 text-warn', bad: 'border-bad/25 bg-bad/10 text-bad' };
-const delay = (i: number): CSSProperties => ({ ['--d' as string]: `${i * 40}ms` });
+const delay = (i: number): CSSProperties => ({ ['--d' as string]: `${i * 12}ms` });
 const reduced = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 // counts up from 0 (600ms, ease-out) whenever the value changes; instant when the user prefers reduced motion
@@ -117,7 +119,6 @@ function MiniStat({ spec, tile, vs, range, state }: { spec: TileSpec; tile: Doct
   );
 }
 
-const SectionTitle = ({ children }: { children: ReactNode }) => <h2 className="pt-1 text-[12px] font-semibold uppercase tracking-wide text-muted">{children}</h2>;
 
 // Money, kept apart from the patient follow-ups: what came in over the period and what is still owed today.
 function PaymentsSummary({ d, state, range, base, has, className }: { d: DoctorSummary; state: MoneyState; range: string; base: string; has: (m: string) => boolean; className?: string }) {
@@ -183,7 +184,7 @@ function AttendanceBars({ data, today }: { data: DoctorSummary['attendance']; to
   const top = Math.max(4, max);
   return (
     <div className="px-5 pb-4 pt-3">
-      <div className="flex h-[150px] items-end gap-1.5 sm:gap-2" role="img" aria-label="Patients attended per day">
+      <div className="flex h-[96px] items-end gap-1.5 sm:gap-2" role="img" aria-label="Patients attended per day">
         {data.map((a, i) => (
           <div key={a.date} className="group relative flex h-full min-w-0 flex-1 flex-col justify-end" title={`${fdate(a.date)}: ${a.attended} attended`}>
             <span className="num mb-1 text-center text-[11px] text-muted opacity-0 transition-opacity group-hover:opacity-100">{a.attended}</span>
@@ -219,52 +220,103 @@ export function DoctorOverview({ days }: { days: string }) {
   const primary = PRIMARY.map((k) => SPECS.find((s) => s.key === k)!);
   const more = SPECS.filter((s) => !PRIMARY.includes(s.key));
   return (
-    <div className="space-y-3.5">
-      {(doc.show || doc.own) && (
-        <div className="flex flex-wrap items-center gap-2.5">
-          {doc.own ? <span className="text-[12.5px] text-fg-2">Prescriptions and dues shown here are <b className="font-medium text-fg">{doc.own}</b>'s own. Patients and attendance are shared.</span> : <><span className="text-[12.5px] text-fg-2">Prescriptions and dues for</span><DoctorFilter f={doc} /></>}
-        </div>
-      )}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <QuickActions base={base} />
+        {(doc.show || doc.own) && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            {doc.own ? <span className="text-[12.5px] text-fg-2">Showing <b className="font-medium text-fg">{doc.own}</b>'s own prescriptions and dues. Patients and attendance are shared.</span> : <><span className="text-[12.5px] text-fg-2">Prescriptions and dues for</span><DoctorFilter f={doc} /></>}
+          </div>
+        )}
+      </div>
       {!d ? <Card className="p-5"><Skeleton className="h-12 w-64" /></Card> : <Hero d={d} base={base} has={has} />}
 
-      <section aria-label="Key numbers" className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        {!d ? Array.from({ length: 4 }, (_, i) => <Card key={i} className="p-3.5"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /></Card>)
-          : primary.map((s, i) => <Tile key={s.key} spec={s} tile={d.tiles[s.key]} d={d} vs={vs} range={range} i={i + 1} state={state} />)}
-      </section>
-      <section aria-label="More numbers" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {!d ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[52px] rounded-lg" />)
-          : more.map((s) => <MiniStat key={s.key} spec={s} tile={d.tiles[s.key]} vs={vs} range={range} state={state} />)}
-      </section>
-
-      <SectionTitle>Follow-ups &amp; appointments</SectionTitle>
-      <div className={cn('grid gap-4 [&>*]:min-w-0', has('bookings') && 'lg:grid-cols-3')}>
-        <div id="follow-ups" className={cn('scroll-mt-4', has('bookings') && 'lg:col-span-2')}><FollowUpList d={d} base={base} hasPatients={has('patients')} /></div>
-        {has('bookings') && <TodaysAppointments base={base} />}
+      <div className="space-y-3">
+        <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {!d ? Array.from({ length: 4 }, (_, i) => <Card key={i} className="p-3.5"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /></Card>)
+            : primary.map((s, i) => <Tile key={s.key} spec={s} tile={d.tiles[s.key]} d={d} vs={vs} range={range} i={i + 1} state={state} />)}
+        </section>
+        <section aria-label="More numbers" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {!d ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[52px] rounded-lg" />)
+            : more.map((s) => <MiniStat key={s.key} spec={s} tile={d.tiles[s.key]} vs={vs} range={range} state={state} />)}
+        </section>
       </div>
 
-      <SectionTitle>Payments</SectionTitle>
-      {!d ? <Card className="p-5"><Skeleton className="h-20" /></Card> : (
-        <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
-          <PaymentsSummary d={d} state={state} range={range} base={base} has={has} />
-          <Card className="fhq-rise" style={delay(9)}>
-            <CardHeader title="Dues to collect" subtitle="Largest balances first" icon={<Wallet className="h-4 w-4" />}
-              action={has('invoices') ? <Link to={`${base}/invoices`} className={cn(link, 'shrink-0')}>Invoices <ArrowRight className="h-3 w-3" /></Link> : undefined} />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] [&>*]:min-w-0">
+        <div className="space-y-6">
+          <div id="follow-ups" className="scroll-mt-4"><FollowUpList d={d} base={base} hasPatients={has('patients')} /></div>
+          {has('patients') && <PatientsToReview base={base} today={d?.today} />}
+          <Card className="fhq-rise" style={delay(11)}>
+            <CardHeader title="Recent prescriptions" subtitle={`Written ${period}`} icon={<FileText className="h-4 w-4" />}
+              action={has('prescriptions') ? <Link to={`${base}/prescriptions`} className={cn(link, 'shrink-0')}>All <ArrowRight className="h-3 w-3" /></Link> : undefined} />
             <div className="px-4 pb-3 pt-1 sm:px-5">
-              {d.owing.length ? (
+              {!d ? <Skeleton className="h-32" /> : d.recentPrescriptions.length ? (
                 <ul className="divide-y divide-line">
-                  {d.owing.map((o) => (
-                    <li key={o.patientId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5">
-                      <Link to={`${base}/patients/${o.patientId}`} className="min-w-0 flex-1 break-words text-[13.5px] font-medium hover:text-blue-bright">{o.name}</Link>
-                      <span className={cn('num shrink-0 rounded-md border px-2 py-0.5 text-[12.5px] font-semibold', CHIP.warn)}>{rs(o.outstandingPaise)}</span>
+                  {d.recentPrescriptions.map((r) => (
+                    <li key={r.rxId} className="flex flex-wrap items-start gap-x-3 gap-y-1 py-2.5">
+                      <div className="min-w-[10rem] flex-1">
+                        <Link to={`${base}/prescriptions/${r.rxId}`} className="block break-words text-[13.5px] font-medium leading-snug hover:text-blue-bright">{r.patientName || r.patientId}</Link>
+                        <p className="mt-0.5 break-words text-[12px] text-fg-2">{r.diagnosis || 'No diagnosis entered'}</p>
+                      </div>
+                      <span className="num shrink-0 text-[12px] text-muted">{fdate(r.rxDate)}</span>
                     </li>
                   ))}
                 </ul>
-              ) : state === 'yes' ? <EmptyState className="py-6" icon={<CheckCircle2 className="h-5 w-5 text-ok" />} title="All settled" body="No patient owes a balance." />
-                : <EmptyState className="py-6" icon={<Wallet className="h-5 w-5" />} title={state === 'none' ? 'No invoices yet' : 'Not confirmed yet'} body={state === 'none' ? 'Dues appear here once an invoice is raised.' : 'The invoice list could not be checked, so no balance is claimed either way.'} />}
+              ) : <p className="flex items-center gap-2.5 py-3 text-[13px] text-fg-2"><FileText className="h-4 w-4 shrink-0 text-muted" /><span><span className="font-medium text-fg">No prescriptions {`${period}`}</span></span></p>}
             </div>
           </Card>
+
+
+          <Card className="fhq-rise" style={delay(13)}>
+            <CardHeader title={`Patients attended, last ${d ? d.attendance.length : 7} days`} subtitle="Today is highlighted" icon={<ClipboardList className="h-4 w-4" />} />
+            {!d ? <Skeleton className="mx-5 mb-4 h-[150px]" /> : <AttendanceBars data={d.attendance} today={d.today} />}
+          </Card>
+
         </div>
-      )}
+        <div className="space-y-6">
+          {has('bookings') && <TodaysAppointments base={base} />}
+          {!d ? <Card className="p-5"><Skeleton className="h-20" /></Card> : (
+            <>
+              <PaymentsSummary d={d} state={state} range={range} base={base} has={has} />
+              <Card className="fhq-rise" style={delay(9)}>
+                <CardHeader title="Dues to collect" subtitle="Largest balances first" icon={<Wallet className="h-4 w-4" />}
+                  action={has('invoices') ? <Link to={`${base}/invoices`} className={cn(link, 'shrink-0')}>Invoices <ArrowRight className="h-3 w-3" /></Link> : undefined} />
+                <div className="px-4 pb-3 pt-1 sm:px-5">
+                  {d.owing.length ? (
+                    <ul className="divide-y divide-line">
+                      {d.owing.map((o) => (
+                        <li key={o.patientId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5">
+                          <Link to={`${base}/patients/${o.patientId}`} className="min-w-0 flex-1 break-words text-[13.5px] font-medium hover:text-blue-bright">{o.name}</Link>
+                          <span className={cn('num shrink-0 rounded-md border px-2 py-0.5 text-[12.5px] font-semibold', CHIP.warn)}>{rs(o.outstandingPaise)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : state === 'yes' ? <p className="flex items-center gap-2.5 py-3 text-[13px] text-fg-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-ok" /><span><span className="font-medium text-fg">All settled</span> · no patient owes a balance</span></p>
+                    : <EmptyState className="py-6" icon={<Wallet className="h-5 w-5" />} title={state === 'none' ? 'No invoices yet' : 'Not confirmed yet'} body={state === 'none' ? 'Dues appear here once an invoice is raised.' : 'The invoice list could not be checked, so no balance is claimed either way.'} />}
+                </div>
+              </Card>
+
+            </>
+          )}
+          <Card className="fhq-rise" style={delay(12)}>
+            <CardHeader title="Today's patients" subtitle={d ? `${d.todaysVisits.length} marked in attendance` : ' '} icon={<UserCheck className="h-4 w-4" />}
+              action={has('visits') ? <Link to={`${base}/attendance`} className={cn(link, 'shrink-0')}>Attendance <ArrowRight className="h-3 w-3" /></Link> : undefined} />
+            <div className="px-4 pb-3 pt-1 sm:px-5">
+              {!d ? <Skeleton className="h-32" /> : d.todaysVisits.length ? (
+                <ul className="divide-y divide-line">
+                  {d.todaysVisits.map((v) => (
+                    <li key={v.patientId} className="flex items-center justify-between gap-3 py-2.5">
+                      <Link to={`${base}/patients/${v.patientId}`} className="min-w-0 flex-1 break-words text-[13.5px] font-medium hover:text-blue-bright">{v.name}</Link>
+                      <span className={cn('shrink-0 rounded-md border px-1.5 text-[11.5px] font-medium leading-[20px]', v.status === 'Attended' ? CHIP.ok : CHIP.bad)}>{v.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="flex items-center gap-2.5 py-3 text-[13px] text-fg-2"><UserCheck className="h-4 w-4 shrink-0 text-muted" /><span><span className="font-medium text-fg">No one marked yet</span> · mark attendance as patients arrive</span></p>}
+            </div>
+          </Card>
+
+        </div>
+      </div>
 
       {d?.byDoctor && d.byDoctor.length > 0 && (
         <Card className="fhq-rise" style={delay(10)}>
@@ -302,51 +354,6 @@ export function DoctorOverview({ days }: { days: string }) {
           </div>
         </Card>
       )}
-
-      <SectionTitle>Care activity</SectionTitle>
-      <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
-        <Card className="fhq-rise lg:col-span-2" style={delay(11)}>
-          <CardHeader title="Recent prescriptions" subtitle={`Written ${period}`} icon={<FileText className="h-4 w-4" />}
-            action={has('prescriptions') ? <Link to={`${base}/prescriptions`} className={cn(link, 'shrink-0')}>All <ArrowRight className="h-3 w-3" /></Link> : undefined} />
-          <div className="px-4 pb-3 pt-1 sm:px-5">
-            {!d ? <Skeleton className="h-32" /> : d.recentPrescriptions.length ? (
-              <ul className="divide-y divide-line">
-                {d.recentPrescriptions.map((r) => (
-                  <li key={r.rxId} className="flex flex-wrap items-start gap-x-3 gap-y-1 py-2.5">
-                    <div className="min-w-[10rem] flex-1">
-                      <Link to={`${base}/prescriptions/${r.rxId}`} className="block break-words text-[13.5px] font-medium leading-snug hover:text-blue-bright">{r.patientName || r.patientId}</Link>
-                      <p className="mt-0.5 break-words text-[12px] text-fg-2">{r.diagnosis || 'No diagnosis entered'}</p>
-                    </div>
-                    <span className="num shrink-0 text-[12px] text-muted">{fdate(r.rxDate)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : <EmptyState className="py-6" icon={<FileText className="h-5 w-5" />} title={`No prescriptions ${period}`} />}
-          </div>
-        </Card>
-
-        <Card className="fhq-rise" style={delay(12)}>
-          <CardHeader title="Today's patients" subtitle={d ? `${d.todaysVisits.length} marked in attendance` : ' '} icon={<UserCheck className="h-4 w-4" />}
-            action={has('visits') ? <Link to={`${base}/attendance`} className={cn(link, 'shrink-0')}>Attendance <ArrowRight className="h-3 w-3" /></Link> : undefined} />
-          <div className="px-4 pb-3 pt-1 sm:px-5">
-            {!d ? <Skeleton className="h-32" /> : d.todaysVisits.length ? (
-              <ul className="divide-y divide-line">
-                {d.todaysVisits.map((v) => (
-                  <li key={v.patientId} className="flex items-center justify-between gap-3 py-2.5">
-                    <Link to={`${base}/patients/${v.patientId}`} className="min-w-0 flex-1 break-words text-[13.5px] font-medium hover:text-blue-bright">{v.name}</Link>
-                    <span className={cn('shrink-0 rounded-md border px-1.5 text-[11.5px] font-medium leading-[20px]', v.status === 'Attended' ? CHIP.ok : CHIP.bad)}>{v.status}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : <EmptyState className="py-6" icon={<UserCheck className="h-5 w-5" />} title="No one marked yet" body="Mark attendance as patients arrive." />}
-          </div>
-        </Card>
-      </div>
-
-      <Card className="fhq-rise" style={delay(13)}>
-        <CardHeader title={`Patients attended, last ${d ? d.attendance.length : 7} days`} subtitle="Today is highlighted" icon={<ClipboardList className="h-4 w-4" />} />
-        {!d ? <Skeleton className="mx-5 mb-4 h-[150px]" /> : <AttendanceBars data={d.attendance} today={d.today} />}
-      </Card>
     </div>
   );
 }

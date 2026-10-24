@@ -66,3 +66,16 @@ describe('money is never "zero" by default', () => {
     for (const s of ['yes', 'none', 'unknown'] as const) expect(moneyNote(480000, s)).toBeNull();
   });
 });
+
+import { patientsToReview } from '../src/web/clinical/dashboardLogic';
+describe('patientsToReview', () => {
+  const p = (id: string, status: string, latestVisit: string | null, registeredOn: string | null) => ({ patientId: id, name: id, phone: '', mainComplaint: '', status, latestVisit, registeredOn });
+  it('lists only active patients not seen for the minimum days, longest gap first', () => {
+    const out = patientsToReview([p('a', 'Active', '2026-10-20', null), p('b', 'Active', '2026-10-01', null), p('c', 'Completed', '2026-09-01', null), p('d', 'Active', null, '2026-10-10')], '2026-10-24');
+    expect(out.map((r) => [r.patientId, r.days, r.never])).toEqual([['b', 23, false], ['d', 14, true]]);
+  });
+  it('skips patients with no date at all and honours the limit', () => {
+    expect(patientsToReview([p('x', 'Active', null, null)], '2026-10-24')).toEqual([]);
+    expect(patientsToReview([p('a', 'Active', '2026-01-01', null), p('b', 'Active', '2026-01-02', null)], '2026-10-24', 10, 1)).toHaveLength(1);
+  });
+});

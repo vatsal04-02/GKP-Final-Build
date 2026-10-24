@@ -181,24 +181,13 @@ async function main() {
     await page.keyboard.press('g'); await page.keyboard.press('i');
     await page.waitForURL(/\/inbox/);
   });
-  await step('both themes render (light is the clinic default) and the toggle flips them', async () => {
+  await step('the clinic theme is light only (no dark toggle)', async () => {
     await page.goto(`${BASE}/w/${wsId}`);
     await settle(page);
-    const theme = () => page.evaluate(() => document.documentElement.getAttribute('data-theme'));
-    const toggle = () => page.getByRole('button', { name: /Switch to (light|dark) mode/ });
-    const first = await theme();
-    expect(first === 'light', `the clinic default theme should be light, got ${first}`);
+    const theme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    expect(theme === 'light', `the theme should be light, got ${theme}`);
+    expect((await page.getByRole('button', { name: /Switch to (light|dark) mode/ }).count()) === 0, 'a dark-mode toggle is still shown');
     await page.screenshot({ path: path.join(SHOTS, '41-dashboard-light.png') });
-    await toggle().click();
-    await page.waitForTimeout(300);
-    expect((await theme()) === 'dark', 'the toggle did not switch to dark');
-    await page.screenshot({ path: path.join(SHOTS, '41-dashboard-dark.png') });
-    await page.goto(`${BASE}/w/${wsId}/inbox`);
-    await settle(page);
-    await page.screenshot({ path: path.join(SHOTS, '42-inbox-dark.png') });
-    await toggle().click();
-    await page.waitForTimeout(200);
-    expect((await theme()) === 'light', 'the toggle did not switch back to light');
   });
   await step('API responses carry no backend ids or keys', async () => {
     const bodies = await page.evaluate(async (w) => Promise.all(['/api/me', `/api/w/${w}/workspace`, `/api/w/${w}/settings`, `/api/w/${w}/automations`, `/api/w/${w}/conversations`].map(async (u) => (await fetch(u)).text())), wsId);

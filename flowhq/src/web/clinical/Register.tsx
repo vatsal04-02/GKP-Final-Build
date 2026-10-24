@@ -1,6 +1,6 @@
 // The patient register: a clean spreadsheet-style version of the clinic's paper register, plus the patient's record.
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download, Plus, Printer, Search, UserRound } from 'lucide-react';
 import { PATIENT_STATUSES, SEXES, type Patient, type PatientList, type PatientProfile, type PatientRow, type VisitStatus } from '@core/clinical';
@@ -29,7 +29,8 @@ export default function Register() {
   const [status, setStatus] = useState(''); const [followUp, setFollowUp] = useState(false); const [owing, setOwing] = useState(false);
   const [sort, setSort] = useState<SortKey>('serial'); const [dir, setDir] = useState<'asc' | 'desc'>('asc'); const [page, setPage] = useState(1);
   const [weekOn, setWeekOn] = useState(false); const [week, setWeek] = useState(() => mondayOf(today));
-  const [creating, setCreating] = useState(false); const [exporting, setExporting] = useState(false);
+  const [sp] = useSearchParams(); const [creating, setCreating] = useState(sp.get('new') === '1');   // the dashboard's "Register patient" opens the form straight away
+  const [exporting, setExporting] = useState(false);
   const qs = (extra = '') => `/patients?q=${encodeURIComponent(dq)}${status ? `&status=${status}` : ''}${followUp ? '&followUp=1' : ''}${owing ? '&owing=1' : ''}&sort=${sort}&dir=${dir}${weekOn ? `&week=${week}` : ''}${extra}`;
   const list = useQuery({ queryKey: ['register', ws.id, dq, status, followUp, owing, sort, dir, page, weekOn ? week : ''], queryFn: () => api<PatientList>(wsPath(ws.id, qs(`&page=${page}&pageSize=50`))), placeholderData: keepPreviousData });
   const reset = () => setPage(1);

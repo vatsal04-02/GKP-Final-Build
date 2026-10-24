@@ -39,6 +39,15 @@ export default function Dashboard() {
   const enquiryCard = has('contacts');
   const metrics = d ? (clinical ? ws.dashboardMetrics.filter((k) => SLIM.includes(k)) : ws.dashboardMetrics).filter((k) => !(enquiryCard && (k === 'new_contacts' || k === 'conversion'))).map((k) => d.metrics.find((m) => m.key === k)).filter((m): m is NonNullable<typeof m> => !!m) : [];
   const labels = d?.series[0]?.points.map((p) => date(f, `${p.date}T12:00:00Z`)) || [];
+  const aiMetric = d && clinical ? (() => { const m = d.metrics.find((x) => x.key === 'ai_handled'); return m ? <MetricCard m={m} spark={days !== '1' ? series(m.key) : undefined} emphasis /> : null; })() : null;
+  const attentionCard = (
+    <Card className="flex flex-col">
+      <CardHeader title="Needs attention" subtitle={d ? `${d.attention.length ? d.metrics.find((m) => m.key === 'pending_actions')?.value : 0} open` : ' '} action={has('tasks') ? <Link to={`/w/${ws.id}/tasks`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">All tasks <ArrowRight className="h-3 w-3" /></Link> : undefined} />
+      <div className="flex-1 px-3 pb-3 pt-2">
+        {!d ? <SkeletonRows rows={4} className="p-2" /> : d.attention.length ? d.attention.map((tk) => <TaskRow key={tk.id} task={tk} />) : <EmptyState className="py-8" icon={<CheckCircle2 className="h-5 w-5" />} title="All clear" body="Nothing is waiting for a person right now." />}
+      </div>
+    </Card>
+  );
   return (
     <Page
       title={`${greet}, ${firstName(me.user.name, me.user.role)}`}
@@ -46,16 +55,21 @@ export default function Dashboard() {
       actions={<Segmented value={days} onChange={setDays} options={RANGES.map((r) => ({ value: r.value, label: r.label }))} />}
     >
       {q.error ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card> : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {clinical && <DoctorOverview days={days} />}
-          {clinical && <h2 className="pt-2 text-[12px] font-semibold uppercase tracking-wide text-muted">Enquiries &amp; messages</h2>}
-          {enquiryCard && <EnquiryOverview d={d} days={days} />}
-          <section aria-label="Key metrics" className={clinical ? 'grid grid-cols-2 gap-3 md:grid-cols-3' : 'grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6'}>
+          {clinical && <h2 className="border-t border-line pt-6 text-[12px] font-semibold uppercase tracking-wide text-muted">Enquiries &amp; messages</h2>}
+          {clinical ? (
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] [&>*]:min-w-0">
+              {enquiryCard ? <EnquiryOverview d={d} days={days} /> : <div />}
+              <div className="space-y-6">{aiMetric}{attentionCard}</div>
+            </div>
+          ) : enquiryCard && <EnquiryOverview d={d} days={days} />}
+          {!clinical && <section aria-label="Key metrics" className={clinical ? 'grid grid-cols-2 gap-3 md:grid-cols-3' : 'grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6'}>
             {!d ? Array.from({ length: 8 }, (_, i) => <Card key={i} className="p-4"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /><Skeleton className="mt-3 h-3 w-28" /></Card>)
               : metrics.map((m) => <MetricCard key={m.key} m={m} spark={days !== '1' ? series(m.key) : undefined} emphasis={m.key === 'new_contacts' || m.key === 'ai_handled'} />)}
-          </section>
+          </section>}
 
-          <div className={clinical ? 'grid gap-4 xl:grid-cols-2 [&>*]:min-w-0' : 'grid gap-4 xl:grid-cols-3 [&>*]:min-w-0'}>
+          <div className={clinical ? 'hidden' : 'grid gap-4 xl:grid-cols-3 [&>*]:min-w-0'}>
             {!clinical && <Card className="xl:col-span-2">
               <CardHeader title="Conversations" subtitle={has('ai') ? tt('Incoming messages and what the {ai.name} did with them') : 'Incoming messages'} icon={<Sparkles className="h-4 w-4" />} />
               <div className="px-3 pb-3 pt-2">
@@ -67,16 +81,11 @@ export default function Dashboard() {
                 )}
               </div>
             </Card>}
-            <Card className={clinical && !has('bookings') ? 'flex flex-col xl:col-span-2' : 'flex flex-col'}>
-              <CardHeader title="Needs attention" subtitle={d ? `${d.attention.length ? d.metrics.find((m) => m.key === 'pending_actions')?.value : 0} open` : ' '} action={has('tasks') ? <Link to={`/w/${ws.id}/tasks`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">All tasks <ArrowRight className="h-3 w-3" /></Link> : undefined} />
-              <div className="flex-1 px-3 pb-3 pt-2">
-                {!d ? <SkeletonRows rows={4} className="p-2" /> : d.attention.length ? d.attention.map((tk) => <TaskRow key={tk.id} task={tk} />) : <EmptyState className="py-8" icon={<CheckCircle2 className="h-5 w-5" />} title="All clear" body="Nothing is waiting for a person right now." />}
-              </div>
-            </Card>
+            {!clinical && attentionCard}
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3 [&>*]:min-w-0">
-            {has('bookings') && (
+          <div className={clinical ? 'hidden' : 'grid gap-4 xl:grid-cols-3 [&>*]:min-w-0'}>
+            {has('bookings') && !clinical && (
               <Card className="xl:col-span-1">
                 <CardHeader title={tt('Upcoming {booking.plural|lower}')} icon={<CalendarDays className="h-4 w-4" />} action={<Link to={`/w/${ws.id}/bookings`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">View all <ArrowRight className="h-3 w-3" /></Link>} />
                 <div className="px-5 pb-4 pt-2">

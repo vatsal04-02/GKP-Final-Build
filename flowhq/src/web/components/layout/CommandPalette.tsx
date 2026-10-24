@@ -2,12 +2,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, CornerDownLeft, MessageCircle, Moon, Search, User } from 'lucide-react';
+import { ArrowRight, CornerDownLeft, MessageCircle, Search, User } from 'lucide-react';
 import type { Contact, Conversation } from '@core/domain';
 import { MODULES } from '@core/registry';
 import { api, ws as wsPath } from '../../lib/api';
 import { useWs } from '../../lib/workspace';
-import { useTheme } from '../../lib/theme';
 import { icon } from '../../lib/icons';
 import { cn } from '../../lib/cn';
 import { Kbd } from '../ui/primitives';
@@ -16,7 +15,6 @@ import { Modal } from '../ui/feedback';
 interface Item { id: string; group: string; label: string; hint?: string; icon: React.ReactNode; run: () => void }
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { ws, tt, me } = useWs();
-  const { toggle } = useTheme();
   const nav = useNavigate();
   const [q, setQ] = useState('');
   const [i, setI] = useState(0);
@@ -36,7 +34,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const people: Item[] = needle ? (contacts.data || []).filter((c) => match(`${c.name} ${c.phone || ''} ${c.ref || ''}`)).slice(0, 6).map((c) => ({ id: `c-${c.id}`, group: tt('{contact.plural}'), label: c.name, hint: c.phone || undefined, icon: <User className="h-4 w-4" />, run: go(`/w/${ws.id}/contacts/${c.id}`) })) : [];
     const threads: Item[] = needle ? (convs.data || []).filter((c) => match(`${c.contactName} ${c.lastMessagePreview || ''}`)).slice(0, 5).map((c) => ({ id: `t-${c.id}`, group: 'Conversations', label: c.contactName, hint: c.lastMessagePreview || undefined, icon: <MessageCircle className="h-4 w-4" />, run: go(`/w/${ws.id}/inbox/${c.id}`) })) : [];
     const workspaces: Item[] = me.workspaces.filter((w) => w.id !== ws.id && match(`switch ${w.name}`)).map((w) => ({ id: `w-${w.id}`, group: 'Workspaces', label: `Switch to ${w.name}`, icon: <ArrowRight className="h-4 w-4" />, run: go(`/w/${w.id}`) }));
-    const actions: Item[] = [{ id: 'theme', group: 'Actions', label: 'Toggle light / dark', icon: <Moon className="h-4 w-4" />, run: () => { toggle(); onClose(); } }].filter((x) => match(x.label));
+    const actions: Item[] = [];
     return [...pages, ...people, ...threads, ...workspaces, ...actions];
   }, [q, ws, contacts.data, convs.data, me.workspaces]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setI(0), [q]);

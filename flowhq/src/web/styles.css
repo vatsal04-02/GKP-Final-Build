@@ -5,7 +5,7 @@
 
 /* Geeta Krishna Physiotherapy Centre theme. Token names are kept from the original design system so every component keeps working:
    "blue" is the BRAND colour (now deep forest green: active states, links, focus) and "accent" is the orange reserved for primary
-   actions and highlights. Light is the default; dark stays available. Contrast checked against WCAG AA (see IMPLEMENTATION_PLAN.md). */
+   actions and highlights. Light only. Contrast checked against WCAG AA (see IMPLEMENTATION_PLAN.md). */
 :root, [data-theme='light'] {
   --bg: 248 245 236;       /* #F8F5EC warm off-white */
   --bg-2: 237 229 209;     /* #EDE5D1 soft cream (sidebar) */
@@ -24,6 +24,11 @@
   --accent: 244 81 11;     /* #F4510B orange: highlights */
   --accent-strong: 201 63 8; /* #C93F08 orange for button fills (white text = 5.0:1) */
   --sage: 220 233 226;     /* #DCE9E2 */
+  /* Sidebar: deep forest green panel with a soft glow at the top */
+  --side-1: 17 74 64;      /* #114A40 */
+  --side-2: 8 48 41;       /* #083029 */
+  --side-fg: 226 238 232;  /* menu text */
+  --side-muted: 134 170 158;
   --ok: 22 133 74;
   --warn: 180 105 6;
   --bad: 200 38 38;
@@ -32,33 +37,6 @@
   --shadow-pop: 0 18px 48px -14px rgb(13 64 56 / 0.28), 0 0 0 1px rgb(var(--line));
   color-scheme: light;
 }
-[data-theme='dark'] {
-  --bg: 7 26 23;
-  --bg-2: 10 33 29;
-  --surface: 13 42 37;
-  --surface-2: 17 51 45;
-  --field: 10 33 29;
-  --elevated: 21 58 51;
-  --line: 32 72 64;
-  --line-2: 44 92 82;
-  --fg: 244 241 232;
-  --fg-2: 170 188 181;
-  --muted: 128 148 140;
-  --blue: 61 150 130;
-  --blue-bright: 98 186 164;
-  --blue-soft: 160 218 200;
-  --accent: 244 81 11;
-  --accent-strong: 201 63 8;
-  --sage: 32 72 64;
-  --ok: 52 190 112;
-  --warn: 245 158 11;
-  --bad: 240 90 90;
-  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.02) inset, 0 8px 24px -12px rgb(0 0 0 / 0.5);
-  --shadow-lift: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 12px 28px -12px rgb(0 0 0 / 0.65);
-  --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(var(--line));
-  color-scheme: dark;
-}
-
 @layer base {
   html, body, #root { height: 100%; }
   body { @apply bg-bg text-fg antialiased; font-feature-settings: 'cv11', 'ss01', 'ss03'; }
@@ -102,8 +80,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 /* Dashboard motion: calm, transform/opacity only. The reduced-motion rule above switches all of it off. */
 @keyframes fhq-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes fhq-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-.fhq-rise { animation: fhq-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
-.fhq-grow { transform-origin: bottom; animation: fhq-grow 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+.fhq-rise { animation: fhq-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+.fhq-grow { transform-origin: bottom; animation: fhq-grow 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
 
 /* ---------------------------------------------------------------------------------------------------------------------------------
    Motion system. Subtle on purpose: 150-300 ms, ease-out, transform and opacity only, nothing bounces. Every rule here is switched off by
@@ -127,7 +105,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .fhq-toast-in { animation: fhq-toast-in 0.26s var(--ease-out) both; }
 .fhq-toast-out { animation: fhq-toast-out 0.28s ease-in both; }
 .fhq-bar-in { transform-origin: center; animation: fhq-bar-in 0.28s var(--ease-out) both; }
-.fhq-draw { stroke-dasharray: 1; animation: fhq-draw 0.9s var(--ease-out) both; animation-delay: var(--d, 0ms); }
+.fhq-draw { stroke-dasharray: 1; animation: fhq-draw 0.5s var(--ease-out) both; animation-delay: var(--d, 0ms); }
 .fhq-float { animation: fhq-float 4s ease-in-out infinite; }
 .fhq-glow { animation: fhq-glow 18s ease-in-out infinite; }
 .fhq-breathe { animation: fhq-breathe 2.4s ease-in-out infinite; }
@@ -146,8 +124,3 @@ main tbody tr:nth-child(9), main ul.divide-y > li:nth-child(9) { animation-delay
 main tbody tr:nth-child(10), main ul.divide-y > li:nth-child(10) { animation-delay: 270ms; }
 main tbody tr:nth-child(11), main ul.divide-y > li:nth-child(11) { animation-delay: 300ms; }
 main tbody tr:nth-child(n+12), main ul.divide-y > li:nth-child(n+12) { animation-delay: 330ms; }
-
-/* Light/dark switch: colours cross-fade instead of snapping (only while the class is on, only when motion is allowed). */
-@media (prefers-reduced-motion: no-preference) {
-  html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after { transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, fill 0.3s ease, stroke 0.3s ease, box-shadow 0.3s ease !important; }
-}

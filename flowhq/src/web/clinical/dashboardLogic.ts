@@ -56,3 +56,18 @@ export function moneyNote(value: number, state: MoneyState): string | null {
   if (value !== 0) return null;                  // a non-zero amount is real whatever the check says
   return state === 'yes' ? null : state === 'none' ? 'No invoices yet' : 'Not confirmed yet';
 }
+
+// Active patients who have not been seen for a while: "days since" counts from the latest attended visit, or from registration when there was none.
+// Only re-orders and filters what the register already holds; the longest gap comes first.
+export interface ReviewRow { patientId: string; name: string; phone: string; complaint: string; days: number; never: boolean }
+export function patientsToReview(rows: Array<{ patientId: string; name: string; phone: string; mainComplaint: string; status: string; latestVisit: string | null; registeredOn: string | null }>, today: string, minDays = 10, limit = 6): ReviewRow[] {
+  const out: ReviewRow[] = [];
+  for (const r of rows) {
+    if (r.status !== 'Active') continue;
+    const since = r.latestVisit || r.registeredOn;
+    if (!since) continue;
+    const days = daysBetween(since.slice(0, 10), today);
+    if (days >= minDays) out.push({ patientId: r.patientId, name: r.name, phone: r.phone, complaint: r.mainComplaint, days, never: !r.latestVisit });
+  }
+  return out.sort((a, b) => b.days - a.days || a.name.localeCompare(b.name)).slice(0, limit);
+}
