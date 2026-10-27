@@ -44,7 +44,7 @@
   --dur-editorial: 850ms;
 
   --header-h: 76px;
-  --section-pad: clamp(72px, 5vw + 44px, 112px);
+  --section-pad: clamp(40px, 2.6vw + 26px, 68px); /* tighter rhythm: sections feel like a page, not a poster */
   --curve: 0px; /* sections meet on a straight edge with a hairline (was a 28-44px dome) */
   --teal-light: color-mix(in srgb, #0f766e 55%, white); /* tint of brand teal for dark surfaces */
   --focus-ring: #0f766e;

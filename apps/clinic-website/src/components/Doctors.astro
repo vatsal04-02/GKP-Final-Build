@@ -403,6 +403,29 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
     box-shadow: 0 14px 26px -20px rgb(12 59 54 / 0.5);
   }
 
+  /* Scroll-driven drift: the photograph moves a few percent against its frame as the card passes through the viewport
+     (compositor-only; browsers without scroll timelines, and reduced-motion users, keep it still). `scale` and
+     `translate` are the individual properties, so they never fight the reveal's own transform. */
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      @keyframes photo-drift {
+        from {
+          translate: 0 -3.5%;
+        }
+        to {
+          translate: 0 3.5%;
+        }
+      }
+      .doc__scale :global(img) {
+        scale: 1.1;
+        animation-name: photo-drift;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
+        animation-timeline: view();
+      }
+    }
+  }
+
   /* Portraits are tall head-and-shoulders crops: keep the face in frame inside the card's shape */
   .doc__photo :global(.clinic-img) {
     object-position: 50% 14%;
@@ -436,11 +459,7 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
       --r: 6px;
     }
     .doc__photo {
-      height: 460px;
-    }
-    /* Staggered editorial offset */
-    .doc:nth-child(2) {
-      margin-top: 48px;
+      height: 400px;
     }
   }
 </style>
