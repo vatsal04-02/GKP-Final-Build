@@ -132,8 +132,8 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
     position: relative;
     aspect-ratio: 249 / 222;
     overflow: hidden;
-    border-radius: 20px;
-    box-shadow: 0 24px 40px -28px rgb(12 59 54 / 0.55);
+    border-radius: 6px;
+    box-shadow: 0 14px 26px -20px rgb(12 59 54 / 0.5);
     background: var(--color-sand);
   }
   .pair__frame :global(.clinic-img) {
@@ -141,17 +141,17 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
   }
   /* Same wipe as the portraits, played once with the intro block (no fill-forwards: the shadow is never clipped at rest) */
   :global(.js) .head:not(.in-view) .pair__frame {
-    clip-path: inset(0 0 100% 0 round 20px);
+    clip-path: inset(0 0 100% 0 round 6px);
   }
   :global(.js) .head.in-view .pair__frame {
     animation: pair-wipe 950ms var(--ease-soft) 300ms backwards;
   }
   @keyframes pair-wipe {
     from {
-      clip-path: inset(0 0 100% 0 round 20px);
+      clip-path: inset(0 0 100% 0 round 6px);
     }
     to {
-      clip-path: inset(0 0 0 0 round 20px);
+      clip-path: inset(0 0 0 0 round 6px);
     }
   }
   .pair__cap {
@@ -167,7 +167,7 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
     gap: 36px;
   }
   .doc {
-    --r: 24px;
+    --r: 6px;
     --d: calc(var(--i, 0) * 140ms);
     display: grid;
     gap: 1.1rem;
@@ -199,7 +199,7 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
     position: absolute;
     inset: 0;
     border-radius: var(--r);
-    box-shadow: 0 28px 44px -30px rgb(12 59 54 / 0.5);
+    box-shadow: 0 14px 26px -20px rgb(12 59 54 / 0.5);
     transition: opacity 900ms ease-out;
     transition-delay: calc(var(--d) + 250ms);
     pointer-events: none;
@@ -211,7 +211,7 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
     inset: 0;
     z-index: -1;
     border-radius: var(--r);
-    box-shadow: 0 40px 60px -26px rgb(12 59 54 / 0.7);
+    box-shadow: 0 18px 32px -22px rgb(12 59 54 / 0.6);
     opacity: 0;
     transition: opacity 320ms ease;
     pointer-events: none;
@@ -398,9 +398,9 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
     width: 100%;
     aspect-ratio: 16 / 9;
     object-fit: cover;
-    border-radius: 24px;
+    border-radius: 6px;
     background: var(--color-pine);
-    box-shadow: 0 28px 44px -30px rgb(12 59 54 / 0.5);
+    box-shadow: 0 14px 26px -20px rgb(12 59 54 / 0.5);
   }
 
   /* Portraits are tall head-and-shoulders crops: keep the face in frame inside the card's shape */
@@ -433,7 +433,7 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
       gap: 28px;
     }
     .doc {
-      --r: 26px;
+      --r: 6px;
     }
     .doc__photo {
       height: 460px;

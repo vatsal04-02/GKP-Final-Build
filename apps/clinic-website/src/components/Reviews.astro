@@ -8,6 +8,14 @@ import { clinic, links, reviews } from '../data/site';
 const count = reviews.length;
 const mode = count === 0 ? 'placeholder' : count === 1 ? 'featured' : 'cards';
 const visible = Math.min(Math.max(count, 1), 3);
+const initials = (name: string) =>
+  name
+    .replace(/[^\p{L}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('') || 'G';
 ---
 
 <section id="reviews" class="section curve surface-pine on-dark" data-section data-ambient aria-labelledby="reviews-title">
@@ -76,8 +84,11 @@ const visible = Math.min(Math.max(count, 1), 3);
                   <button type="button" class="card__more" aria-expanded="false" hidden>Read more</button>
                 </blockquote>
                 <figcaption>
-                  <strong class="card__author">{r.author}</strong>
-                  {r.source && <span> · {r.source}</span>}
+                  <span class="card__av" aria-hidden="true">{initials(r.author)}</span>
+                  <span class="card__who">
+                    <strong class="card__author">{r.author}</strong>
+                    {r.source && <span> · {r.source}</span>}
+                  </span>
                 </figcaption>
               </figure>
             ))}
@@ -111,8 +122,11 @@ const visible = Math.min(Math.max(count, 1), 3);
                 <button type="button" class="card__more" aria-expanded="false" hidden>Read more</button>
               </blockquote>
               <figcaption>
-                <strong class="card__author" data-author></strong>
-                <span class="card__meta" data-meta hidden></span>
+                <span class="card__av" data-av aria-hidden="true"></span>
+                <span class="card__who">
+                  <strong class="card__author" data-author></strong>
+                  <span class="card__meta" data-meta hidden></span>
+                </span>
               </figcaption>
             </figure>
           </template>
@@ -335,6 +349,8 @@ const visible = Math.min(Math.max(count, 1), 3);
   .slider__track::-webkit-scrollbar {
     display: none;
   }
+  /* Light cards on the pine band: serif quote mark, the review, then an initials avatar with the name.
+     (They override the shared glass look, so no blur or translucent fill is left on them.) */
   .card {
     position: relative;
     flex: 0 0 100%; /* one review at a time on phones */
@@ -342,39 +358,43 @@ const visible = Math.min(Math.max(count, 1), 3);
     display: grid;
     align-content: start;
     gap: 0.9rem;
-    padding: 1.5rem 1.3rem 1.3rem;
-    border-radius: 20px;
+    padding: 1.6rem 1.5rem 1.4rem;
+    border: 0;
+    border-radius: 6px;
+    background: var(--color-ivory);
+    color: var(--color-ink);
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     scroll-snap-align: start;
     overflow: hidden;
-    transition: transform var(--dur-normal) var(--ease-soft), border-color var(--dur-normal) ease, box-shadow var(--dur-normal) ease;
+    transition: transform var(--dur-normal) var(--ease-soft), box-shadow var(--dur-normal) ease;
   }
   @media (hover: hover) {
     .card:hover {
       transform: translateY(-3px);
-      border-color: rgb(233 223 201 / 0.45);
-      box-shadow: 0 16px 30px -18px rgb(0 0 0 / 0.55);
+      box-shadow: 0 18px 30px -18px rgb(0 0 0 / 0.55);
     }
   }
   .card__mark {
-    top: -0.1em;
-    right: 0.2em;
-    font-size: 6rem;
+    position: static;
+    display: block;
+    height: 2rem;
+    font: 400 4.5rem/0.75 var(--font-serif);
+    color: var(--color-teal);
+    opacity: 1;
   }
   .card blockquote {
     position: relative;
     margin: 0;
   }
   .card p {
-    font-size: 1rem;
-    line-height: 1.6;
-    color: rgb(250 248 242 / 0.9);
-  }
-  .card figcaption {
-    font-size: 0.875rem;
-    color: rgb(250 248 242 / 0.7);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: color-mix(in srgb, var(--color-ink) 88%, transparent);
   }
   .card strong {
-    color: var(--color-ivory);
+    color: var(--color-pine);
   }
   /* Review text: three lines, then "Read more" (only offered when the text is actually cut off) */
   :global(.js) .card__text {
@@ -398,7 +418,7 @@ const visible = Math.min(Math.max(count, 1), 3);
     font: inherit;
     font-size: 0.875rem;
     font-weight: 700;
-    color: var(--color-sand);
+    color: var(--color-teal);
     text-decoration: underline;
     text-underline-offset: 3px;
     cursor: pointer;
@@ -407,14 +427,36 @@ const visible = Math.min(Math.max(count, 1), 3);
     display: none;
   }
   .card figcaption {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgb(12 59 54 / 0.14);
+    font-size: 0.875rem;
+    color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+  }
+  .card__av {
+    flex: none;
     display: grid;
-    gap: 0.2rem;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--color-pine);
+    color: var(--color-sand);
+    font: 700 0.8125rem/1 var(--font-sans);
+    letter-spacing: 0.04em;
+  }
+  .card__who {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
   }
   /* Elements below are created by google-reviews.ts at runtime, so they carry no scoping attribute */
   .card__author :global(a) {
     color: inherit;
     text-decoration: none;
-    border-bottom: 1px solid rgb(250 248 242 / 0.3);
+    border-bottom: 1px solid rgb(12 59 54 / 0.3);
   }
   .card__author :global(a:hover) {
     border-bottom-color: currentColor;
@@ -425,7 +467,7 @@ const visible = Math.min(Math.max(count, 1), 3);
     align-items: center;
     gap: 0.2rem 0.6rem;
     font-size: 0.8125rem;
-    color: rgb(250 248 242 / 0.66);
+    color: color-mix(in srgb, var(--color-ink) 65%, transparent);
   }
   .card__meta[hidden] {
     display: none;
@@ -433,10 +475,11 @@ const visible = Math.min(Math.max(count, 1), 3);
   .card__meta :global(.card__stars) {
     letter-spacing: 0.08em;
     font-size: 0.95rem;
-    color: var(--color-sand);
+    color: #c98a10;
   }
   .card__meta :global(.card__stars .off) {
-    opacity: 0.28;
+    color: rgb(12 59 54 / 0.25);
+    opacity: 1;
   }
 
   .slider__foot {

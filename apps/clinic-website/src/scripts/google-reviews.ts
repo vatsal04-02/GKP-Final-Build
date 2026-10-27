@@ -107,6 +107,17 @@ function buildCard(tpl: HTMLTemplateElement, r: PlacesReview, i: number, total: 
 
   const author = card.querySelector<HTMLElement>('[data-author]')!;
   const name = r.authorAttribution?.displayName?.trim() || 'Google reviewer';
+  const av = card.querySelector<HTMLElement>('[data-av]');
+  if (av) {
+    av.textContent =
+      name
+        .replace(/[^\p{L}\s]/gu, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0]!.toUpperCase())
+        .join('') || 'G';
+  }
   const uri = r.authorAttribution?.uri;
   if (uri && /^https:\/\//.test(uri)) {
     const a = document.createElement('a');

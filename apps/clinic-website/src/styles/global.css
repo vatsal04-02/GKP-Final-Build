@@ -44,8 +44,8 @@
   --dur-editorial: 850ms;
 
   --header-h: 76px;
-  --section-pad: clamp(64px, 4.5vw + 34px, 100px);
-  --curve: 28px; /* depth of the curved edge between sections */
+  --section-pad: clamp(72px, 5vw + 44px, 112px);
+  --curve: 0px; /* sections meet on a straight edge with a hairline (was a 28-44px dome) */
   --teal-light: color-mix(in srgb, #0f766e 55%, white); /* tint of brand teal for dark surfaces */
   --focus-ring: #0f766e;
   /* A whisper of sand over ivory: lets neighbouring light sections alternate without a hard colour change */
@@ -190,15 +190,9 @@ html {
   color: var(--color-ivory);
 }
 
-/* Curved dividers. A .curve section rises over the bottom padding of the one above and its top edge
-   is a soft dome, so light and dark bands never meet in a hard cut.
-   The dome is a painted pseudo-element: nothing is ever clipped to a rounded rectangle (doing that
-   to a whole section made scrolling drop frames — see README "Performance"). */
-@media (min-width: 768px) {
-  :root {
-    --curve: 44px;
-  }
-}
+/* Section edges. --curve is 0, so a .curve section starts on a straight edge; a 1px hairline marks the join
+   (dark ink on light surfaces, ivory on dark ones). The old dome machinery stays in case a depth is wanted
+   again, but nothing is clipped or curved by default. */
 .curve {
   position: relative;
   margin-top: calc(var(--curve) * -1);
@@ -215,10 +209,21 @@ html {
   left: 0;
   right: 0;
   top: 0;
-  height: var(--curve);
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  background: var(--surface);
+  height: 1px;
+  z-index: 1;
+  background: rgb(12 59 54 / 0.14);
   pointer-events: none;
+}
+.curve.on-dark::before,
+.curve.surface-pine::before {
+  background: rgb(250 248 242 / 0.16);
+}
+/* Flat, quiet backgrounds: the stacked dots, grids, rings, glow orbs and film grain behind sections are gone
+   (one tone per section; fewer composited layers). The hero keeps its own treatment. */
+.depth,
+.fx,
+section > .bg {
+  display: none !important;
 }
 .section.curve {
   padding-top: calc(var(--section-pad) + var(--curve));
@@ -279,19 +284,22 @@ section[id] {
   letter-spacing: -0.016em;
 }
 .h2 {
-  font-size: min(clamp(28px, 7vw, 56px), clamp(1.875rem, 1.2rem + 1.9vw, 2.875rem)); /* desktop 30 → 46 */
-  line-height: 1.12;
+  font-size: min(clamp(30px, 8vw, 56px), clamp(2rem, 1.1rem + 2.5vw, 3.25rem)); /* desktop 32 → 52 */
+  line-height: 1.08;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
 }
 .h3 {
   font-size: clamp(1.3125rem, 1.1rem + 0.6vw, 1.75rem); /* 21 → 28 */
   line-height: 1.2;
 }
 :root {
-  --lead-fs: clamp(1rem, 0.95rem + 0.2vw, 1.125rem); /* 16 → 18 */
+  --lead-fs: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem); /* 17 → 19 */
 }
 .lead {
   font-size: var(--lead-fs);
-  line-height: 1.65;
+  line-height: 1.7;
+  max-width: 62ch;
   color: color-mix(in srgb, var(--color-ink) 78%, transparent);
 }
 .on-dark .lead {
