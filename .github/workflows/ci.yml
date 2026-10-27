@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Selected workflow: build is reproducible and every simulator suite passes (reference + authoritative)
+      - name: "Selected workflow: build is reproducible and every simulator suite passes (reference + authoritative)"
         run: node n8n/final/run-tests.js
       - name: Shared snippets (rule 10 in CLAUDE.md)
         run: |
@@ -42,3 +42,35 @@ jobs:
           for f in n8n/snippets/*.test.js; do echo "== $f"; node "$f"; done
       - name: W13 AI receptionist
         run: node n8n/w13/w13.test.js
+  deploy-files:
+    # The server files cannot be started in CI, but they can be parsed: compose files, scripts, and the placeholder guard.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose files are valid (main stack, and with FlowHQ)
+        env:
+          N8N_DOMAIN: n8n.example.test
+          N8N_ADMIN_DOMAIN: n8n-admin.example.test
+          GRIST_DOMAIN: crm.example.test
+          FLOWHQ_DOMAIN: app.example.test
+          ACME_EMAIL: ops@example.test
+          GRIST_ADMIN_EMAIL: ops@example.test
+          GRIST_TEAM_NAME: clinic
+          GOOGLE_CLIENT_ID: x
+          GOOGLE_CLIENT_SECRET: x
+          N8N_ENCRYPTION_KEY: x
+          GRIST_SESSION_SECRET: x
+        run: |
+          set -e
+          docker compose -f docker-compose.yml config -q
+          touch flowhq/.env && echo '[]' > flowhq/config/users.json
+          docker compose -f docker-compose.yml -f flowhq/deploy/docker-compose.flowhq.yml config -q
+      - name: Caddyfile is valid
+        run: |
+          docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -e N8N_DOMAIN=n8n.example.test -e GRIST_DOMAIN=crm.example.test -e ACME_EMAIL=ops@example.test caddy:2 caddy validate --config /etc/caddy/Caddyfile
+      - name: Shell scripts parse
+        run: for f in scripts/*.sh; do bash -n "$f"; done
+      - name: deploy.sh refuses an untouched .env.example
+        run: |
+          cp .env.example .env && chmod 600 .env
+          if ./scripts/deploy.sh --check --skip-dns; then echo "deploy.sh accepted placeholder settings"; exit 1; fi

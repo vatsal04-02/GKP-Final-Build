@@ -35,6 +35,8 @@ Vercel → Project → Settings → Environment Variables. **Never** give these 
 Use a **Preview** deployment for the first test. Without these variables the form shows "we couldn't send your request" and offers WhatsApp and the phone number: nothing is lost silently.
 
 ## 2. Server stack (Caddy → n8n + Grist) **[LIVE]**
+**On a fresh VPS (Hostinger or similar) follow `docs/DEPLOY_HOSTINGER.md` instead: it covers server hardening, DNS, the one-command deploy, FlowHQ, backups and updates. The notes below are the background.**
+
 `docker-compose.yml` (production, with Caddy), `docker-compose.nodomain.yml` (Tailscale), `docker-compose.local.yml` (Cloudflare tunnel). Start from `.env.example` (`cp .env.example .env`, `chmod 600 .env`, then `./scripts/gen-secrets.sh` for the encryption key and session secret). **Never change `N8N_ENCRYPTION_KEY` on an existing install** (every stored credential becomes unreadable) and keep the `n8n_data` and `grist_data` volumes.
 `docker-compose.yml` sets `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (the workflow reads `$env.FLOWHQ_*`) and passes the `FLOWHQ_*` variables from `.env` to n8n. Fill them from `config/env/n8n-flowhq.env.example`; leave the safe defaults (`FLOWHQ_WA_SEND_MODE=off`, `FLOWHQ_ALERT_EMAIL_TO` empty, `FLOWHQ_AI_EXTERNAL_ENABLED=false`) until the checklist is done. After editing `.env`:
 ```bash
