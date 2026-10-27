@@ -139,6 +139,21 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
   .pair__frame :global(.clinic-img) {
     display: block;
   }
+  /* Same wipe as the portraits, played once with the intro block (no fill-forwards: the shadow is never clipped at rest) */
+  :global(.js) .head:not(.in-view) .pair__frame {
+    clip-path: inset(0 0 100% 0 round 20px);
+  }
+  :global(.js) .head.in-view .pair__frame {
+    animation: pair-wipe 950ms var(--ease-soft) 300ms backwards;
+  }
+  @keyframes pair-wipe {
+    from {
+      clip-path: inset(0 0 100% 0 round 20px);
+    }
+    to {
+      clip-path: inset(0 0 0 0 round 20px);
+    }
+  }
   .pair__cap {
     position: relative;
     margin-top: 0.9rem;

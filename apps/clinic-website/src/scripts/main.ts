@@ -165,6 +165,66 @@ window.matchMedia('(min-width: 1100px)').addEventListener('change', (e) => {
   if (e.matches) setMenu(false);
 });
 
+/* ---------- Section titles: split into words so CSS can slide them up one after another ---------- */
+
+if (!reduceMotion) {
+  qsa('h2.h2').forEach((h) => {
+    // Only plain-text titles inside a reveal block (it supplies the in-view trigger); the hero is left alone
+    const plain = Array.from(h.childNodes).every((n) => n.nodeType === Node.TEXT_NODE);
+    if (!plain || !h.closest('.reveal') || h.closest('[data-hero]')) return;
+    const words = (h.textContent ?? '').trim().split(/\s+/);
+    h.replaceChildren(
+      ...words.flatMap((word, i) => {
+        const mask = document.createElement('span');
+        const inner = document.createElement('span');
+        mask.className = 'w';
+        inner.className = 'w__i';
+        inner.style.setProperty('--wi', String(Math.min(i, 9)));
+        inner.textContent = word;
+        mask.append(inner);
+        return i === 0 ? [mask] : [document.createTextNode(' '), mask];
+      }),
+    );
+    h.classList.add('is-split');
+  });
+}
+
+/* ---------- Primary buttons lean a few pixels toward the pointer (mouse only; hero and sticky bar excluded) ---------- */
+
+if (!reduceMotion && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+  const PULL = 6; // px at the button's edge
+  qsa<HTMLElement>('a.btn-primary')
+    .filter((btn) => !btn.closest('[data-hero], [data-sticky-cta]'))
+    .forEach((btn) => {
+      btn.addEventListener('pointermove', (event) => {
+        const box = btn.getBoundingClientRect();
+        const dx = (event.clientX - (box.left + box.width / 2)) / (box.width / 2);
+        const dy = (event.clientY - (box.top + box.height / 2)) / (box.height / 2);
+        btn.style.setProperty('--mx', `${(dx * PULL).toFixed(1)}px`);
+        btn.style.setProperty('--my', `${(dy * PULL).toFixed(1)}px`);
+      });
+      btn.addEventListener('pointerleave', () => {
+        btn.style.removeProperty('--mx');
+        btn.style.removeProperty('--my');
+      });
+    });
+}
+
+/* ---------- Swipe strips that overflow need to be reachable from the keyboard ---------- */
+
+const focusableWhenScrolling = qsa('.reel');
+const syncScrollFocus = () =>
+  focusableWhenScrolling.forEach((el) => {
+    if (el.scrollWidth > el.clientWidth + 1) {
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', 'More photographs of the clinic');
+    } else {
+      el.removeAttribute('tabindex');
+    }
+  });
+syncScrollFocus();
+window.addEventListener('resize', syncScrollFocus, { passive: true });
+
 /* ---------- Scroll reveal ---------- */
 
 const revealEls = qsa('.reveal');

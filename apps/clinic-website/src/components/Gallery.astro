@@ -82,7 +82,6 @@ const pending = galleryPending.join(', ').replace(/, ([^,]*)$/, ' and $1');
               {wide.map((g, i) => (
                 <figure
                   class:list={['slide', { 'is-active': i === 0 }]}
-                  role="group"
                   aria-roledescription="slide"
                   aria-label={`${i + 1} of ${wide.length}`}
                   data-gal-slide
@@ -324,6 +323,22 @@ const pending = galleryPending.join(', ').replace(/, ([^,]*)$/, ' and $1');
   }
   .viewer__track::-webkit-scrollbar {
     display: none;
+  }
+  /* The main photograph is uncovered top to bottom once, as the banner arrives. It is a keyframe animation
+     (no fill-forwards), so at rest there is no clip-path left to cut off the focus ring. */
+  :global(.js) .banner:not(.in-view) .viewer__track {
+    clip-path: inset(0 0 100% 0 round 18px);
+  }
+  :global(.js) .banner.in-view .viewer__track {
+    animation: viewer-wipe 1000ms var(--ease-soft) 250ms backwards;
+  }
+  @keyframes viewer-wipe {
+    from {
+      clip-path: inset(0 0 100% 0 round 18px);
+    }
+    to {
+      clip-path: inset(0 0 0 0 round 18px);
+    }
   }
   .slide {
     position: relative;

@@ -144,6 +144,12 @@ const year = new Date().getFullYear();
     .contact {
       justify-content: flex-end;
     }
+    /* Four links per line (4 + 3) instead of six and a lone "Visit" */
+    .links ul {
+      display: grid;
+      grid-template-columns: repeat(4, max-content);
+      gap: 0.4rem 1.6rem;
+    }
   }
   /* The page has 76px of bottom padding for the fixed mobile bar; the footer's colour is painted into it */
   @media (max-width: 767px) {

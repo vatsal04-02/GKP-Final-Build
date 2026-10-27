@@ -363,10 +363,13 @@ section[id] {
   -webkit-tap-highlight-color: transparent;
   transition:
     transform 200ms ease,
+    translate 220ms var(--ease-soft),
     background-color 200ms ease,
     border-color 200ms ease,
     color 200ms ease,
     box-shadow 200ms ease;
+  /* Set by main.ts on mouse devices only: the main buttons lean a few pixels toward the pointer */
+  translate: var(--mx, 0px) var(--my, 0px);
 }
 .btn .icon-arrow {
   transition: transform 200ms ease;
@@ -722,6 +725,29 @@ section[id] {
 }
 .js .reveal.in-view {
   opacity: 1;
+  transform: none;
+}
+
+/* Section titles arrive word by word, each sliding up out of its own line mask (main.ts splits them; no-JS and
+   reduced-motion visitors get the plain heading). The header itself then only fades, so the words are the one
+   thing that moves. The mask is padded so ascenders and descenders are never cut. */
+.js .reveal:has(.is-split) {
+  --ry: 0px;
+}
+.js .is-split .w {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding: 0.1em 0.04em 0.16em;
+  margin: -0.1em -0.04em -0.16em;
+}
+.js .is-split .w__i {
+  display: inline-block;
+  transform: translate3d(0, 110%, 0);
+  transition: transform 750ms var(--ease-soft);
+  transition-delay: calc(var(--wi, 0) * 45ms + 120ms);
+}
+.js .reveal.in-view .is-split .w__i {
   transform: none;
 }
 
