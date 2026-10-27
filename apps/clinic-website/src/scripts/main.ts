@@ -502,7 +502,7 @@ qsa('[data-slider]').forEach((slider) => {
   );
   // Web fonts change line breaks, so re-check which cards are cut off once they have loaded
   void document.fonts?.ready.then(checkClamp);
-  // Fired when the cards are swapped (skeletons → live reviews → …)
+  // Fired when the cards are swapped (built-in → live reviews)
   slider.addEventListener('slider:refresh', () => {
     index = 0;
     viewport.scrollTo({ left: 0, behavior: 'auto' });
