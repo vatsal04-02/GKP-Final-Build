@@ -296,6 +296,18 @@ section[id] {
 :root {
   --lead-fs: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem); /* 17 → 19 */
 }
+/* Body copy: no one-word last lines; headings already balance. Optical sizing and kerning stay on for the serif. */
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+h1,
+h2,
+h3 {
+  font-kerning: normal;
+  font-optical-sizing: auto;
+}
 .lead {
   font-size: var(--lead-fs);
   line-height: 1.7;
@@ -665,6 +677,58 @@ section[id] {
       animation-timing-function: linear;
       animation-fill-mode: both;
       animation-timeline: view();
+    }
+  }
+}
+
+
+/* ---------- Scroll-driven typography (native CSS, compositor-only, no scroll listener) ----------
+   1. The hairline on top of every section draws from left to right as the section rises into view.
+   2. The lead paragraph under each heading fills in word by word (main.ts splits it) as it travels up the screen,
+      so the reader's eye is led down the copy.
+   Both are progressive enhancement: browsers without scroll-driven animations (and reduced-motion users) simply
+   see the finished state, and the paragraph is never split. Longhands on purpose (see the note above). */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @keyframes hair-draw {
+      from {
+        transform: scaleX(0);
+      }
+      to {
+        transform: scaleX(1);
+      }
+    }
+    @keyframes word-in {
+      from {
+        opacity: 0.2;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    .curve {
+      view-timeline-name: --sec;
+      view-timeline-axis: block;
+    }
+    .curve::before {
+      transform-origin: left;
+      animation-name: hair-draw;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --sec;
+      animation-range: entry 0% entry 30%;
+    }
+    .is-scrub {
+      view-timeline-name: --lead;
+      view-timeline-axis: block;
+    }
+    .is-scrub .sw {
+      animation-name: word-in;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --lead;
+      /* each word starts a little after the one before it, spread over the first ~30% of the paragraph's travel */
+      animation-range: cover calc(var(--wi) / var(--wn) * 30%) cover calc(var(--wi) / var(--wn) * 30% + 14%);
     }
   }
 }

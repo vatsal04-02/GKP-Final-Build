@@ -1,22 +1,17 @@
 ---
 import { conditions } from '../data/site';
 
-// Each hotspot jumps to the condition card whose title matches `target` (case-insensitive).
-// x / y are positions on the 420 × 440 drawing below, as percentages of it. `side` is the side its label sits on;
-// `len` is how far (in % of the drawing's width) the leader line runs from the dot to the label column.
-const LABEL_EDGE = 28; // labels live in the outer 28% on each side
-const place = (x: number, side: 'l' | 'r') => (side === 'l' ? x - LABEL_EDGE : 100 - LABEL_EDGE - x);
-
+// Each chip jumps to the condition card whose title matches `target` (case-insensitive).
 const spots = [
-  { key: 'neck', label: 'Neck', target: 'Neck Pain', x: 50, y: 20, side: 'l' },
-  { key: 'shoulder', label: 'Shoulder', target: 'Shoulder Pain / Frozen Shoulder', x: 61.9, y: 24.5, side: 'r' },
-  { key: 'back', label: 'Back', target: 'Back Pain', x: 50, y: 43, side: 'l' },
-  { key: 'knee', label: 'Knee', target: 'Knee Pain / Arthritis', x: 54.8, y: 78.4, side: 'r' },
-  { key: 'leg', label: 'Sciatica', target: 'Sciatica', x: 44.8, y: 89, side: 'l' },
-  { key: 'sports', label: 'Sports', target: 'Sports Injuries', x: 55.7, y: 95.5, side: 'r' },
+  { key: 'neck', label: 'Neck', target: 'Neck Pain' },
+  { key: 'shoulder', label: 'Shoulder', target: 'Shoulder Pain / Frozen Shoulder' },
+  { key: 'back', label: 'Back', target: 'Back Pain' },
+  { key: 'sciatica', label: 'Sciatica', target: 'Sciatica' },
+  { key: 'knee', label: 'Knee', target: 'Knee Pain / Arthritis' },
+  { key: 'sports', label: 'Sports', target: 'Sports Injuries' },
 ] as const;
 
-// A hotspot must never point at a card that does not exist
+// A chip must never point at a card that does not exist
 for (const s of spots) {
   if (!conditions.some((c) => c.title.toLowerCase() === s.target.toLowerCase())) {
     throw new Error(`BodyMap: no condition titled "${s.target}"`);
@@ -25,265 +20,93 @@ for (const s of spots) {
 ---
 
 <div class="bm reveal" data-bodymap>
-  <div class="bm__copy">
-    <p class="bm__count" aria-hidden="true">{String(spots.length).padStart(2, '0')} areas</p>
-    <h3 class="bm__title">Tap where it hurts.</h3>
-    <p class="bm__hint">Pick the area closest to your pain and we’ll jump to the matching card below.</p>
-  </div>
-
-  <div class="bm__fig">
-    <div class="bm__stage">
-      <svg class="bm__svg" viewBox="0 0 420 440" aria-hidden="true" focusable="false">
-        <!-- Fine line-art figure: each limb is an outlined tube (a wide ivory stroke with a slightly narrower pine one on top) -->
-        <g transform="translate(100 0)" stroke-linecap="round" stroke-linejoin="round" fill="none">
-          <g class="o" stroke-width="33.5">
-            <path d="M92 266q-4 76-6 152"></path>
-            <path d="M128 266q4 76 6 152"></path>
-          </g>
-          <g class="c" stroke-width="30.5">
-            <path d="M92 266q-4 76-6 152"></path>
-            <path d="M128 266q4 76 6 152"></path>
-          </g>
-          <g class="o" stroke-width="23.5">
-            <path d="M58 112q-20 62-24 130"></path>
-            <path d="M162 112q20 62 24 130"></path>
-          </g>
-          <g class="c" stroke-width="20.5">
-            <path d="M58 112q-20 62-24 130"></path>
-            <path d="M162 112q20 62 24 130"></path>
-          </g>
-          <path
-            class="body"
-            d="M84 92q26 8 52 0l16 6q14 4 14 20l-6 78q-2 18-8 32l4 34q-46 14-92 0l4-34q-6-14-8-32l-6-78q0-16 14-20z"
-            stroke-width="1.5"></path>
-          <path class="body" d="M99 68h22v20l15 6H84l15-6z" stroke-width="1.5"></path>
-          <ellipse class="body" cx="110" cy="46" rx="24" ry="28" stroke-width="1.5"></ellipse>
-          <!-- the spine, drawn very faintly -->
-          <path d="M110 98v150" stroke="#faf8f2" stroke-opacity=".3" stroke-width="1.25" stroke-dasharray="2 6"></path>
-        </g>
-      </svg>
-
-      {
-        spots.map((s, i) => (
-          <button
-            type="button"
-            class={`hs hs--${s.side}`}
-            style={`left:${s.x}%; top:${s.y}%; --i:${i}; --len:${place(s.x, s.side).toFixed(1)}`}
-            data-bodymap-target={s.target}
-            aria-label={`${s.label} — jump to the ${s.target} card`}
-          >
-            <span class="hs__line" aria-hidden="true"></span>
-            <span class="hs__pulse" aria-hidden="true"></span>
-            <span class="hs__dot" aria-hidden="true"></span>
-            <span class="hs__label" aria-hidden="true">{s.label}</span>
+  <p class="bm__q" id="bm-q">Where does it hurt?</p>
+  <ul class="bm__list" aria-labelledby="bm-q">
+    {
+      spots.map((s) => (
+        <li>
+          <button type="button" class="chip" data-bodymap-target={s.target} aria-label={`${s.label} — jump to the ${s.target} card`}>
+            {s.label}
           </button>
-        ))
-      }
-    </div>
-  </div>
+        </li>
+      ))
+    }
+  </ul>
 
   <p class="sr-only" role="status" aria-live="polite" data-bodymap-status></p>
 </div>
 
 <style>
-  /* A flat pine panel with a hairline border. The orange hotspots are the brightest thing on it. */
+  /* A quick-jump strip between hairlines: the question on the left, the six areas as plain serif links on the right */
   .bm {
-    position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: clamp(1.25rem, 3vw, 2rem);
+    gap: 0.5rem 2rem;
     align-items: center;
-    max-width: 1040px;
-    margin: 0 auto clamp(28px, 4vw, 48px);
-    padding: clamp(1.4rem, 1rem + 2vw, 2.6rem);
-    border: 1px solid rgb(250 248 242 / 0.14);
-    border-radius: 6px;
-    color: var(--color-ivory);
-    background: var(--color-pine);
+    margin: 0 0 clamp(28px, 4vw, 48px);
+    padding-block: 0.6rem;
+    border-block: 1px solid rgb(12 59 54 / 0.2);
   }
-
-  /* ---- Copy ---- */
-  .bm__copy {
-    display: grid;
-    gap: 0.7rem;
-    justify-items: start;
-  }
-  .bm__count {
+  .bm__q {
     margin: 0;
-    padding-bottom: 0.7rem;
-    border-bottom: 1px solid rgb(250 248 242 / 0.22);
     font-size: 0.75rem;
     font-weight: 800;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--color-sand);
+    color: var(--color-teal);
   }
-  .bm__title {
+  .bm__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.4rem;
     margin: 0;
-    font: 400 clamp(1.9rem, 1.3rem + 2vw, 2.75rem) / 1.08 var(--font-serif);
-    letter-spacing: -0.012em;
-    color: var(--color-ivory);
-  }
-  .bm__hint {
-    margin: 0;
-    max-width: 26rem;
-    font-size: 1.0625rem;
-    line-height: 1.65;
-    color: rgb(250 248 242 / 0.82);
-  }
-
-  /* ---- Figure ---- */
-  .bm__fig {
-    display: grid;
-    place-items: center;
-  }
-  .bm__stage {
-    position: relative;
-    width: min(100%, 420px);
-    aspect-ratio: 420 / 440;
-    container-type: inline-size; /* the leader lines are sized in % of this width (cqw) */
-  }
-  .bm__svg {
-    display: block;
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-  }
-  .bm__svg .o {
-    stroke: rgb(250 248 242 / 0.85);
-  }
-  .bm__svg .c {
-    stroke: var(--color-pine);
-  }
-  .bm__svg .body {
-    fill: var(--color-pine);
-    stroke: rgb(250 248 242 / 0.85);
-  }
-
-  /* ---- Hotspots: a 44px touch area around a 14px dot, with a leader line to a permanent label ---- */
-  .hs {
-    position: absolute;
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
     padding: 0;
-    margin: -22px 0 0 -22px;
+    list-style: none;
+  }
+  .chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 0.85rem;
     border: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--color-ivory);
+    background: none;
+    font: 400 1.375rem/1 var(--font-serif);
+    color: var(--color-pine);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
-  .hs__line {
+  /* The underline is a scaled bar (transform only); it draws in from the left on hover and focus */
+  .chip::after {
+    content: '';
     position: absolute;
-    top: 50%;
-    width: calc(var(--len) * 1cqw);
-    height: 1px;
-    background: rgb(250 248 242 / 0.45);
-    transition: background-color var(--dur-fast) ease;
-  }
-  .hs--l .hs__line {
-    right: 50%;
-  }
-  .hs--r .hs__line {
-    left: 50%;
-  }
-  .hs__label {
-    position: absolute;
-    top: 50%;
-    padding: 0.85rem 0.45rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    transform: translateY(-50%);
-    color: var(--color-ivory);
-    transition: color var(--dur-fast) ease;
-  }
-  .hs--l .hs__label {
-    right: calc(50% + var(--len) * 1cqw);
-  }
-  .hs--r .hs__label {
-    left: calc(50% + var(--len) * 1cqw);
-  }
-  .hs__dot {
-    position: relative;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
+    left: 0.85rem;
+    right: 0.85rem;
+    bottom: 9px;
+    height: 2px;
     background: var(--color-cta);
-    border: 2px solid var(--color-ivory);
-    transition: transform var(--dur-fast) var(--ease-soft);
-  }
-  /* One pulse per dot as the panel arrives (transform + opacity only), staggered down the figure; not a loop */
-  .hs__pulse {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 14px;
-    height: 14px;
-    margin: -7px 0 0 -7px;
-    border-radius: 50%;
-    background: var(--color-cta);
-    opacity: 0;
-    pointer-events: none;
-  }
-  :global(.js) .bm.in-view .hs__pulse {
-    animation: hs-pulse 1500ms ease-out both;
-    animation-delay: calc(var(--i) * 160ms + 500ms);
-  }
-  @keyframes hs-pulse {
-    0% {
-      transform: scale(1);
-      opacity: 0.55;
-    }
-    100% {
-      transform: scale(3);
-      opacity: 0;
-    }
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 280ms var(--ease-soft);
   }
   @media (hover: hover) {
-    .hs:hover .hs__dot {
-      transform: scale(1.2);
-    }
-    .hs:hover .hs__label {
-      color: var(--color-sand);
-    }
-    .hs:hover .hs__line {
-      background: var(--color-sand);
+    .chip:hover::after {
+      transform: scaleX(1);
     }
   }
-  .hs:focus-visible {
-    outline: 3px solid var(--color-sand);
-    outline-offset: 0;
+  .chip:focus-visible {
+    outline: 3px solid var(--color-cta);
+    outline-offset: -3px;
   }
-  .hs:focus-visible .hs__label {
-    color: var(--color-sand);
+  .chip:focus-visible::after {
+    transform: scaleX(1);
   }
-  .hs:active .hs__dot {
-    transform: scale(0.92);
+  .chip:active {
+    color: var(--color-teal);
   }
 
-  /* Very narrow phones (320–400px): less padding around the drawing and slightly smaller labels, so every label stays inside it */
-  @media (max-width: 400px) {
+  @media (min-width: 900px) {
     .bm {
-      padding: 1rem 0.9rem;
-    }
-    .hs__label {
-      padding-inline: 0.3rem;
-      font-size: 0.6875rem;
-      letter-spacing: 0.06em;
-    }
-  }
-
-  @media (min-width: 768px) {
-    .bm {
-      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-      gap: clamp(1.5rem, 4vw, 3.5rem);
+      grid-template-columns: auto 1fr;
     }
   }
 </style>

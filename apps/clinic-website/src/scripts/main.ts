@@ -189,6 +189,27 @@ if (!reduceMotion) {
   });
 }
 
+/* ---------- Lead paragraphs: split into words so CSS can fill them in as they scroll up the screen ---------- */
+
+if (!reduceMotion && typeof CSS !== 'undefined' && CSS.supports('animation-timeline: view()')) {
+  qsa('p.lead').forEach((p) => {
+    const plain = Array.from(p.childNodes).every((n) => n.nodeType === Node.TEXT_NODE);
+    const words = (p.textContent ?? '').trim().split(/\s+/).filter(Boolean);
+    if (!plain || words.length < 4 || p.closest('[data-hero]')) return;
+    p.style.setProperty('--wn', String(words.length));
+    p.replaceChildren(
+      ...words.flatMap((word, i) => {
+        const span = document.createElement('span');
+        span.className = 'sw';
+        span.style.setProperty('--wi', String(i));
+        span.textContent = word;
+        return i === 0 ? [span] : [document.createTextNode(' '), span];
+      }),
+    );
+    p.classList.add('is-scrub');
+  });
+}
+
 /* ---------- Primary buttons lean a few pixels toward the pointer (mouse only; hero and sticky bar excluded) ---------- */
 
 if (!reduceMotion && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {

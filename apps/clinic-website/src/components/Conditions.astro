@@ -11,7 +11,7 @@ import { conditionMessage, conditions, whatsappLink, links } from '../data/site'
   <div class="container-site relative">
     <header class="head reveal">
       <div class="head__title">
-        <p class="eyebrow">02 / Conditions</p>
+        <p class="eyebrow">Conditions</p>
         <h2 id="conditions-title" class="h2">Point to the pain. We’ll take it from there.</h2>
       </div>
       <p class="lead head__lead">
@@ -35,7 +35,6 @@ import { conditionMessage, conditions, whatsappLink, links } from '../data/site'
               data-concern={c.title}
             >
               <span class="card__top">
-                <span class="card__no" aria-hidden="true"></span>
                 <span class="card__icon">
                   <Icon name={c.icon} size={19} />
                 </span>
@@ -95,7 +94,6 @@ import { conditionMessage, conditions, whatsappLink, links } from '../data/site'
   /* Ruled "index card" grid: hairlines instead of floating tiles. Numbered, outlined icon, serif title, an action
      line at the foot. Hover fills the card with pine and draws the action line out. */
   .grid {
-    counter-reset: cond;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
@@ -209,27 +207,6 @@ import { conditionMessage, conditions, whatsappLink, links } from '../data/site'
   .card__top {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-  }
-  .cell {
-    counter-increment: cond;
-  }
-  .card__no::before {
-    content: counter(cond, decimal-leading-zero);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    font-variant-numeric: tabular-nums;
-    color: rgb(12 59 54 / 0.55);
-    transition: color 260ms ease;
-  }
-  .card:focus-visible .card__no::before {
-    color: rgb(250 248 242 / 0.7);
-  }
-  @media (hover: hover) {
-    .card:hover .card__no::before {
-      color: rgb(250 248 242 / 0.7);
-    }
   }
   .card__icon {
     display: grid;
@@ -371,9 +348,6 @@ import { conditionMessage, conditions, whatsappLink, links } from '../data/site'
     }
     .card__top {
       display: contents;
-    }
-    .card__no {
-      display: none;
     }
     .card__go {
       display: none;
