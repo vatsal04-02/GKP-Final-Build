@@ -36,7 +36,7 @@ src/components/Booking.astro + src/scripts/booking.ts   The "Book your visit" re
 src/styles/global.css   Design tokens, glass surfaces, buttons, motion system, reduced-motion rules
 src/scripts/main.ts     Progressive enhancement (every feature degrades without JS)
 src/assets/clinic/      Drop real photos here (see below)
-scripts/make-brand-assets.mjs   Regenerates public/og.png and the iOS icon
+scripts/make-logo-assets.mjs    Rebuilds the logo marks, tab icon, iOS icon and public/og.png from src/assets/brand/ (the clinic's two logo files)
 ```
 
 ## Adding real photography

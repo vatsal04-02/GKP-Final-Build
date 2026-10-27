@@ -1,4 +1,7 @@
 /**
+ * SUPERSEDED by scripts/make-logo-assets.mjs (the real logo). Running this overwrites public/og.png and the iOS icon with the old
+ * monogram artwork, so don't.
+ *
  * Generates the social-share image (public/og.png) and iOS icon (public/apple-touch-icon.png).
  * Text is converted to vector outlines from the bundled DM Serif Display font, so output does not
  * depend on system fonts. Run with: node scripts/make-brand-assets.mjs
