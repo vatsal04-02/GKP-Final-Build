@@ -15,7 +15,14 @@ Verified against production, not assumed. "LIVE" means observed working on produ
 | Reminders / follow-ups / review requests to patients | **OFF in effect**: `Reminder_Consent` is empty (no one is eligible), send mode is allowlist | Send_Ledger unchanged |
 | Marketing messages | OFF | none exist |
 
-## Seeded schedules awaiting the owner's approval (production `Doctors` / `Doctor_Schedules` / `Booking_Config`)
+## Staff-managed booking (1 Nov 2026): already live, and it does NOT depend on `booking_enabled`
+**`booking_enabled` is an AI-only switch** (`permissions.ts`: "it never limits what staff may do"; `engine.ts`: `aiOk = channel === 'staff' || aiBookingEnabled`; the token/AI path answers 403 `ai_booking_disabled`). So no production setting was changed to enable staff booking, and `booking_enabled` stays OFF (switching it ON would enable AI booking: not done, per the owner's rule).
+Owner-approved schedules verified against what production serves: Dr. Mahesh Tiwari Mon-Sat morning 09:00-13:00, Dr. Sandeep Tiwari Mon-Sat evening 16:00-20:00, Sunday closed, 30-minute slots, capacity 1, both shifts on, no configuration problems.
+Verified with the REAL FLOW HQ server process and a real Grist, switch OFF (`flowhq/tests/real-grist/staff-booking.real.test.ts`, 9/9): staff create (right doctor and shift, read-back, written with an audit id by the signed-in user), duplicate key replays, a full slot or non-existent slot is refused, move keeps the reference and frees the old slot, cancel is idempotent and keeps the record, every operation and refusal is audited and only an admin can read the log, the outbox is clean, signed-out = 401 everywhere, front desk cannot change settings or the AI switch, a service token cannot use the staff routes, and the AI path cannot create or move while the switch is off.
+**By design, to be decided by the owner:** with the switch OFF the service token can still cancel a patient's OWN existing appointment (needs the patient's phone; frees a slot only; W13 does not do it while AI booking is off). If the owner wants the AI path read-only while OFF, `cancel` in `service.ts` can be gated like create and move (a small change plus test update).
+**Logins:** production has ONE login (an admin). Front-desk and doctor logins do not exist yet; add them to `flowhq/config/users.json` (`role: staff`, a doctor login also `clinician` and `doctorId`; `docs/booking-operations.md`). A doctor login can only manage its own doctor's appointments.
+
+## Seeded schedules (APPROVED by the owner on 1 Nov 2026) (production `Doctors` / `Doctor_Schedules` / `Booking_Config`)
 | Doctor | Shift | Days | Hours |
 |---|---|---|---|
 | Dr. Mahesh Tiwari (DR-001, MPT (PT)) | Morning | Mon-Sat | 09:00-13:00 |
