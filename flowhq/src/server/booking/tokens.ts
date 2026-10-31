@@ -4,7 +4,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
-export const SCOPES = ['config:read', 'availability:read', 'appointments:read', 'appointments:create', 'appointments:update', 'appointments:cancel'] as const;
+export const SCOPES = ['config:read', 'availability:read', 'appointments:read', 'appointments:create', 'appointments:update', 'appointments:cancel', 'payments:read', 'payments:write'] as const;
 export type Scope = (typeof SCOPES)[number];
 export type TokenSource = 'WhatsApp AI' | 'Other';
 export interface TokenRecord { id: string; workspace: string; scopes: Scope[]; source: TokenSource; hash: string; expiresAt?: string; revoked?: boolean; note?: string }

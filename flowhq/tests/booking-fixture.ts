@@ -10,6 +10,8 @@ import { SEED_CONFIG, SEED_DOCTORS, SEED_SCHEDULES } from '../src/server/booking
 import { BT } from '../src/server/booking/schema';
 import { TokenStore, newToken, type TokenRecord } from '../src/server/booking/tokens';
 import { localToEpochSec } from '../src/server/booking/engine';
+import path from 'node:path';
+import { PAYMENT_TABLES } from '../src/server/payments/schema';
 
 export const NOW = Date.UTC(2026, 9, 7, 6, 30);   // Wed 2026-10-07 12:00 IST
 export const THU = '2026-10-08';
@@ -18,6 +20,8 @@ export const M09 = slot('DR-001', THU, '09:00'); export const M0930 = slot('DR-0
 export const ist = (date: string, hhmm: string) => localToEpochSec(date, +hhmm.slice(0, 2) * 60 + +hhmm.slice(3), 'Asia/Kolkata');
 export const rows = (list: Array<Record<string, unknown>>): GristRecord[] => list.map((f, i) => ({ id: i + 1, fields: { ...f } as GristRecord['fields'] }));
 export const PW = 'correct horse 42';
+/** The test clock: every service in the fixture reads it, so a test can move time forward (payment expiry). */
+export const clock = { t: NOW };
 
 export interface Fixture {
   app: ReturnType<typeof createApp>; docs: Record<string, Record<string, GristRecord[]>>; doc: Record<string, GristRecord[]>;
@@ -26,10 +30,11 @@ export interface Fixture {
   api: (path: string, o?: { method?: string; body?: unknown; token?: string | null; headers?: Record<string, string> }) => Promise<{ status: number; json: any; text: string }>;
   fail: { audit: boolean; grist: null | ((method: string, table: string) => boolean) };
   booking: () => Promise<import('../src/server/booking/staff-service').StaffBooking>;
+  payments: () => Promise<import('../src/server/payments/service').PaymentService>;
 }
 
 /** `who` is one of: admin, desk (front desk), mahesh / sandeep (a doctor's own login), linked (doctorId DR-002), vague (partial name), badlink (doctorId that is not a doctor). */
-export async function buildFixture(o: { bookingOn?: boolean; noBookingTables?: boolean; trustProxy?: boolean; tokens?: TokenRecord[]; outboxDir?: string } = {}): Promise<Fixture> {
+export async function buildFixture(o: { bookingOn?: boolean; noBookingTables?: boolean; trustProxy?: boolean; tokens?: TokenRecord[]; outboxDir?: string; payments?: { dir: string; noQr?: boolean; webhookSecret?: string } } = {}): Promise<Fixture> {
   const d = demoDocs(NOW); const docs = d.docs;
   const physio = docs.REGISTRY!.Clinics!.find((r) => r.fields.Clinic_Slug === 'demo-physio')!.fields.Grist_Doc_ID as string;
   const doc = docs[physio]!;
@@ -38,10 +43,12 @@ export async function buildFixture(o: { bookingOn?: boolean; noBookingTables?: b
     const cfg = SEED_CONFIG.map((r) => ({ ...r })); cfg.find((r) => r.Key === 'booking_enabled')!.Value = o.bookingOn ? 'on' : 'off';
     Object.assign(doc, { [BT.config]: rows(cfg), [BT.doctors]: rows(SEED_DOCTORS), [BT.schedules]: rows(SEED_SCHEDULES), [BT.blocks]: [], [BT.audit]: [], [BT.consent]: [], [BT.consentLog]: [] });
   }
+  if (o.payments) for (const t of Object.keys(PAYMENT_TABLES)) doc[t] = [];
+  clock.t = NOW;
   doc[BT.appointments] = [];   // a clean appointments table for the assertions
   const fail: Fixture['fail'] = { audit: false, grist: null };
   const mem = memoryGrist(docs, { failOn: (m, t) => (fail.audit && m === 'POST' && t === BT.audit) || !!fail.grist?.(m, t) });
-  const adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: 'k', registryDocId: 'REGISTRY', timezone: 'Asia/Kolkata', locale: 'en-IN', currency: 'INR', fetchImpl: mem, clinic: loadClinicConfig('config/clinic.json'), cacheMs: 0, now: () => NOW, ...(o.outboxDir ? { auditOutbox: { dir: o.outboxDir, staleMs: 200, waitMs: 1500 } } : {}) });
+  const adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: 'k', registryDocId: 'REGISTRY', timezone: 'Asia/Kolkata', locale: 'en-IN', currency: 'INR', fetchImpl: mem, clinic: loadClinicConfig('config/clinic.json'), cacheMs: 0, now: () => clock.t, ...(o.payments ? { payments: { filesDir: o.payments.dir, qrFile: o.payments.noQr ? path.join(o.payments.dir, 'missing.jpg') : path.resolve('assets/kotak-upi-qr.jpg'), webhookSecret: o.payments.webhookSecret ?? 'whsec_test_0123456789abcdef' } } : {}), ...(o.outboxDir ? { auditOutbox: { dir: o.outboxDir, staleMs: 200, waitMs: 1500 } } : {}) });
   const full = newToken('n8n-test', 'demo-physio'); const records = o.tokens || [full.record];
   const h = hashPassword(PW);
   const users: UserRecord[] = [
@@ -64,5 +71,5 @@ export async function buildFixture(o: { bookingOn?: boolean; noBookingTables?: b
   const parse = async (r: Response) => { const text = await r.text(); let json: any = null; try { json = text ? JSON.parse(text) : null; } catch { /* not json */ } return { status: r.status, json, text }; };
   const s: Fixture['s'] = async (who, path, x = {}) => parse(await app.request(`/api/w/demo-physio/schedule${path}`, { method: x.method || 'GET', headers: { ...(who === 'none' ? {} : { cookie: cookies[who]! }), ...(x.body !== undefined ? { 'content-type': 'application/json' } : {}), ...(x.csrf === false ? {} : { 'x-flowhq-csrf': '1' }), ...x.headers }, body: x.body === undefined ? undefined : JSON.stringify(x.body) }));
   const api: Fixture['api'] = async (path, x = {}) => parse(await app.request(`/api/booking${path}`, { method: x.method || 'GET', headers: { ...(x.token === null ? {} : { authorization: `Bearer ${x.token ?? full.token}` }), ...(x.body !== undefined ? { 'content-type': 'application/json' } : {}), ...x.headers }, body: x.body === undefined ? undefined : JSON.stringify(x.body) }));
-  return { app, docs, doc, token: full.token, tokenRecord: full.record, cookies, s, api, fail, booking: async () => (await adapter.workspace('demo-physio'))!.booking!()! };
+  return { app, docs, doc, token: full.token, tokenRecord: full.record, cookies, s, api, fail, booking: async () => (await adapter.workspace('demo-physio'))!.booking!()!, payments: async () => (await adapter.workspace('demo-physio'))!.payments!()! };
 }

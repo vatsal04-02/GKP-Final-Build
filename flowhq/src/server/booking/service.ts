@@ -32,7 +32,7 @@ export interface AppointmentView {
   patient: { name: string; phone_masked: string }; reason: string; service: string; source: string; created_at: string | null; updated_at: string | null;
 }
 // patientId / stage are for staff bookings: the register patient this is for (must exist, its phone must match), and whether it starts as Pending confirmation.
-export interface CreateInput { slotId: string; patientName: string; patientPhone: string; reason?: string; service?: string; idempotencyKey: string; patientId?: string; stage?: 'Pending confirmation' | 'Confirmed' }
+export interface CreateInput { slotId: string; patientName: string; patientPhone: string; reason?: string; service?: string; idempotencyKey: string; patientId?: string; stage?: 'Pending confirmation' | 'Confirmed'; holdForPayment?: boolean }
 
 export class ConfigUnavailable extends Error {}
 // cfg = the raw Booking_Config rows; setting = what the admin's switch says (the AI may still be failed closed: ai.available is what counts)
@@ -278,7 +278,7 @@ export class BookingService {
         const fields: Record<string, unknown> = {
           Booking_UID: uid, Audit_ID: auditId, ...(lead ? { Lead: lead } : {}), Service: service, Physio: doctor, Start: chk.slot.startSec, End: chk.slot.endSec, Status: 'Booked',
           Patient_ID: patientId, Patient_Name: name, Patient_Phone: ph.phone, Doctor_ID: slot.doctorId, Shift: cap(chk.slot.shift), Slot_Key: i.slotId,
-          Booking_Source: a.source, Appt_Stage: a.kind === 'staff' && i.stage === 'Pending confirmation' ? 'Pending confirmation' : 'Confirmed', Reason: reason, Idem_Key: i.idempotencyKey, Created_At: this.ts(), Updated_At: this.ts(), Created_By: a.id,
+          Booking_Source: a.source, Appt_Stage: (a.kind === 'staff' || i.holdForPayment === true) && i.stage === 'Pending confirmation' ? 'Pending confirmation' : 'Confirmed', Reason: reason, Idem_Key: i.idempotencyKey, Created_At: this.ts(), Updated_At: this.ts(), Created_By: a.id,
         };
         const [id] = await this.grist.add(this.docId, BT.appointments, [fields as never]);
 

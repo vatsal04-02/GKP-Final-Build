@@ -7,6 +7,7 @@ import type {
 
 import type { RecordsService } from '../records/service';
 import type { StaffBooking } from '../booking/staff-service';
+import type { PaymentService } from '../payments/service';
 export type Role = 'admin' | 'staff';
 export interface Viewer { email: string; name: string; role: Role; clinician?: string; doctorId?: string; grants?: string[] }   // doctorId: the stable Doctors.Doctor_ID this login is (booking rights); clinician: the name used on prescriptions   // clinician: set for a doctor's login
 export interface Ctx { viewer: Viewer; now: number }
@@ -57,6 +58,7 @@ export interface WorkspaceBackend {
   records?(): RecordsService | null;
   // Appointment booking (the one service that creates / moves / cancels appointments). Works against the clinic's Grist doc; fails closed if its tables are missing.
   booking?(): StaffBooking | null;
+  payments?(): PaymentService | null;   // UPI payment requests / screenshot review for this workspace (src/server/payments)
   settings(ctx: Ctx): Promise<SettingsView>;
   updateSettings(values: Record<string, string>, ctx: Ctx): Promise<SettingsView>;
 }

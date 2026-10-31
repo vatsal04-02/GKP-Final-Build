@@ -6,8 +6,10 @@ import { bad } from '../records/ids';
 import { readBodyLimited } from '../net';
 import { tokenAllowed, tokenFailed, type Scope, type ServiceToken, type TokenStore } from './tokens';
 import type { BookingActor, BookingService } from './service';
+import type { PaymentService } from '../payments/service';
+import { registerTokenPaymentRoutes } from '../payments/routes';
 
-export interface BookingRouteDeps { tokens: TokenStore; service: (workspace: string) => Promise<BookingService | null>; now?: () => number; clientKey: (c: Context) => string }
+export interface BookingRouteDeps { tokens: TokenStore; service: (workspace: string) => Promise<BookingService | null>; payments?: (workspace: string) => Promise<PaymentService | null>; now?: () => number; clientKey: (c: Context) => string }
 type E = { Variables: { tok: ServiceToken; svc: BookingService } };
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
 const createBody = z.object({
@@ -42,7 +44,8 @@ export function bookingRoutes(d: BookingRouteDeps) {
     try { return JSON.parse(text); } catch { throw bad('invalid_json', 'The body must be JSON', 400); }
   };
 
-  r.get('/config', async (c) => c.json(await need(c, 'config:read').config()));
+  const payments = async (c: Context<E>) => { const p = d.payments ? await d.payments(c.get('tok').workspace) : null; if (!p) throw bad('payments_unavailable', 'Payments are not set up for this clinic', 503); return p; };
+  r.get('/config', async (c) => { const base = await need(c, 'config:read').config(); const p = d.payments ? await d.payments(c.get('tok').workspace) : null; return c.json(p ? { ...base, ...(await p.config().catch(() => ({}))) } : base); });
 
   r.get('/availability', async (c) => {
     const svc = need(c, 'availability:read');
@@ -55,6 +58,11 @@ export function bookingRoutes(d: BookingRouteDeps) {
     const b = createBody.parse(await json(c));
     const header = c.req.header('idempotency-key');
     if (header && b.idempotency_key && header !== b.idempotency_key) throw bad('invalid_idempotency_key', 'The Idempotency-Key header and idempotency_key differ', 400);
+    const pay = d.payments ? await d.payments(c.get('tok').workspace) : null;
+    if (pay && (await pay.gate()).open) {   // payments are open: a WhatsApp booking becomes a HELD appointment + a payment request (same booking engine, same slot rules)
+      const res = await pay.createRequest({ slotId: b.slot_id, patientName: b.patient.name, patientPhone: b.patient.phone, reason: b.reason, idempotencyKey: header || b.idempotency_key || '', channel: 'whatsapp' }, actor(c));
+      return c.json(res, res.replayed ? 200 : 201);
+    }
     const res = await svc.create({ slotId: b.slot_id, patientName: b.patient.name, patientPhone: b.patient.phone, reason: b.reason, service: b.service, idempotencyKey: header || b.idempotency_key || '' }, actor(c));
     return c.json(res, res.replayed ? 200 : 201);
   });
@@ -81,5 +89,7 @@ export function bookingRoutes(d: BookingRouteDeps) {
   });
 
   r.notFound((c) => err(c, 404, 'not_found', 'No such booking endpoint'));
+  const big = async (c: Context<E>): Promise<unknown> => { const text = await readBodyLimited(c, 8_000_000); if (text === null) throw bad('too_large', 'Request body is too large', 413); try { return JSON.parse(text); } catch { throw bad('invalid_json', 'The body must be JSON', 400); } };
+  registerTokenPaymentRoutes(r, { need: (c, scope) => { if (!(c as Context<E>).get('tok').scopes.has(scope)) throw bad('forbidden', `This token may not use ${scope}`, 403); }, payments: (c) => payments(c as Context<E>), actor: (c) => actor(c as Context<E>), json: (c) => big(c as Context<E>), rawBody: async (c, max) => { const t = await readBodyLimited(c, max); if (t === null) throw bad('too_large', 'Request body is too large', 413); return t; } });
   return r;
 }

@@ -8,6 +8,7 @@ import { bad } from '../records/ids';
 import { readBodyLimited } from '../net';
 import type { BookingActor } from './service';
 import type { StaffBooking } from './staff-service';
+import { registerStaffPaymentRoutes } from '../payments/routes';
 
 type E = { Variables: { backend: WorkspaceBackend; ctx: Ctx } };
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
@@ -44,6 +45,7 @@ export function scheduleRoutes() {
   const q = (c: Context<E>, k: string) => c.req.query(k) || undefined;
   const num = (c: Context<E>, k: string) => { const v = c.req.query(k); return v === undefined || v === '' ? undefined : Number(v); };
 
+  registerStaffPaymentRoutes(r, { payments: (c) => { const p = c.get('backend').payments?.(); if (!p) throw bad('payments_unavailable', 'Payments are not set up for this workspace', 404); return p; }, who });
   // ---- reading (any signed-in user with access to the workspace)
   r.get('/schedule/overview', async (c) => c.json(await svc(c).overview(q(c, 'date'), who(c))));
   r.get('/schedule/day', async (c) => c.json(await svc(c).dayView(q(c, 'date') || '', { doctorId: q(c, 'doctor_id'), shift: q(c, 'shift') }, who(c))));
