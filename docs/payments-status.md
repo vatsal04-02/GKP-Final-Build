@@ -1,3 +1,16 @@
+# Payments: OPENED in production on 2 Nov 2026
+
+The owner confirmed in writing (2 Nov 2026) that the Kotak UPI account showing VATSAL TRIPATHI may receive patient fees, and set the fee at ₹500. Applied through Grist with a `Payment_Events` row per setting (actor `owner-directive 2026-11-02`): `consultation_fee_inr=500`, `payee_authorization_note` (recorded), `payee_authorized=on`, then `payments_enabled=on` last. **Rollback:** FLOW HQ > Schedule > Payments > Payments off (patients see nothing new; held bookings expire normally).
+
+Production checks after opening (synthetic bookings only, both cancelled afterwards; every row kept):
+- Token API: payments open, fee 500, payee VATSAL TRIPATHI; `/payments/qr` returns 58,814 bytes, SHA-256 `de47be92…` = the supplied file.
+- **Website through Vercel -> n8n -> FLOW HQ** (the visible section appears because config says open): slots, book (held *Pending confirmation* appointment, reference + ₹500 + deadline), the same request again = the same booking, another person for the same slot = 409, QR identical to the supplied file and refused for another phone, screenshot upload -> `SCREENSHOT_RECEIVED` -> `REVIEW_REQUIRED` with flags (website AI reading is off, so `ocr_unavailable`), the same picture again changes nothing, an SVG is refused (415). Status stayed *under review*; nothing became PAID.
+- **WhatsApp (authorised test number +919322146560 only):** a pending booking made the notifier upload the QR to Meta and send it as an IMAGE with amount, reference, deadline and the "never share your UPI PIN / OTP" warning; the ledger shows the message accepted by Meta with a real message id and status **read**. The connected number is still Meta's TEST number: this is NOT real-patient WhatsApp availability.
+- Cancelling the unpaid bookings freed the slots and the housekeeping set both payments to `CANCELLED`.
+- Existing functions intact: `80-verify` and `health-check.sh` pass; the enquiry path still rejects a consent-less lead; the booking API is not public.
+
+NOT done, and why: (1) **staff approval to PAID in production** needs a front-desk/admin login, which does not exist for Claude, and marking a synthetic booking PAID would record money that never arrived; the approval path is proven on staging (`staging-payments.real.test.ts` step 9) only. (2) **A WhatsApp screenshot from a phone** was not sent (it needs the owner's phone); download-and-store from Meta was proven only against a stub. (3) **No real bank transaction has been verified**, so no payment has been collected or confirmed. The first real one must be checked in the bank statement by staff.
+Note: `scripts/4d/97-ai-booking-api-test.sh` expects an immediately Confirmed booking; with payments open an AI booking is held instead, so that script now stops at its first check. Use the payment flow above for a production test.
 # Payments: status and what is still needed (2 Nov 2026)
 
 Architecture and rules: `docs/payments.md`. This page says what has been PROVEN, where, and what is outstanding. **No automated bank verification exists: every payment is confirmed by staff.**
