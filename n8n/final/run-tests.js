@@ -60,6 +60,18 @@ const TARGETS = {
 // Everything 4C expects still applies; 4d-ai-retry.test.js proves the delta (and runs the retry Code node itself).
 TARGETS.fourd = { ...TARGETS.fourc, file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4d.json'), finalSuites: [...TARGETS.fourc.finalSuites, '4d-ai-retry', '4d-integrity', '4d-allowlist-gate'] };
 
+// Slice 4E: 4D + no quiet hours for staff alerts, hand-off alerts, booking confirmations and replies to a patient who wrote to us (n8n/final/tools/patch-4e-no-quiet-hours.js).
+// Everything 4D expects still applies except the few quiet-hours expectations listed below; 4e-no-quiet-hours.test.js proves the delta.
+TARGETS.foure = { ...TARGETS.fourd, file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4e.json'), finalSuites: [...TARGETS.fourd.finalSuites, '4e-no-quiet-hours'], known: [
+  ...TARGETS.fourd.known,
+  // intended 4E behaviour: a staff alert / booking confirmation is no longer held at 22:30 (the earlier suites asserted the hold); proved the other way round in 4e-no-quiet-hours.test.js
+  ['F-4E-INTENT', /^quiet hours: the lead is stored and answered, the alert is held and the log says why/],
+  ['F-4E-INTENT', /^quiet hours: the booking is stored and answered, the confirmation is NOT sent and the log says why/],
+  ['F-4E-INTENT', /^no alert reached the clinic at all \(WhatsApp held by quiet hours AND e-mail failed\)/],
+  // the 4C build-identity test asserts the 4C candidate is exactly build(candidate); 4E (like 4D before it) changes nodes that patch touches
+  ['F-4E-LAYER', /^build: 13 nodes added \(6 consent \+ 7 W13 booking\)/],
+] };
+
 function runTarget(name, t) {
   const file = TARGETS[name] ? t.file : path.resolve(name);
   console.log(`\n=== ${name}: ${path.relative(process.cwd(), file)}`);
@@ -88,7 +100,7 @@ function runTarget(name, t) {
   if (r.status !== 0) { console.log('  FAIL'); process.exit(1); }
 }
 const arg = process.argv[2];
-const names = arg ? [arg] : ['reference', 'authoritative', 'fourc', 'fourd'];
+const names = arg ? [arg] : ['reference', 'authoritative', 'fourc', 'fourd', 'foure'];
 let bad = 0;
 for (const n of names) bad += runTarget(n, TARGETS[n] || { file: path.resolve(n), env: {}, known: [] });
 process.exit(bad ? 1 : 0);

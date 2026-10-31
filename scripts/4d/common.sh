@@ -7,7 +7,9 @@ F=(-f docker-compose.yml -f flowhq/deploy/docker-compose.flowhq.yml)
 V4_ID=VaZ0abHwRICrx6C0                       # the workflow that is active today (SINGLE-MODEL V4 CRM BOOKING CANDIDATE)
 D4_ID=F4dRetryd0c49396                       # the 4D candidate (its id is fixed in n8n/final/workflows/...candidate4d.json)
 D4_FILE=n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidate4d.json
-CLINIC=demo-clinic                           # Clinic_Slug of the production clinic in the Agency Registry
+E4_ID=F4eNoQuietHrs001                       # the 4E candidate = 4D + no quiet hours for staff alerts and replies (n8n/final/tools/patch-4e-no-quiet-hours.js)
+E4_FILE=n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidate4e.json
+CLINIC=demo-clinic                          # Clinic_Slug of the production clinic in the Agency Registry
 TOKEN_ID=n8n-whatsapp
 SECRETS="$HOME/.4d-secrets"                  # mode 700; secrets live here only for the duration of the cutover, then are shredded
 PUBLIC_N8N="https://$(grep -E '^N8N_DOMAIN=' .env | head -1 | cut -d= -f2- | sed 's/[[:space:]]#.*$//' | sed 's/[[:space:]]*$//')"
