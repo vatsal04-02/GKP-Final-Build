@@ -1,3 +1,5 @@
+# OBSOLETE: DO NOT MOUNT OR DEPLOY THIS FILE. It publishes the whole n8n editor, its REST API and the n8n-only booking API to the internet.
+# The repository's root Caddyfile is the only proxy configuration (docs/security-review.md S1). Kept only because the staging checks measure it.
 {
 	email {$ACME_EMAIL}
 }

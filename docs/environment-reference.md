@@ -5,11 +5,11 @@ Names and meanings only. **No value is recorded here and none should be pasted i
 ## 1. Domains and DNS (A records to the server's IP, before the first start)
 | Variable | Purpose | Public? |
 |---|---|---|
-| `N8N_DOMAIN` | n8n webhooks (Meta, Cal.com, the website form) | yes, but with `Caddyfile.production` **only `/webhook/*` and `/healthz`** |
-| `N8N_ADMIN_DOMAIN` (new, `Caddyfile.production`) | the n8n editor / REST API | no: `ADMIN_ALLOW_CIDR` only |
+| `N8N_DOMAIN` | n8n webhooks (Meta, Cal.com, the website form) | yes, but the root `Caddyfile` publishes **only `/webhook/*` and `/healthz`** |
+| `N8N_ADMIN_DOMAIN` (root `Caddyfile`) | the n8n editor / REST API | no: `ADMIN_ALLOW_CIDR` only |
 | `ADMIN_ALLOW_CIDR` (new) | who may open the editor, e.g. `203.0.113.7/32` (several separated by spaces) | n/a |
 | `GRIST_DOMAIN` | the CRM tables (Google sign-in) | yes (Grist's own login) |
-| `FLOWHQ_DOMAIN` | the FLOW HQ web app | yes (login); `/api/booking/*` not published with `Caddyfile.production` |
+| `FLOWHQ_DOMAIN` | the FLOW HQ web app | yes (login); `/api/booking/*` is answered 404 by the root `Caddyfile` |
 | `ACME_EMAIL` | Let's Encrypt notices | n/a |
 
 ## 2. Services and versions

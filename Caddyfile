@@ -64,5 +64,13 @@
 {$FLOWHQ_DOMAIN:flowhq.localhost} {
 	import secure_headers
 	encode gzip
-	reverse_proxy flowhq:8787
+	# /api/booking/* is the booking API for n8n only (service token). n8n reaches it inside the Docker network (http://flowhq:8787),
+	# so it is not published here. Staff use the signed-in /api/w/... routes, which are unaffected.
+	@booking_api path /api/booking /api/booking/*
+	handle @booking_api {
+		respond "Not found" 404
+	}
+	handle {
+		reverse_proxy flowhq:8787
+	}
 }

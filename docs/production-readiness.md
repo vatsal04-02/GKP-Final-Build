@@ -8,7 +8,7 @@ Blockers, in order:
 1. The deployed n8n workflows were never exported or compared with the repo candidate (no access). Drift is unknown (`docs/n8n-deployed-export-procedure.md`).
 2. WhatsApp was never tested for real (no authorised number or Meta credential). Template approval, `booking_confirmation` / `reminder_*` wording without a Cal.com link, real error codes: unverified.
 3. The AI model was a deterministic stub. A supervised run with the real model and a synthetic patient is required (section 6).
-4. The current proxy file publishes the n8n editor (`docs/security-review.md` S1). Deploy `Caddyfile.production` first.
+4. The proxy: `main`'s root `Caddyfile` is the hardened one (editor on `N8N_ADMIN_DOMAIN` for `ADMIN_ALLOW_CIDR` only; `/api/booking/*` not published). The server may still run the older copy: deploy it and verify from outside (`docs/security-review.md` S1). Never use `flowhq/deploy/Caddyfile`.
 5. Staging used a Grist document built from `grist/schema.md`, not the live one. Rehearse `provision-booking` on a copy of the live document.
 6. Owner decision D2 (registration form) is pending: until reminder consent is recorded, **every automated reminder is suppressed** (deliberate).
 
@@ -38,7 +38,7 @@ Security review: `docs/security-review.md`. Runbooks (monitoring, backup, restor
 Stop at the first failed check. Take backups first (`docs/runbooks.md` section 2).
 1. **Read-only n8n export, sanitize, diff** against `candidatefinal` and `candidate4c`. Reconcile if different.
 2. **Rehearse** on a copy of the live Grist document and on a staging n8n.
-3. **Proxy:** add `N8N_ADMIN_DOMAIN` (DNS) and `ADMIN_ALLOW_CIDR` to `.env`; mount `flowhq/deploy/Caddyfile.production`; `docker compose ... up -d caddy`. Check: `https://<N8N_DOMAIN>/rest/login` is 404, a Meta test delivery to `/webhook/whatsapp-inbound` still works, the editor opens from the allowed address only.
+3. **Proxy:** `N8N_ADMIN_DOMAIN` (DNS A record) and `ADMIN_ALLOW_CIDR` in `.env`; the root `Caddyfile` (not `flowhq/deploy/Caddyfile*`); `./scripts/deploy.sh --check`, then `docker compose ... up -d caddy`. Check: `https://<N8N_DOMAIN>/rest/login` is 404, a Meta test delivery to `/webhook/whatsapp-inbound` still works, the editor opens from the allowed address only.
 4. **FLOW HQ image:** `docker compose -f docker-compose.yml -f flowhq/deploy/docker-compose.flowhq.yml up -d --build flowhq`. Check `/api/health` shows `audit_outbox` ok and run the canary in `docs/booking-operations.md`.
 5. **Provision (additive):** `docker compose exec flowhq node dist/tools/provision-booking.mjs <slug>` (dry run), then `... --apply --seed`. Confirm `booking_enabled` = off. Then `node n8n/production/scripts/migrate-grist.js --doc <docId>` then `--apply`.
 6. **Token and env:** `docker compose exec flowhq node dist/tools/booking-token.mjs n8n-whatsapp <slug> --days 90 --write`; `docker compose restart flowhq`; create credential `FlowHQ Booking API` in n8n; set `FLOWHQ_BOOKING_API_URL=http://flowhq:8787` and `FLOWHQ_AI_MAX_REPLIES_PER_HOUR=12`; recreate n8n.
