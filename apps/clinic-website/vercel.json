@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.geetakrishnaphysiotherapy.co.in" }],
+      "destination": "https://geetakrishnaphysiotherapy.co.in/$1",
+      "permanent": true
+    }
+  ]
+}

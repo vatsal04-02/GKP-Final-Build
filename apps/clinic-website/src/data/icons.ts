@@ -39,6 +39,8 @@ import i_pause from 'lucide-static/icons/pause.svg?raw';
 import i_play from 'lucide-static/icons/play.svg?raw';
 import i_map from 'lucide-static/icons/map.svg?raw';
 import i_user_round from 'lucide-static/icons/user-round.svg?raw';
+import i_brain from 'lucide-static/icons/brain.svg?raw';
+import i_users from 'lucide-static/icons/users.svg?raw';
 
 export const icons = {
   'bone': i_bone,
@@ -79,6 +81,8 @@ export const icons = {
   'play': i_play,
   'map': i_map,
   'user-round': i_user_round,
+  'brain': i_brain,
+  'users': i_users,
 } as const;
 
 export type IconName = keyof typeof icons;

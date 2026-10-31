@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import ClinicImage from './ClinicImage.astro';
 import Icon from './Icon.astro';
 import { getPhoto } from '../lib/photos';
-import { doctorBookMessage, doctors, doctorsPhoto, whatsappLink } from '../data/site';
+import { doctorBookMessage, doctors, doctorsPhoto, doctorsTrust, whatsappLink } from '../data/site';
 
 // Drop public/doctor-intro.mp4 in and the player appears at the next build; without the file nothing is rendered.
 const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4'));
@@ -18,17 +18,25 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
   <div class="container-site relative">
     <div class="layout">
     <header class="head reveal">
-      <p class="eyebrow">Doctors</p>
+      <p class="eyebrow">Our Doctors</p>
       <h2 id="doctors-title" class="h2">Meet the doctors behind your recovery.</h2>
-      <p class="lead">Dr. Sandeep Tiwari and Dr. Mahesh Tiwari lead Geeta Krishna Physiotherapy, both qualified MPT (PT).</p>
+      <p class="lead">
+        A trusted, experienced <strong>physiotherapy team</strong> at Geeta Krishna Physiotherapy, Lucknow, led by two qualified MPT (PT) specialists.
+      </p>
       {
         getPhoto(doctorsPhoto.slot) && (
           <figure class="pair">
             <div class="pair__frame">
-              <ClinicImage photo={doctorsPhoto.slot} alt={doctorsPhoto.alt} sizes="(min-width:1024px) 300px, 80vw" />
+              <ClinicImage photo={doctorsPhoto.slot} alt={doctorsPhoto.alt} sizes="(min-width:1024px) 340px, 80vw" />
             </div>
-            <figcaption class="pair__cap">
-              <span class="tbd">{doctorsPhoto.caption}</span>
+            <figcaption class="pair__labels">
+              {doctors.map((d) => (
+                <span class="pair__label">
+                  <strong>{d.name}</strong>
+                  <span>{d.role}</span>
+                  <span>{d.qualification}</span>
+                </span>
+              ))}
             </figcaption>
           </figure>
         )
@@ -58,17 +66,23 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
             </figure>
 
             <div class="doc__info">
-              <h3 id={`doc-${i}-name`} class="h3 doc__name">{d.name}</h3>
+              <div class="doc__head">
+                <h3 id={`doc-${i}-name`} class="h3 doc__name">{d.name}</h3>
+                <p class="doc__sub">
+                  {d.role} <span class="doc__bar" aria-hidden="true">|</span> {d.qualification}
+                </p>
+              </div>
               <dl class="doc__facts">
                 <div>
                   <dt>Specialisation</dt>
-                  <dd><span class="tbd">{d.specialisation}</span></dd>
+                  <dd><span class="chip">{d.specialisation}</span></dd>
                 </div>
                 <div>
                   <dt>About</dt>
-                  <dd><span class="tbd">{d.bio}</span></dd>
+                  <dd><span class="chip">{d.about}</span></dd>
                 </div>
               </dl>
+              <p class="doc__bio">{d.bio}</p>
               <a
                 class="btn btn-primary ask"
                 href={whatsappLink(doctorBookMessage(d.name))}
@@ -98,6 +112,20 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
         </figure>
       )
     }
+
+    <ul class="assure reveal" aria-label="Why patients trust the team">
+      {
+        doctorsTrust.map((t) => (
+          <li class="assure__item">
+            <Icon name={t.icon} size={30} strokeWidth={1.6} class="assure__icon" />
+            <span class="assure__text">
+              <strong>{t.title}</strong>
+              <span>{t.sub}</span>
+            </span>
+          </li>
+        ))
+      }
+    </ul>
     </div>
   </div>
 </section>
@@ -123,10 +151,14 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
   }
 
   /* Joint photograph (native size is small, so it is kept modest) */
+  .head .lead :global(strong) {
+    font-weight: 700;
+    color: var(--color-ink);
+  }
   .pair {
     position: relative;
-    margin: 0.4rem 0 0;
-    width: min(100%, 300px);
+    margin: 0.4rem 0 1.1rem;
+    width: min(100%, 340px);
   }
   .pair__frame {
     position: relative;
@@ -154,12 +186,33 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
       clip-path: inset(0 0 0 0 round 6px);
     }
   }
-  .pair__cap {
-    position: relative;
-    margin-top: 0.9rem;
+  /* Name plates sit on solid pine over the lower edge of the photo, so they stay legible on any picture */
+  .pair__labels {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
-  .pair__cap :global(.tbd) {
+  .pair__label {
+    display: grid;
+    justify-items: center;
+    gap: 1px;
+    padding: 0.4rem 0.3rem;
+    border-radius: 8px;
+    border: 1px solid rgb(233 223 201 / 0.35);
+    background: var(--color-pine);
+    color: var(--color-ivory);
+    font-size: 0.6875rem;
+    line-height: 1.3;
+    text-align: center;
+    box-shadow: 0 8px 16px -10px rgb(12 59 54 / 0.7);
+  }
+  .pair__label strong {
     font-size: 0.75rem;
+    font-weight: 800;
   }
 
   .cards {
@@ -356,18 +409,50 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
     opacity: 0;
     transform: translate3d(0, 18px, 0);
   }
+  .doc__head {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .doc__sub {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-teal);
+  }
+  .doc__bar {
+    margin-inline: 0.45rem;
+    font-weight: 400;
+  }
   .doc__facts {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.9rem;
+    grid-template-columns: repeat(2, minmax(0, max-content));
+    gap: 0.9rem 1.6rem;
     margin: 0;
-    padding-block: 0.9rem;
-    border-block: 1px solid rgb(12 59 54 / 0.14);
+    padding-top: 0.9rem;
+    border-top: 1px solid rgb(12 59 54 / 0.14);
   }
   .doc__facts div {
     display: grid;
     align-content: start;
-    gap: 0.3rem;
+    justify-items: start;
+    gap: 0.4rem;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.8rem;
+    border: 1px dashed rgb(12 59 54 / 0.5);
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--color-ink);
+  }
+  .doc__bio {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: color-mix(in srgb, var(--color-ink) 86%, transparent);
   }
   .doc__facts dt {
     font-size: 0.6875rem;
@@ -379,13 +464,58 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
   .doc__facts dd {
     margin: 0;
   }
-  .doc__facts :global(.tbd) {
-    font-size: 0.75rem;
-  }
-
   .ask {
     justify-self: start;
     min-height: 48px;
+  }
+
+  /* Four reassurance facts under the cards */
+  .assure {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    margin: 0.4rem 0 0;
+    padding: 0.4rem 0;
+    list-style: none;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-sand) 30%, var(--color-ivory));
+  }
+  .assure__item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.8rem 0.75rem;
+  }
+  @media (min-width: 640px) {
+    .assure__item {
+      gap: 0.8rem;
+      padding: 0.9rem 1rem;
+    }
+  }
+  .assure__item :global(.assure__icon) {
+    flex: none;
+    color: var(--color-teal);
+  }
+  .assure__text {
+    display: grid;
+    gap: 0.1rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+  }
+  .assure__text strong {
+    font-size: 0.9375rem;
+    font-weight: 800;
+    color: var(--color-pine);
+  }
+  @media (min-width: 1024px) {
+    .assure {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .assure__item + .assure__item {
+      border-left: 1px solid rgb(12 59 54 / 0.14);
+    }
   }
 
   /* Optional introduction video (only when public/doctor-intro.mp4 exists) */

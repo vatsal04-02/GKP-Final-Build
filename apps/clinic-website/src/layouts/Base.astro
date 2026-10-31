@@ -2,7 +2,7 @@
 import '../styles/global.css';
 import manropeLatin from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
 import dmSerifLatin from '@fontsource/dm-serif-display/files/dm-serif-display-latin-400-normal.woff2?url';
-import { clinic, faqs, links, seo } from '../data/site';
+import { clinic, conditions, doctors, faqs, links, seo } from '../data/site';
 
 interface Props {
   title?: string;
@@ -17,47 +17,95 @@ const gaId = import.meta.env.PUBLIC_GA_ID;
 // Structured data: only supported types, only verified facts (PRD §34).
 // The review figure is the site's own ("467+" on the page); schema.org needs a plain number, so the plus is dropped.
 const reviewCount = clinic.rating.count.replace(/\D/g, '');
+
+// One linked graph (WebSite → WebPage → clinic → doctors) so search engines and answer engines read the same facts
+// the page shows. Entity ids hang off the site root, so they stay stable however the page is reached.
+const origin = new URL('/', Astro.site).href;
+const ids = {
+  site: `${origin}#website`,
+  page: `${canonical}#webpage`,
+  clinic: `${origin}#clinic`,
+  doctor: (i: number) => `${origin}#doctor-${i + 1}`,
+};
+const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const businessSchema = {
   '@context': 'https://schema.org',
-  '@type': 'Physiotherapy',
-  '@id': `${canonical}#clinic`,
-  name: clinic.name,
-  url: canonical,
-  telephone: clinic.phone.display,
-  image: ogImage,
-  description,
-  address: {
-    '@type': 'PostalAddress',
-    streetAddress: clinic.address.street,
-    addressLocality: clinic.address.city,
-    addressRegion: clinic.address.region,
-    postalCode: clinic.address.postalCode,
-    addressCountry: 'IN',
-  },
-  openingHours: ['Mo-Sa 09:00-13:00', 'Mo-Sa 16:00-20:00'],
-  openingHoursSpecification: [
+  '@graph': [
     {
-      '@type': 'OpeningHoursSpecification',
-      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-      opens: '09:00',
-      closes: '13:00',
+      '@type': 'WebSite',
+      '@id': ids.site,
+      url: origin,
+      name: clinic.name,
+      inLanguage: 'en-IN',
+      publisher: { '@id': ids.clinic },
     },
     {
-      '@type': 'OpeningHoursSpecification',
-      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-      opens: '16:00',
-      closes: '20:00',
+      '@type': 'WebPage',
+      '@id': ids.page,
+      url: canonical,
+      name: title,
+      description,
+      inLanguage: 'en-IN',
+      isPartOf: { '@id': ids.site },
+      about: { '@id': ids.clinic },
+      primaryImageOfPage: { '@type': 'ImageObject', url: ogImage, width: 1200, height: 630 },
+      // Read-aloud hint for voice assistants: the headline answer and the doctors' intro.
+      speakable: { '@type': 'SpeakableSpecification', cssSelector: ['.hero__lead', '#doctors-title', '#doctors .lead'] },
     },
-  ],
-  aggregateRating: {
-    '@type': 'AggregateRating',
-    ratingValue: clinic.rating.value,
-    reviewCount,
-  },
-  hasMap: links.directions,
-  employee: [
-    { '@type': 'Person', name: 'Dr. Sandeep Tiwari', jobTitle: 'Clinic Lead' },
-    { '@type': 'Person', name: 'Dr. Mahesh Tiwari', jobTitle: 'Clinic Lead' },
+    {
+      '@type': 'Physiotherapy',
+      '@id': ids.clinic,
+      name: clinic.name,
+      alternateName: [`${clinic.shortName} Physio`, `${clinic.name} Lucknow`],
+      url: origin,
+      telephone: clinic.phone.tel,
+      image: ogImage,
+      logo: new URL('brand/gkp-mark-pine.webp', Astro.site).href,
+      description,
+      medicalSpecialty: 'https://schema.org/Physiotherapy',
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: `${clinic.address.street}, ${clinic.address.area}`,
+        addressLocality: clinic.address.city,
+        addressRegion: 'Uttar Pradesh',
+        postalCode: clinic.address.postalCode,
+        addressCountry: 'IN',
+      },
+      areaServed: seo.areaServed.map((name) => ({ '@type': 'AdministrativeArea', name })),
+      contactPoint: {
+        '@type': 'ContactPoint',
+        contactType: 'appointments',
+        telephone: clinic.phone.tel,
+        areaServed: 'IN',
+      },
+      openingHoursSpecification: [
+        { '@type': 'OpeningHoursSpecification', dayOfWeek: weekdays, opens: '09:00', closes: '13:00' },
+        { '@type': 'OpeningHoursSpecification', dayOfWeek: weekdays, opens: '16:00', closes: '20:00' },
+      ],
+      availableService: conditions.map((c) => ({ '@type': 'PhysicalTherapy', name: `Physiotherapy for ${c.title}` })),
+      knowsAbout: doctors.flatMap((d) => d.knowsAbout),
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: clinic.rating.value,
+        reviewCount,
+        bestRating: '5',
+      },
+      hasMap: links.directions,
+      employee: doctors.map((_, i) => ({ '@id': ids.doctor(i) })),
+    },
+    ...doctors.map((d, i) => ({
+      '@type': 'Person',
+      '@id': ids.doctor(i),
+      name: d.name,
+      honorificPrefix: 'Dr.',
+      jobTitle: `${d.role} Physiotherapist`,
+      description: d.bio,
+      worksFor: { '@id': ids.clinic },
+      knowsAbout: d.knowsAbout,
+      hasCredential: { '@type': 'EducationalOccupationalCredential', credentialCategory: 'degree', name: d.about },
+      workLocation: { '@id': ids.clinic },
+    })),
   ],
 };
 
@@ -83,9 +131,17 @@ const faqSchema = {
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="alternate" hreflang="en-IN" href={canonical} />
+    <link rel="alternate" hreflang="x-default" href={canonical} />
+    <link rel="sitemap" type="application/xml" href="/sitemap-index.xml" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="author" content={clinic.name} />
     <meta name="theme-color" content="#0C3B36" />
     <meta name="format-detection" content="telephone=no" />
+
+    <!-- Local signals: the clinic's region and place name -->
+    <meta name="geo.region" content="IN-UP" />
+    <meta name="geo.placename" content="Gomti Nagar, Lucknow" />
 
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="en_IN" />
@@ -96,8 +152,13 @@ const faqSchema = {
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:alt" content={`${clinic.name} — Gomti Nagar, Lucknow`} />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={`${clinic.name} — Gomti Nagar, Lucknow`} />
 
     <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

@@ -131,7 +131,10 @@ export const principles = [
   { n: '04', title: 'Local & Accessible', body: 'Gomti Nagar, Lucknow.' },
 ] as const;
 
-/* ---------- Doctors (PRD §14) — unknown details stay TBD ---------- */
+/* ---------- Doctors (PRD §14) ----------
+ * Specialities and bios are the clinic's own wording (supplied for the Doctors section). Experience years,
+ * certifications and awards are still unknown, so none are stated.
+ */
 
 export const doctors = [
   {
@@ -141,9 +144,11 @@ export const doctors = [
     short: 'Dr. Sandeep',
     initials: 'ST',
     qualification: 'MPT (PT)',
-    role: 'Clinic Lead',
-    specialisation: TBD,
-    bio: '[TBD - clinic approval]',
+    role: 'Neuro Specialist',
+    specialisation: 'Neurological Rehabilitation',
+    about: 'MPT (Physiotherapy)',
+    bio: 'Specialises in the physiotherapy management of neurological conditions such as stroke, paralysis, Parkinson’s, spinal cord injuries and other neuro-rehabilitation needs.',
+    knowsAbout: ['Neurological rehabilitation', 'Stroke rehabilitation', 'Paralysis', 'Parkinson’s disease', 'Spinal cord injury'],
   },
   {
     n: '02',
@@ -152,11 +157,21 @@ export const doctors = [
     short: 'Dr. Mahesh',
     initials: 'MT',
     qualification: 'MPT (PT)',
-    role: 'Clinic Lead',
-    specialisation: TBD,
-    bio: '[TBD - clinic approval]',
+    role: 'Ortho Specialist',
+    specialisation: 'Orthopaedic Rehabilitation',
+    about: 'MPT (Physiotherapy)',
+    bio: 'Specialises in the physiotherapy management of orthopaedic and musculoskeletal conditions such as back and neck pain, joint pain, arthritis, post-surgery rehabilitation and sports injuries.',
+    knowsAbout: ['Orthopaedic rehabilitation', 'Back pain', 'Neck pain', 'Arthritis', 'Post-surgery rehabilitation', 'Sports injuries'],
   },
 ] as const;
+
+/** Strip of four facts under the doctor cards. */
+export const doctorsTrust = [
+  { icon: 'shield-check', title: 'Qualified & Experienced', sub: 'MPT (PT) Specialists' },
+  { icon: 'brain', title: 'Neuro & Ortho Expertise', sub: 'Comprehensive Rehabilitation' },
+  { icon: 'users', title: 'Personalised Care', sub: 'Evidence-based Treatment Plans' },
+  { icon: 'map-pin', title: 'Based in Lucknow', sub: 'Geeta Krishna Physiotherapy' },
+] as const satisfies readonly { icon: IconName; title: string; sub: string }[];
 
 /* ---------- Clinic gallery (PRD §15) ----------
  * Photos are picked up by filename from src/assets/clinic/ (gallery-1, gallery-2, …). To add one, drop
@@ -178,11 +193,10 @@ export const gallery = [
 
 export const galleryPending = ['reception', 'equipment'] as const;
 
-/** Joint photo shown with the doctors. Who is pictured is for the clinic to confirm — see caption. */
+/** Joint photo shown with the doctors: Dr. Sandeep Tiwari on the left, Dr. Mahesh Tiwari on the right. */
 export const doctorsPhoto = {
   slot: 'doctors-together',
-  alt: 'Two men in white shirts standing side by side in front of a flowering plant',
-  caption: '[TBD - confirm who is pictured]',
+  alt: 'Dr. Sandeep Tiwari (left) and Dr. Mahesh Tiwari (right), the two MPT (PT) physiotherapists of Geeta Krishna Physiotherapy, Gomti Nagar, Lucknow',
 } as const;
 
 /* ---------- How it works (PRD §16) ---------- */
@@ -255,6 +269,26 @@ export const faqs: Faq[] = [
     a: 'Yes — sports injuries are one of the concerns the clinic provides physiotherapy for. Message or call the clinic to discuss your situation.',
     confirmed: true,
   },
+  {
+    q: 'Which physiotherapy clinic is in Gomti Nagar, Lucknow?',
+    a: `${clinic.name} is at ${clinic.address.street}, ${clinic.address.area}, ${clinic.address.city} ${clinic.address.postalCode}. The clinic is led by two MPT (PT) physiotherapists, Dr. Sandeep Tiwari and Dr. Mahesh Tiwari, and is open Monday to Saturday.`,
+    confirmed: true,
+  },
+  {
+    q: 'Who are the doctors at Geeta Krishna Physiotherapy?',
+    a: 'Dr. Sandeep Tiwari, MPT (PT), is the clinic’s neuro specialist, and Dr. Mahesh Tiwari, MPT (PT), is its ortho specialist. Together they lead the clinic’s physiotherapy team in Gomti Nagar, Lucknow.',
+    confirmed: true,
+  },
+  {
+    q: 'Is there a neuro physiotherapist in Lucknow for stroke or paralysis?',
+    a: 'Yes. Dr. Sandeep Tiwari, MPT (PT), is the neuro specialist at Geeta Krishna Physiotherapy in Gomti Nagar, Lucknow. The clinic provides physiotherapy management of neurological conditions such as stroke, paralysis, Parkinson’s, spinal cord injuries and other neuro-rehabilitation needs.',
+    confirmed: true,
+  },
+  {
+    q: 'Is there an orthopaedic physiotherapist in Lucknow for joint and back pain?',
+    a: 'Yes. Dr. Mahesh Tiwari, MPT (PT), is the ortho specialist at Geeta Krishna Physiotherapy in Gomti Nagar, Lucknow. The clinic provides physiotherapy management of orthopaedic and musculoskeletal conditions such as back and neck pain, joint pain, arthritis, post-surgery rehabilitation and sports injuries.',
+    confirmed: true,
+  },
   { q: 'Do you offer home visits?', a: TBD, confirmed: false },
   { q: 'How long is a session?', a: TBD, confirmed: false },
 ];
@@ -262,7 +296,15 @@ export const faqs: Faq[] = [
 /* ---------- SEO (PRD §34) ---------- */
 
 export const seo = {
-  title: 'Geeta Krishna Physiotherapy | Physiotherapist in Gomti Nagar, Lucknow',
+  title: 'Physiotherapy in Gomti Nagar, Lucknow | Geeta Krishna Physiotherapy',
   description:
-    'Physiotherapy in Gomti Nagar, Lucknow by two MPT doctors. 5.0 rated from 460+ Google reviews. Back pain, sciatica, frozen shoulder, sports injuries. Book on WhatsApp.',
+    'Neuro & ortho physiotherapy in Gomti Nagar, Lucknow by two MPT doctors. Back pain, sciatica, stroke rehab, sports injuries. 5.0 on Google. Book on WhatsApp.',
+  /** Canonical site address — what the sitemap, canonical tags and social previews point at unless PUBLIC_SITE_URL overrides it. */
+  siteUrl: 'https://geetakrishnaphysiotherapy.co.in',
+  /** Places the clinic is searched from; used for structured data only (no unverified claims about travel or coverage). */
+  areaServed: ['Gomti Nagar', 'Viram Khand', 'Lucknow'],
 } as const;
+
+/** Short, factual summary for answer engines (served as /llms.txt) — every line is verified clinic data. */
+export const aboutSummary =
+  'Geeta Krishna Physiotherapy is a physiotherapy clinic in Viram Khand, Gomti Nagar, Lucknow, led by two MPT (PT) physiotherapists: Dr. Sandeep Tiwari (neuro specialist) and Dr. Mahesh Tiwari (ortho specialist).';

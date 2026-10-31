@@ -77,14 +77,22 @@ Everything below is intentionally left as `[TBD - confirm with clinic]` (PRD §3
 - [ ] Doctor portraits: the supplied pair image looks AI-generated/enhanced (a Gemini sparkle sits in the right-hand photo; it falls outside the crops used). Patients will see these faces at the clinic, so swap in unretouched photographs of the doctors if these are not genuine
 - [ ] Gallery photos `gallery-4` … `gallery-7` (the large viewer): they show identifiable patients, so confirm consent; `gallery-6` has a wall board with fee amounts and a doctor's name that are legible at full size (the site deliberately lists no prices and no such doctor) — crop it, swap it, or confirm the board is current; the same board suggests home visits exist, which would settle the `[TBD]` FAQ answer, but nothing on the page claims it until the clinic confirms
 - [ ] Hero video + poster: the supplied loop and the entrance photo both look AI-generated (a small Google sparkle mark sits near the bottom right of the footage, and the signboard in it shows hours 9:00–1:30 / 4:30–8:30, "B.Sc. B.P.T." qualifications, a second phone number, "Since 2004" — none of which match the site). Patients will see this as the clinic, so replace it with real footage or confirm the sign with the clinic. The source is 1280×720, so it is a little soft on very large screens
-- [ ] Doctor specialisation, experience, certifications and bios (`doctors` in `src/data/site.ts`)
+- [ ] Doctor experience, certifications and awards (specialities and bios are in; `doctors` in `src/data/site.ts`)
 - [ ] Set `GOOGLE_PLACES_API_KEY` + `GOOGLE_PLACE_ID` in Vercel (see *Live Google reviews*); confirm the three built-in fallback reviews are approved for use
 - [ ] Home visits: the booking form offers a "Home visit" chip and the FAQ answer is still `[TBD]` — confirm the clinic does them (or remove the chip in `Booking.astro`)
 - [ ] FAQ answers: home visits, session length (`faqs` — unconfirmed ones are excluded from FAQ structured data). The pricing section and the starting-price question were removed; add them back only once the clinic confirms real prices
 - [ ] Sign-off on promise-style copy — "Physiotherapy that puts an expiry date on your pain.", "Gomti Nagar's trusted physio clinic", the first built-in review ("within 3 days he became quite normal"), read as outcome commitments, which PRD §37 steers away from
 - [ ] Clinic's Google Business Profile URL (`links.directions` and `links.reviews` use a Maps search built from the verified address until a place ID is set; the map embed searches for the clinic by name and area — check it lands on the right pin)
-- [ ] Production domain → `PUBLIC_SITE_URL` (for the current deployment: `https://physio-two-umber.vercel.app`; canonical, sitemap and `og:image` are built from it); confirm title/meta description copy. The meta description says "460+ Google reviews" and the structured data says 467 (the figure on the page) — update both as the count grows. A bespoke `og-image.jpg` was not supplied, so social previews keep using the generated `og.png`
+- [x] Production domain: `https://geetakrishnaphysiotherapy.co.in` is the built-in default (`astro.config.mjs` + `seo.siteUrl`) and `www` redirects to it (`vercel.json`); `PUBLIC_SITE_URL` still overrides it. Canonical, sitemap and `og:image` are built from it; confirm title/meta description copy. The meta description says "460+ Google reviews" and the structured data says 467 (the figure on the page) — update both as the count grows. A bespoke `og-image.jpg` was not supplied, so social previews keep using the generated `og.png`
 - [ ] GA4 + Search Console approval
+
+## Local SEO / AEO / GEO
+
+- **Canonical + sitemap** use the production domain; `www` 308-redirects to the bare domain.
+- **Title / description** target "physiotherapy in Gomti Nagar, Lucknow" (`seo` in `site.ts`), with `geo.region` / `geo.placename` meta, an `en-IN` hreflang and full Open Graph + Twitter tags.
+- **Structured data** (one linked `@graph` in `Base.astro`): WebSite, WebPage (with `speakable`), the Physiotherapy clinic (address, hours, areaServed, services, rating), a Person per doctor (credential, specialities), plus `FAQPage` from the confirmed FAQs. No coordinates are published yet: add `geo` once the clinic's Google Business Profile pin is confirmed.
+- **Answer engines:** the FAQ answers "neuro / ortho physiotherapist in Lucknow", who the doctors are and where the clinic is. `/llms.txt` is generated from the same data; `/robots.txt` welcomes search and AI crawlers and keeps only `/api/` out.
+- **Still needs the clinic (off-site, the biggest local lever):** claim and complete the Google Business Profile (same name, address, phone and hours as the site), keep collecting Google reviews, and list the same name/address/phone on Practo and Justdial.
 
 ## Design & accessibility notes
 
