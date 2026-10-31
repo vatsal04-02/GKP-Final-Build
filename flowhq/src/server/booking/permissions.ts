@@ -4,7 +4,7 @@
 //   staff (front desk)         view everything; create / move / cancel / change the status of appointments; add or remove leave and blocked time
 //   staff with a doctor login  view everything; manage ONLY their own doctor's appointments; no blocks, no settings
 // The AI booking switch (`booking_enabled`) is an AI switch only: it never limits what staff may do.
-export type Right = 'view' | 'appointments:write' | 'blocks:write' | 'settings:write' | 'ai_switch' | 'audit:read' | 'consent:record_yes' | 'consent:record_no' | 'consent:correct';
+export type Right = 'view' | 'appointments:write' | 'blocks:write' | 'settings:write' | 'ai_switch' | 'audit:read' | 'consent:record_yes' | 'consent:record_no' | 'consent:correct' | 'payments:review';
 // grants: explicit per-user permissions from users.json. Today only 'consent:write' (lets a non-admin record a reminder-consent YES).
 export interface Identity { role?: 'admin' | 'staff'; clinician?: string; grants?: string[] }
 
@@ -13,6 +13,7 @@ export function can(who: Identity, right: Right): boolean {
   switch (right) {
     case 'view': case 'appointments:write': return true;          // an unknown role is treated as plain staff, never as admin
     case 'blocks:write': return !who.clinician;                    // a doctor's own login cannot close the clinic or block other people's time
+    case 'payments:review': return !who.clinician;                // payment screenshots hold patient data: front desk and admins only, not a doctor's own login
     case 'consent:record_no': return true;                          // a withdrawal can only SUPPRESS reminders, so any authorised staff member may record it
     case 'consent:record_yes': return (who.grants || []).includes('consent:write');   // a YES needs an explicit grant (front desk and doctors alike); admins always (above)
     default: return false;                                         // settings, the AI switch and the audit log are admin only

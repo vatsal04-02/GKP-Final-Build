@@ -23,9 +23,10 @@
     "hash-password": "tsx src/server/tools/hash-password.ts",
     "provision-records": "tsx src/server/tools/provision-records.ts",
     "provision-booking": "tsx src/server/tools/provision-booking.ts",
+    "provision-payments": "tsx src/server/tools/provision-payments.ts",
     "booking-token": "tsx src/server/tools/booking-token.ts",
     "audit-outbox": "tsx src/server/tools/audit-outbox.ts",
-    "build:tools": "esbuild src/server/tools/audit-outbox.ts src/server/tools/provision-booking.ts src/server/tools/provision-records.ts src/server/tools/booking-token.ts --bundle --platform=node --format=esm --target=node20 --outdir=dist/tools --out-extension:.js=.mjs",
+    "build:tools": "esbuild src/server/tools/audit-outbox.ts src/server/tools/provision-booking.ts src/server/tools/provision-payments.ts src/server/tools/provision-records.ts src/server/tools/booking-token.ts --bundle --platform=node --format=esm --target=node20 --outdir=dist/tools --out-extension:.js=.mjs",
     "start:env": "node --env-file=.env dist/server/index.js"
   },
   "dependencies": {

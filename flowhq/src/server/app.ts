@@ -67,7 +67,7 @@ export function createApp(d: AppDeps) {
   });
 
   // ---------------------------------------------------------------- booking service API (token auth, mounted BEFORE the session check below)
-  app.route('/api/booking', bookingRoutes({ tokens: d.bookingTokens || ({ verify: () => null } as unknown as TokenStore), service: async (slug) => (await d.adapter.workspace(slug))?.booking?.() ?? null, now, clientKey: (c) => clientKey(c, trustProxy) }));
+  app.route('/api/booking', bookingRoutes({ tokens: d.bookingTokens || ({ verify: () => null } as unknown as TokenStore), service: async (slug) => (await d.adapter.workspace(slug))?.booking?.() ?? null, payments: async (slug) => (await d.adapter.workspace(slug))?.payments?.() ?? null, now, clientKey: (c) => clientKey(c, trustProxy) }));
 
   // ---------------------------------------------------------------- session
   app.post('/api/auth/login', async (c) => {

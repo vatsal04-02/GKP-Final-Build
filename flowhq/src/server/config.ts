@@ -17,6 +17,9 @@ export interface Config {
   usersJson: string;
   trustProxy: boolean;
   auditOutboxDir: string;
+  paymentFilesDir: string;
+  paymentQrFile: string;
+  paymentWebhookSecret: string;
   auditRequireVolume: boolean;
   auditBreakGlass: boolean;
   bookingTokensFile: string;
@@ -48,7 +51,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     usersJson: env.FLOWHQ_USERS || '',
     trustProxy: !/^(0|false|no|off)$/i.test(env.FLOWHQ_TRUST_PROXY || ''),   // default true: production runs behind Caddy. Set false if FLOW HQ is ever reachable without a proxy.
     auditOutboxDir: env.FLOWHQ_AUDIT_OUTBOX_DIR || path.resolve('config/audit-outbox'),   // on the persistent flowhq_config volume
-    auditRequireVolume: env.FLOWHQ_AUDIT_REQUIRE_VOLUME ? /^(1|true|yes|on)$/i.test(env.FLOWHQ_AUDIT_REQUIRE_VOLUME) : process.platform === 'linux' && env.NODE_ENV === 'production',   // refuse to run on the container's own (ephemeral) layer
+    paymentFilesDir: env.FLOWHQ_PAYMENT_FILES_DIR || path.resolve('config/payment-files'),   // patient payment screenshots: on the persistent flowhq_config volume, never under a public path
+  paymentQrFile: env.FLOWHQ_PAYMENT_QR_FILE || path.resolve('assets/kotak-upi-qr.jpg'),   // the supplied QR, unaltered
+  paymentWebhookSecret: env.FLOWHQ_PAYMENT_WEBHOOK_SECRET || '',   // empty = no provider is connected: provider events are refused
+  auditRequireVolume: env.FLOWHQ_AUDIT_REQUIRE_VOLUME ? /^(1|true|yes|on)$/i.test(env.FLOWHQ_AUDIT_REQUIRE_VOLUME) : process.platform === 'linux' && env.NODE_ENV === 'production',   // refuse to run on the container's own (ephemeral) layer
     auditBreakGlass: /^(1|true|yes|on)$/i.test(env.FLOWHQ_AUDIT_BREAKGLASS || ''),   // emergency only: see docs/booking-operations.md
     bookingTokensFile: env.FLOWHQ_BOOKING_TOKENS_FILE || path.resolve('config/booking-tokens.json'),
     bookingTokensJson: env.FLOWHQ_BOOKING_TOKENS || '',

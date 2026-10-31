@@ -9,6 +9,7 @@ import path from 'node:path';
 import { GristClient } from '../../src/server/grist';
 import { provision } from '../../src/server/records/provision';
 import { provisionBooking } from '../../src/server/booking/provision';
+import { provisionPayments } from '../../src/server/payments/provision';
 import { seedBooking } from '../../src/server/booking/seed';
 import { newToken, type TokenRecord } from '../../src/server/booking/tokens';
 import { hashPassword } from '../../src/server/auth';
@@ -63,6 +64,7 @@ export async function createStaging(slug = 'staging-physio', opts: { seed?: bool
   await provision(client, clinicDocId, true, (l) => log.push(l));   // Clinic Records (Patients ...)
   if (opts.provision === false) return { client, registryDocId, clinicDocId, slug, workspaceId, log };   // a clinic document as the CRM template leaves it: NO booking tables yet (the operator provisions it)
   const pb = await provisionBooking(client, clinicDocId, true, (l) => log.push(l)); if (!pb.appointmentsFound) throw new Error('Appointments table missing after setup');
+  await provisionPayments(client, clinicDocId, true, (l) => log.push(l));   // Booking_Payments, Payment_Events, Payment_Files (additive)
   if (opts.seed !== false) {
     await seedBooking(client, clinicDocId, true, (l) => log.push(l));
     const cfg = await client.records(clinicDocId, 'Booking_Config'); const row = cfg.find((r) => r.fields.Key === 'booking_enabled');
@@ -104,7 +106,7 @@ export async function startServer(s: Staging, o: { outboxDir?: string; configDir
   const port = o.port ?? (o.reuse && !o.freshPort ? o.reuse.port : await freePort());   // a RESTART keeps its port (n8n is configured with the address); a second CONCURRENT instance needs freshPort
   // the repo ships a TypeScript source: run it the way `npm run dev:server` does (tsx), from the flowhq directory
   const env = { ...process.env, PORT: String(port), GRIST_BASE_URL: REAL_URL, GRIST_API_KEY: key(), GRIST_REGISTRY_DOC_ID: s.registryDocId, FLOWHQ_SESSION_SECRET: 'staging-session-secret-0123456789abcdef-xyz', FLOWHQ_SECURE_COOKIES: 'false', FLOWHQ_USERS: JSON.stringify(users),
-    FLOWHQ_BOOKING_TOKENS: JSON.stringify(tokens), FLOWHQ_AUDIT_OUTBOX_DIR: outboxDir, FLOWHQ_AUDIT_REQUIRE_VOLUME: 'false', FLOWHQ_TRUST_PROXY: 'false', FLOWHQ_CLINIC_FILE: path.resolve('config/clinic.json'), FLOWHQ_STATIC_DIR: path.join(configDir, 'no-static'), FLOWHQ_DEMO: '', NODE_ENV: 'test', ...o.env } as NodeJS.ProcessEnv;
+    FLOWHQ_BOOKING_TOKENS: JSON.stringify(tokens), FLOWHQ_AUDIT_OUTBOX_DIR: outboxDir, FLOWHQ_PAYMENT_FILES_DIR: path.join(configDir, 'payment-files'), FLOWHQ_AUDIT_REQUIRE_VOLUME: 'false', FLOWHQ_TRUST_PROXY: 'false', FLOWHQ_CLINIC_FILE: path.resolve('config/clinic.json'), FLOWHQ_STATIC_DIR: path.join(configDir, 'no-static'), FLOWHQ_DEMO: '', NODE_ENV: 'test', ...o.env } as NodeJS.ProcessEnv;
   const proc = spawn(process.execPath, ['--import', 'tsx', 'src/server/index.ts'], { cwd: path.resolve('.'), env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = ''; proc.stdout!.on('data', (d) => { out += d; }); proc.stderr!.on('data', (d) => { out += d; });
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((res) => proc.on('exit', (code, signal) => res({ code, signal })));

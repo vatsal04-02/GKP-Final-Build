@@ -41,7 +41,7 @@ describe('only /api/booking/* is exempt from the cookie and CSRF checks', () => 
       if (isBooking) { booking++; expect(res.status, `${r.method} ${r.path}`).toBe(401); expect(res.json.error.code).toBe('unauthorized'); }
       else { staff++; expect([401, 403], `${r.method} ${r.path}`).toContain(res.status); expect(['signed_out', 'csrf']).toContain(res.json.error.code); }
     }
-    expect(booking).toBe(6); expect(staff).toBeGreaterThan(30);
+    expect(booking).toBe(16); expect(staff).toBeGreaterThan(30);
   });
   it('an unknown path under /api/booking needs the token too (it never reveals what exists)', async () => {
     expect((await raw('/api/booking/nope')).status).toBe(401); expect((await raw('/api/booking/')).status).toBe(401);
@@ -56,7 +56,7 @@ describe('scopes are enforced on every booking route', () => {
     for (const [method, p, body] of calls) { const r = await fx.api(p, { method, token: none.token, ...(body ? { body } : {}) }); expect(r.status, `${method} ${p}`).toBe(403); expect(r.json.error.code).toBe('forbidden'); }
     expect(fx.doc.Appointments).toHaveLength(0);
   });
-  it('the set of scopes is exactly the six the contract documents', () => { expect([...SCOPES]).toEqual(['config:read', 'availability:read', 'appointments:read', 'appointments:create', 'appointments:update', 'appointments:cancel']); });
+  it('the set of scopes is exactly the six booking scopes plus the two payment scopes the contract documents', () => { expect([...SCOPES]).toEqual(['config:read', 'availability:read', 'appointments:read', 'appointments:create', 'appointments:update', 'appointments:cancel', 'payments:read', 'payments:write']); });
 });
 
 describe('the service token never reaches the browser', () => {

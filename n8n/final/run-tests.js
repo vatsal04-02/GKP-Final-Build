@@ -72,6 +72,18 @@ TARGETS.foure = { ...TARGETS.fourd, file: path.join(__dirname, 'workflows', 'Flo
   ['F-4E-LAYER', /^build: 13 nodes added \(6 consent \+ 7 W13 booking\)/],
 ] };
 
+// Slice 4F: 4E + UPI payments (n8n/final/tools/patch-4f-payments.js). Everything 4E expects still applies except the few expectations listed below; the payment behaviour is proved by the real-n8n staging journey (flowhq/tests/real-grist/staging-payments.real.test.ts) and 4f-payments.test.js.
+TARGETS.fourf = { ...TARGETS.foure, file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4f.json'), finalSuites: [...TARGETS.foure.finalSuites, '4f-payments'], known: [...TARGETS.foure.known,
+  // intended 4F additions: the website payments webhook is a new public path, and the payment AI reader / Meta media nodes are new users of the AI and WhatsApp credentials (same roles, more nodes)
+  ['F-4F-INTENT', /^webhook inventory: exactly \/website-lead/],
+  ['F-4F-INTENT', /^credential roles: OpenRouter authenticates ONLY the AI calls/],
+  // inventory / count tests that list what the export contained before payments: one more guard copy in the notifier, one more webhook path, one more FLOW HQ default address
+  ['F-4F-COUNT', /^TLS is always verified; the temporary quiet-hours switch is off everywhere/],
+  ['F-4F-COUNT', /^webhooks: exactly four paths/],
+  ['F-4F-COUNT', /^external hosts appear only as configurable defaults/],
+  ['F-4F-COUNT', /^every copy in the export is the same function/],
+] };
+
 function runTarget(name, t) {
   const file = TARGETS[name] ? t.file : path.resolve(name);
   console.log(`\n=== ${name}: ${path.relative(process.cwd(), file)}`);
@@ -100,7 +112,7 @@ function runTarget(name, t) {
   if (r.status !== 0) { console.log('  FAIL'); process.exit(1); }
 }
 const arg = process.argv[2];
-const names = arg ? [arg] : ['reference', 'authoritative', 'fourc', 'fourd', 'foure'];
+const names = arg ? [arg] : ['reference', 'authoritative', 'fourc', 'fourd', 'foure', 'fourf'];
 let bad = 0;
 for (const n of names) bad += runTarget(n, TARGETS[n] || { file: path.resolve(n), env: {}, known: [] });
 process.exit(bad ? 1 : 0);

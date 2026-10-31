@@ -88,6 +88,7 @@ services:
       # Slice 4C (docs/n8n-4c-changes.md): where W13 reaches the FLOW HQ booking API, over the PRIVATE Docker network (http://flowhq:8787), never the public address.
       # Empty (the default) = W13 offers and books nothing through the CRM. The token is the n8n credential "FlowHQ Booking API", not a variable.
       - FLOWHQ_BOOKING_API_URL=${FLOWHQ_BOOKING_API_URL:-}
+      - FLOWHQ_PAYMENT_OCR_WEBSITE=${FLOWHQ_PAYMENT_OCR_WEBSITE:-false}   # send website visitors' payment screenshots to the external AI reader? OFF until the owner decides (WhatsApp screenshots follow the allowlist rule)
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:

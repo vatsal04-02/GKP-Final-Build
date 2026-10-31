@@ -4,7 +4,7 @@
 export interface Startable { start(): Promise<void>; stop(): Promise<void> }
 export interface OutboxHost {
   listWorkspaces(): Promise<Array<{ id: string }>>;
-  workspace(id: string): Promise<{ booking?: () => Startable | null | undefined } | null | undefined>;
+  workspace(id: string): Promise<{ booking?: () => Startable | null | undefined; payments?: () => Startable | null | undefined } | null | undefined>;
 }
 export interface StartOptions { retryMs?: number; maxRetryMs?: number; log?: (message: string) => void; sleep?: (ms: number) => Promise<void> }
 
@@ -18,9 +18,11 @@ export function startAuditOutboxes(host: OutboxHost, o: StartOptions = {}) {
       try {
         for (const w of await host.listWorkspaces()) {
           if (ready.has(w.id)) continue;
-          const svc = (await host.workspace(w.id))?.booking?.();
+          const ws = await host.workspace(w.id); const svc = ws?.booking?.();
           if (!svc) { ready.add(w.id); continue; }
-          started.set(w.id, svc); await svc.start(); ready.add(w.id);
+          started.set(w.id, svc); await svc.start();
+          const pay = ws?.payments?.(); if (pay) { started.set(`${w.id}:payments`, pay); await pay.start(); }   // payment expiry / release housekeeping (every 60 s)
+          ready.add(w.id);
         }
         if (attempt > 1) log(`FLOW HQ: the audit outbox is open now (after ${attempt} attempts)`);
         return;

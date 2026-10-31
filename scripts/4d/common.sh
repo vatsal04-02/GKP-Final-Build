@@ -9,6 +9,8 @@ D4_ID=F4dRetryd0c49396                       # the 4D candidate (its id is fixed
 D4_FILE=n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidate4d.json
 E4_ID=F4eNoQuietHrs001                       # the 4E candidate = 4D + no quiet hours for staff alerts and replies (n8n/final/tools/patch-4e-no-quiet-hours.js)
 E4_FILE=n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidate4e.json
+F4_ID=F4fPayments0001                         # the 4F candidate = 4E + UPI payments (n8n/final/tools/patch-4f-payments.js)
+F4_FILE=n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidate4f.json
 CLINIC=demo-clinic                          # Clinic_Slug of the production clinic in the Agency Registry
 TOKEN_ID=n8n-whatsapp
 SECRETS="$HOME/.4d-secrets"                  # mode 700; secrets live here only for the duration of the cutover, then are shredded
