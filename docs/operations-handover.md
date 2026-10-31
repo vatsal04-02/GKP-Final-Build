@@ -18,7 +18,7 @@ Website form -> Vercel `/api/enquiry` (validation, rate limit, same-origin, requ
 ## 3. Current switches (all verified)
 | Switch | Value | Meaning |
 |---|---|---|
-| `booking_enabled` (Grist Booking_Config; Schedule page, admin) | OFF | the AI booking switch only; staff can always book, move and cancel |
+| `booking_enabled` (Grist Booking_Config; Schedule page, admin) | OFF | the AI booking switch only; while OFF the AI path cannot create, move OR cancel (cancel gated 1 Nov 2026, commit `c21c707`, verified in production: token cancel answers 403 `ai_booking_disabled`); staff can always book, move and cancel |
 | `FLOWHQ_AI_EXTERNAL_ENABLED` | true | AI provider reachable, but only for the allowlisted number (see next row) |
 | `FLOWHQ_WA_SEND_MODE` / `FLOWHQ_WA_ALLOWLIST` | allowlist / the authorized test number only | nothing reaches any other number; non-allowlisted messages are not sent to the AI |
 | Grist Settings `TEST_MODE` / `TEST_PHONE` | TRUE / the authorized test number | every outgoing message is redirected to the test number |
@@ -38,8 +38,8 @@ Settings corrected on 1 Nov from verified information: `clinic_name` = Geeta Kri
 |---|---|---|
 | Full encrypted backup (n8n, Grist, FLOW HQ volumes, env files, workflow export) | `CONFIRM=yes ./scripts/4d/10-backup.sh` (about 1 minute of downtime) or `./scripts/backup.sh` | latest `~/backups/4d-cutover-20261101-003743/`; checksums verified; restore test of the archive contents done |
 | Encrypted Grist documents, no downtime | `95-ai-external.sh` takes one before it changes anything | `~/backups/pre-ai-20261101-000344/` |
-| **Nightly schedule** | **NOT INSTALLED** (the permission system refused a cron job on the server): run once `cd ~/GKP-Final-Build && ./scripts/install-cron.sh` (02:30 daily, keeps 14 days) | **owner action** |
-| Off-server copy | copy the newest `~/backups/4d-cutover-*` folder to another machine (`scp -r deploy@201.18.202.128:backups/<folder> .`) and compare with `SHA256SUMS` | a copy of the 23:14 backup is on the admin PC; the 00:37 copy was started |
+| **Nightly schedule** | **NOT INSTALLED**: the permission system refused creating a cron job on the server twice (also when the owner asked for it) and it was not bypassed. As `deploy` on the VPS run once `cd ~/GKP-Final-Build && ./scripts/install-cron.sh` (02:30 daily, keeps 14 days, no sudo needed; details `docs/monitoring-and-alerts.md`) | **owner action** |
+| Off-server copy | `C:\Users\vatsa\gkp-backups\4d-cutover-20261101-003743` on the admin PC: **both SHA-256 values match the server's `SHA256SUMS`** (verified 1 Nov 2026); repeat after major changes | done |
 Restore: `docs/runbooks.md` section 3 and `scripts/restore.sh <archive> [--with-config]`. The passphrase is `BACKUP_PASSPHRASE` in `.env`: keep a copy OFF the server.
 
 ## 6. Security controls verified
@@ -50,6 +50,7 @@ SSH key only (no passwords, no root), firewall allows 22/80/443 only, fail2ban a
 2. The real `owner_phone` / `staff_alert_phones` (a WhatsApp number that should receive staff alerts) and confirmation that the Meta templates `new_lead_staff_alert` and `human_handoff_alert` are approved.
 3. The registration form and the Meta-approved reminder/confirmation templates (names, language, status): reminders stay off until explicit, evidenced consent exists for a patient.
 4. A Google review link (or Place ID) if review requests are wanted.
-5. `FLOWHQ_CAL_WEBHOOK_SECRET` (W4 cannot verify Cal.com events without it) before Cal.com is retired.
-6. Staff logins, the nightly backup cron, an uptime monitor on `/api/health` and `/healthz`, and a Telegram chat id (`FLOWHQ_TELEGRAM_CHAT_ID`) so n8n failure alerts (W11) reach someone.
-7. The go-live decision for real patients (`FLOWHQ_WA_SEND_MODE=live`, `TEST_MODE=FALSE`): not done; see `docs/activation-status.md`.
+5. `FLOWHQ_CAL_WEBHOOK_SECRET`: while it is unset W4 refuses every Cal.com event (HTTP 500, nothing written), so Cal.com bookings are not synced. Exact steps: `docs/calcom-webhook-status.md`.
+6. Staff logins, the nightly backup cron, an uptime monitor (account needed; `scripts/health-check.sh` does the same checks without one) and a Telegram chat id (`FLOWHQ_TELEGRAM_CHAT_ID`; the bot credential already exists in n8n) so n8n failure alerts (W11) reach someone. Exact steps: `docs/monitoring-and-alerts.md`.
+7. Proactive workflows W6-W9 are documented in `docs/proactive-workflows.md`; `outcome_checkin`, `review_requests`, `weekly_report_whatsapp` are `on` in Settings (they reach the test number only today): decide whether to turn them off.
+8. The go-live decision for real patients (`FLOWHQ_WA_SEND_MODE=live`, `TEST_MODE=FALSE`): not done; see `docs/activation-status.md`. The website consent text is still versioned `DRAFT-2026-10-v1`: finalise it first.
