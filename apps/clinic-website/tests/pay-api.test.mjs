@@ -42,4 +42,9 @@ test('n8n refusing the secret (403) or failing never leaks: the visitor gets a p
   assert.equal((await call(createHandler({ env: { ...ENV, N8N_PAYMENTS_URL: '' } }), { body: b })).status, 503);
   assert.equal((await call(createHandler({ env: { ...ENV, N8N_WEBHOOK_SECRET: 'sk-or-v1-abcdefghijkl' } }), { body: b })).status, 503);   // an AI key is never accepted as the website secret
 });
+test('a shaped refusal from n8n (403 payments_closed) reaches the visitor as is; n8n\'s own 403 text does not', async () => {
+  const b = { action: 'book', slot_id: 'DR-001|2026-11-03|10:00', patient_name: 'Asha Test', patient_phone: '9876543210', request_id: 'req-abcdefgh-2' };
+  const closed = await call(createHandler({ env: ENV, fetchImpl: up(403, { ok: false, error: 'payments_closed' }) }), { body: b }); assert.equal(closed.status, 403); assert.equal(closed.json.error, 'payments_closed');
+  const own = await call(createHandler({ env: ENV, fetchImpl: up(403, { message: 'Authorization data is wrong!' }) }), { body: b }); assert.equal(own.status, 502); assert.equal(own.json.error, 'unavailable');
+});
 test('shape() keeps nothing the action does not need', () => { assert.deepEqual(shape({ action: 'qr', payment_ref: 'GKA-000123', patient_phone: '9876543210', data_base64: 'x'.repeat(50), junk: 1 }).value, { action: 'qr', payment_ref: 'GKA-000123', patient_phone: '9876543210' }); });

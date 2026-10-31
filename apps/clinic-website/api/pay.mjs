@@ -59,7 +59,7 @@ export function createHandler({ env = process.env, fetchImpl = (...a) => fetch(.
     try {
       const r = await fetchImpl(c.url, { method: 'POST', headers: { 'Content-Type': 'application/json', [c.header]: c.secret }, body: JSON.stringify(v), signal: ctl.signal });
       let data = null; try { data = await r.json(); } catch { /* n8n answered without JSON */ }
-      if (data && typeof data === 'object' && r.status >= 200 && r.status < 500 && r.status !== 403) return { status: r.status, body: data };   // n8n already shaped it: patient-safe wording only
+      if (data && typeof data === 'object' && typeof data.ok === 'boolean' && r.status >= 200 && r.status < 500) return { status: r.status, body: data };   // only our own shaped answers (they carry ok: true/false and patient-safe wording); n8n's own 403 Authorization data is wrong! or an error page is NOT passed on
       log('upstream_failed', { code: r.status }); return { status: 502, body: { ok: false, error: 'unavailable' } };
     } catch (e) { const timeout = e && e.name === 'AbortError'; log(timeout ? 'upstream_timeout' : 'upstream_error'); return { status: timeout ? 504 : 502, body: { ok: false, error: timeout ? 'timeout' : 'unavailable' } }; }
     finally { clearTimeout(timer); }
