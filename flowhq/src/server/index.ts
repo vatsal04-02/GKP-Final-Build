@@ -15,6 +15,7 @@ import { startStaffReplySimulator } from './demo/simulator';
 import { loadClinicConfig } from './clinic';
 import { TokenStore, loadTokens } from './booking/tokens';
 import { RECORD_TABLE_NAMES } from './records/schema';
+import { startAuditOutboxes } from './audit-startup';
 
 export function buildServer(env: NodeJS.ProcessEnv = process.env) {
   const cfg = loadConfig(env);
@@ -73,10 +74,7 @@ if (process.argv[1] && /index\.(ts|js)$/.test(process.argv[1])) {
 
   // Audit outbox: open each workspace's outbox now (not on the first booking), recover anything a crash left half-finished, and keep flushing.
   // On a stop signal, finish and release the outbox lock so the next container starts cleanly. Demo mode has a volatile outbox and nothing to recover.
-  const started: Array<{ stop(): Promise<void> }> = [];
-  if (!cfg.demo) void (async () => {
-    try { for (const w of await adapter.listWorkspaces()) { const svc = (await adapter.workspace(w.id))?.booking?.(); if (svc) { started.push(svc); await svc.start(); } } }
-    catch (e) { console.error(`FLOW HQ: could not start the audit outbox for every workspace (${(e as Error).message})`); }
-  })();
-  for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => { void Promise.allSettled(started.map((s) => s.stop())).finally(() => process.exit(0)); });
+  // It keeps retrying (start-up can beat Grist after a backup or a reboot) instead of staying red until a manual restart: src/server/audit-startup.ts.
+  const outboxes = cfg.demo ? null : startAuditOutboxes(adapter);
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => { void (outboxes ? outboxes.stop() : Promise.resolve()).finally(() => process.exit(0)); });
 }

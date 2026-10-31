@@ -128,8 +128,10 @@ export class BookingService {
   auditHealth() { return this.outbox.health(); }
   /** Open the outbox, recover any operation a crash left half-finished, flush, and keep flushing every 30 s. Safe to call more than once. */
   async start(): Promise<void> {
-    try { await this.outbox.open(); } catch (e) { console.error(`FLOW HQ AUDIT OUTBOX: not available (${(e as Error).message}); bookings are refused until it is`); return; }
-    await this.flushAudit();
+    let opened = true;
+    try { await this.outbox.open(); } catch (e) { opened = false; console.error(`FLOW HQ AUDIT OUTBOX: not available (${(e as Error).message}); bookings are refused until it is. Trying again every 30 s.`); }
+    if (opened) await this.flushAudit();
+    // the 30 s loop also re-opens the outbox (flushOnce), so a temporary failure heals itself
     if (!this.timer) { this.timer = setInterval(() => { void this.flushAudit(); }, 30000); this.timer.unref?.(); }
   }
   async stop() { if (this.timer) { clearInterval(this.timer); this.timer = null; } await this.outbox.close(); }
