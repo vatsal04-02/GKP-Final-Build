@@ -43,7 +43,18 @@ async function startMeta() {
 /** The AI stand-in. An image request (the payment reader) gets the configured reading; anything else is a fixed greeting for the receptionist. */
 async function startAi(F: any) {
   const state = { reading: {} as Record<string, unknown>, mode: 'ok' as 'ok' | 'garbage' | 'error', imageCalls: [] as any[], chatCalls: 0 };
-  const chat = F.fakeOpenRouter(F.fakeClaude(() => ({ ...F.BASE_DECISION, intent: 'greeting', action: 'reply', reply: 'Hello! How can we help you today?', lead_summary: 'Said hello.' })));
+  const decide = (b: any) => {   // the receptionist's stand-in: a greeting, "book me for <day> at <n>", and the patient's YES to the clinic's question
+    const facts = b.system.map((x: { text: string }) => x.text).join('\n'); const text = String(b.messages[0].content).replace(/<\/?\[?[A-Za-z_]*\]?_?message>/gi, '').trim();
+    const recent = facts.slice(Math.max(0, facts.lastIndexOf('RECENT CONVERSATION (oldest first)'))); const lastClinic = [...(recent.match(/^- clinic[^\n]*$/gim) || [])].pop() || '';
+    const dateOf = (label: string) => (facts.match(new RegExp(`^- (\\d{4}-\\d{2}-\\d{2}) = \\w+ ${label}`, 'm')) || [])[1] || null;
+    const hhmm = (h: string, ap?: string) => { let n = Number(h.split(':')[0]); const m = h.split(':')[1] || '00'; if (ap === 'PM' && n < 12) n += 12; if (ap === 'AM' && n === 12) n = 0; return `${String(n).padStart(2, '0')}:${m}`; };
+    const d = JSON.parse(JSON.stringify(F.BASE_DECISION));
+    if (/^\s*yes/i.test(text)) { const m = lastClinic.match(/Shall I book (\w{3} \d{2} \w{3}) at (\d{1,2}:\d{2}) (AM|PM)/); if (m) return Object.assign(d, { intent: 'book_appointment', action: 'book_slot', confidence: 0.95, lead_stage: 'hot', booking: { date: dateOf(m[1]!), time: hhmm(m[2]!, m[3]), time_window: null } }); }
+    const m = text.match(/book me for (\w+) at (\d+)/i);
+    if (m) return Object.assign(d, { intent: 'book_appointment', action: 'book_slot', confidence: 0.95, lead_stage: 'hot', booking: { date: (facts.match(new RegExp(`^- (\\d{4}-\\d{2}-\\d{2}) = ${m[1]!.toLowerCase()}`, 'm')) || [])[1] || null, time: hhmm(`${m[2]}:00`, Number(m[2]) < 9 ? 'PM' : undefined), time_window: null }, reply: 'ok' });
+    return Object.assign(d, { intent: 'greeting', action: 'reply', reply: 'Hello! How can we help you today?', lead_summary: 'Said hello.' });
+  };
+  const chat = F.fakeOpenRouter(F.fakeClaude((b: unknown) => decide(b)));
   const server = http.createServer(async (rq, rs) => {
     const body = JSON.parse((await readRaw(rq)).toString('utf8') || '{}'); const content = body.messages?.[1]?.content;
     const isImage = Array.isArray(content) && content.some((p: any) => p.type === 'image_url');
@@ -149,10 +160,15 @@ d('STAGING PAYMENTS: real n8n (4F) + real Grist + real FLOW HQ (WhatsApp and the
     const bad = await site({ action: 'screenshot', payment_ref: refC, patient_phone: '9000020089', data_base64: Buffer.from('<svg onload=alert(1)></svg>').toString('base64'), mime: 'image/svg+xml' }); expect(bad.status).toBe(415);
     expect((await site({ action: 'screenshot', payment_ref: refC, patient_phone: '9000099999', data_base64: png().toString('base64') })).status).toBe(404);
   }, 240000);
-  it('6. WhatsApp: a booking made through the ordinary booking call becomes a held appointment; the notifier sends the QR IMAGE and the instructions, once', async () => {
+  it('6. WhatsApp: a booking made through the real conversation becomes a held appointment (the reply says so); the notifier sends the QR IMAGE and the instructions, once', async () => {
     const r = await metaText('Hello', 'wamid.PAYHELLO1'); expect(r.status).toBe(200); await waitFor(() => toPatient().length >= 1, 90000, 'the receptionist\'s greeting');   // creates the lead and the conversation
-    const ai1 = await flow.api('/appointments', { method: 'POST', headers: { 'idempotency-key': 'wa-pay-key-0001-abcd' }, body: { slot_id: slotId('DR-002', DAY, '16:00'), patient: { name: 'Staging Patient', phone: PATIENT } } });
-    expect(ai1.status, ai1.text).toBe(201); expect(ai1.json.appointment.status).toBe('Pending confirmation'); waRef = ai1.json.payment.payment_ref; expect((await payOf(waRef)).Channel).toBe('whatsapp');
+    const say = async (text: string, id: string) => { const n0 = toPatient().length; const r2 = await metaText(text, id); expect(r2.status).toBe(200); await waitFor(() => toPatient().length > n0, 90000, `the clinic's answer to "${text}"`); return toPatient().at(-1)!.text || ''; };
+    const WORDS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']; const word = WORDS[new Date(`${DAY}T12:00:00Z`).getUTCDay()]!;
+    const q = await say(`Book me for ${word} at 4`, 'wamid.PAYBOOK1'); expect(q).toMatch(/^Shall I book .* at 4:00 PM with Dr\. Sandeep Tiwari\? Reply YES to confirm\.$/);
+    const told = await say('Yes', 'wamid.PAYBOOK2');   // the receptionist books through FLOW HQ, which (payments open) holds the time and creates the payment request
+    expect(told).toMatch(/^Your time is held for you: /); expect(told).toMatch(/pay ₹500 using the QR code/); expect(told).not.toMatch(/is booked|See you then/);
+    waRef = (await pay()).find((p) => p.Channel === 'whatsapp')!.Booking_UID as string; expect(told).toContain(waRef);
+    const hold = (await rows('Appointments')).find((r) => r.fields.Booking_UID === waRef)!.fields; expect(hold.Appt_Stage).toBe('Pending confirmation'); expect(hold.Doctor_ID).toBe('DR-002');
     const before = toPatient().length; await notify();
     const img = await waitFor(() => toPatient().find((m) => m.type === 'image'), 60000, 'the QR image message');
     expect(img.imageId).toBe(QR_MEDIA); expect(img.caption).toContain('₹500'); expect(img.caption).toContain(waRef); expect(img.caption).toMatch(/Never share your UPI PIN, OTP/);

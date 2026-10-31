@@ -3,7 +3,7 @@
 #   ./scripts/4d/80-verify.sh
 . "$(dirname "$0")/common.sh"
 say "n8n <-> FLOW HQ integration check ($(date '+%F %T %Z'))"
-W_ID="$D4_ID"; W_NAME=4D; only_active "$E4_ID" && { W_ID="$E4_ID"; W_NAME=4E; }
+W_ID="$D4_ID"; W_NAME=4D; only_active "$E4_ID" && { W_ID="$E4_ID"; W_NAME=4E; }; only_active "$F4_ID" && { W_ID="$F4_ID"; W_NAME=4F; }
 only_active "$W_ID" && ok "the active workflow is $W_NAME ($W_ID)" || say "  note: active set is $(active_ids | grep '|1$' | tr '\n' ' ')"
 [ "$(docker exec "$(cid n8n)" printenv FLOWHQ_BOOKING_API_URL)" = "http://flowhq:8787" ] && ok "n8n has FLOWHQ_BOOKING_API_URL=http://flowhq:8787" || bad "FLOWHQ_BOOKING_API_URL not set in n8n"
 [ "$(docker exec "$(cid n8n)" printenv FLOWHQ_AI_MAX_REPLIES_PER_HOUR)" = 12 ] && ok "AI reply limit is 12/hour" || bad "AI reply limit is $(docker exec "$(cid n8n)" printenv FLOWHQ_AI_MAX_REPLIES_PER_HOUR)"

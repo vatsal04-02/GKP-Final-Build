@@ -13,10 +13,10 @@ const codeOf = (wf, prefix) => wf.nodes.filter((n) => n.name.startsWith(prefix) 
 
 t('the committed 4F file is exactly patch(4E): new id and name, inactive', () => { assert.deepStrictEqual(patch.patch(e4), f4); assert.strictEqual(f4.id, patch.NEW_ID); assert.strictEqual(f4.active, false); });
 t('every Code node compiles (a syntax error here only shows up when n8n runs it)', () => { const AF = Object.getPrototypeOf(async function () {}).constructor; for (const n of f4.nodes) if (n.parameters && typeof n.parameters.jsCode === 'string') new AF('$input', '$json', '$', '$itemIndex', '$env', '$workflow', n.parameters.jsCode); });
-t('only 4E nodes the patch names changed (W12 sender code, W2 parse and AI job); everything else is identical or new', () => {
+t('only 4E nodes the patch names changed (W12 sender code, W13 booked-reply wording, W2 parse and AI job); everything else is identical or new', () => {
   const old = new Map(e4.nodes.map((n) => [n.name, n])); const changed = [];
   for (const n of f4.nodes) { const o = old.get(n.name); if (!o) { assert(/^W16/.test(n.name), `unexpected new node ${n.name}`); continue; } if (JSON.stringify(n.parameters) !== JSON.stringify(o.parameters)) changed.push(n.name); }
-  for (const c of changed) assert(/^W12 |^W2 [–-] (Parse Meta Event|AI Job)$/.test(c), `unexpected change to ${c}`);
+  for (const c of changed) assert(/^W12 |^W13 |^W2 [–-] (Parse Meta Event|AI Job)$/.test(c), `unexpected change to ${c}`);
   assert(changed.some((c) => c.startsWith('W12 ')) && changed.includes('W2 – Parse Meta Event'));
 });
 t('the credential roles stay clean: WhatsApp only for Meta calls, the AI credential only for the model, FLOW HQ only through its booking API, the webhook credential only on webhooks', () => { assert(!audit(f4).credentials.some((c) => c.shared)); });

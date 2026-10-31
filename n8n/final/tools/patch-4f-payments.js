@@ -4,6 +4,7 @@
 // FLOW HQ owns the payment state (Booking_Payments, statuses, expiry, approval). n8n only moves data and calls the AI reader. The AI/OCR result is UNTRUSTED text: it is sent to
 // FLOW HQ, which turns it into advisory flags and a REVIEW_REQUIRED status. Nothing in this patch can mark a payment paid.
 //
+//  A2. W13: when payments are open a booking is a HELD time (the reply says so), not a confirmed one.
 //  A. W12 (the one sender) can send an IMAGE message (the supplied QR) inside the 24-hour window. Same ledger, allowlist, TEST_MODE and consent rules as a text reply.
 //  B. W2: a WhatsApp IMAGE from a patient with an open payment is a payment screenshot: download it from Meta, store it in FLOW HQ, read it with the AI (if allowed), send the
 //     extraction to FLOW HQ. The AI receptionist (W13) is NOT started for it. Anything that does not match (no open payment, download failed, upload refused) goes to W13 as before.
@@ -47,6 +48,19 @@ function patchW12(out) {
     if (c !== before) { n.parameters.jsCode = c; touched++; }
   }
   if (touched < 2) throw new Error(`W12 image patch touched ${touched} node(s), expected at least 2`);
+}
+
+// ---------------------------------------------------------------- A2. W13: a booking made while payments are open is a HELD time, not a confirmed one
+const BOOKED_LINE = "plan.reply = `Your appointment is booked: ${c.label}${who}.${ref ? ` Your reference is ${ref}.` : ''} See you then!`;\n      plan.lead_patch.Status = 'Booked';";
+const HELD_LINE = "if (body.payment && body.payment.status === 'PENDING_PAYMENT') {   // 4F: payments are open: the time is HELD until the payment is verified by the clinic\n        plan.reply = `Your time is held for you: ${c.label}${who}.${ref ? ` Reference: ${ref}.` : ''} To confirm it, pay ₹${aiLine(body.payment.amount_inr, 12)} using the QR code I am sending next, then send the payment screenshot here. Your visit is confirmed only after the payment is checked.`;\n      } else {\n        plan.reply = `Your appointment is booked: ${c.label}${who}.${ref ? ` Your reference is ${ref}.` : ''} See you then!`;\n        plan.lead_patch.Status = 'Booked';\n      }";
+function patchW13(out) {
+  let touched = 0;
+  for (const n of out.nodes.filter((x) => x.name.startsWith('W13 ') && typeof (x.parameters || {}).jsCode === 'string')) {
+    const c = n.parameters.jsCode; const k = count(c, BOOKED_LINE); if (!k) continue;
+    if (k !== 1) throw new Error(`${n.name}: the booked-reply line is in it ${k} times`);
+    n.parameters.jsCode = c.replace(BOOKED_LINE, () => HELD_LINE); touched++;
+  }
+  if (touched < 1) throw new Error('W13 booked-reply line not found');
 }
 // ---------------------------------------------------------------- node builders
 const nodes = []; const conns = {};
@@ -286,7 +300,7 @@ return out(500, { ok: false, error: 'unknown' });`, X + 2300, Y, true);
 function patch(wf) {
   const out = clone(wf);
   if (out.nodes.some((n) => /^W16/.test(n.name))) throw new Error('already patched');
-  patchW12(out);
+  patchW12(out); patchW13(out);
   nodes.length = 0; for (const k of Object.keys(conns)) delete conns[k]; seq = 0;
   buildW2(out); buildNotifier(out); buildSite();
   const names = new Set(out.nodes.map((n) => n.name));

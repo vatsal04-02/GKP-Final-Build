@@ -1,0 +1,25 @@
+# Payments: status and what is still needed (2 Nov 2026)
+
+Architecture and rules: `docs/payments.md`. This page says what has been PROVEN, where, and what is outstanding. **No automated bank verification exists: every payment is confirmed by staff.**
+
+## Proven on staging (real n8n 4F + real Grist + real FLOW HQ; WhatsApp and the AI reader are stubs)
+`flowhq/tests/real-grist/staging-payments.real.test.ts` (10 steps) plus 56 FLOW HQ unit/API tests (`flowhq/tests/payments.test.ts`) and 6 website-function tests:
+- Website: config / slots / book / status / QR / screenshot through the secret-protected webhook; wrong secret 403; malformed requests 422; a held slot cannot be taken by anyone else; the same request is the same booking; the QR is served only to the booking's own phone and is the supplied file byte for byte.
+- WhatsApp: a real conversation ("Book me for … at 4", "Yes") creates a HELD appointment and the reply says "held", not "booked"; the notifier uploads the supplied QR to Meta and sends it as an IMAGE with amount, reference, deadline and the "never share your UPI PIN / OTP" warning, once; the patient's screenshot is downloaded from Meta with the bearer token, stored, read, and the AI receptionist is NOT started for it; an image from a number with no open payment goes to the receptionist as before and nothing is stored or sent to the AI reader.
+- Verification: every screenshot ends at REVIEW_REQUIRED, never PAID; forged / wrong ones are flagged (wrong amount, failed status, other payee, reused UTR, reused picture, editing marks, instructions written inside the image have no effect, unreadable output); duplicate UTR and duplicate image blocked; replays change nothing; PAID only by staff approval with the amount = fee and a unique 12-digit UTR; a second approval creates nothing; refunds are admin only and keep history; unpaid holds expire and free the slot; paid bookings never expire; a delayed signed provider event after release goes to staff; audit comes first (a failed history write refuses the change).
+- Regression with 4F active: the 12-step patient journey (staging-n8n), the website enquiry journey (staging-website), staff booking, AI booking, lifecycle, restart/recovery suites all pass.
+
+## What is NOT proven, and why (be precise)
+- **No production end-to-end test with payments open.** Opening payments needs the fee and the written payee authorization (below); opening them with an invented fee would expose the QR to real website visitors. Production was verified with payments CLOSED (tables, scopes, 4F active, webhook live, website hides the section, QR refused).
+- **The real WhatsApp media APIs** (upload of the QR, download of a patient's screenshot) were exercised only against a local stub of Meta's documented behaviour. The connected number is Meta's TEST number, which cannot send to arbitrary patients and has no approved templates. The first real screenshot must be watched.
+- **The AI reader's accuracy** on real UPI screenshots is untested (a stub returns fixed readings). Its output only ever produces advisory flags.
+
+## Needed from the owner / outside parties (nothing here was invented)
+1. **Written authorization from the clinic** to collect its fees into the account shown on the QR (payee **VATSAL TRIPATHI**, Kotak, UPI ID ending 6560@kotak), then record it: FLOW HQ > Schedule > Payments > "Clinic authorized this payee account" with a note saying who authorized it and how. The payee is a person, not the clinic.
+2. **The appointment fee** (rupees): same page. There is no default.
+3. Turn **Payments on**. Patients then see the QR (website section appears; WhatsApp bookings send the QR).
+4. Vercel project env var `N8N_PAYMENTS_URL` = `https://n8n.geetakrishnaphysiotherapy.co.in/webhook/site-payments` (the secret and header are the ones `/api/enquiry` already uses). Until it is set the website never shows the payment section. Done by Claude only if it can reach Vercel; otherwise a one-line owner step.
+5. **Decide whether website visitors' payment screenshots may go to the external AI reader** (`FLOWHQ_PAYMENT_OCR_WEBSITE=true`). Off: they go straight to staff review. WhatsApp screenshots follow the existing allowlist rule.
+6. **Meta**: the clinic's real WhatsApp Business number on the Cloud API with media permission, and approved templates for messages outside the 24-hour window (today a status message to a patient who last wrote more than 24 h ago is blocked and retried up to 5 times, then dropped; the patient can see the status on the website page or ask).
+7. **An authoritative bank / provider link** (for example a payment provider's webhook, or a bank statement feed) if automatic confirmation is wanted. FLOW HQ already verifies a signed provider event (`POST /api/booking/payments/provider-event`, HMAC-SHA256 in `x-payment-signature`, needs `FLOWHQ_PAYMENT_WEBHOOK_SECRET`), but a **static QR carries no per-payment reference**: a provider-side dynamic QR / virtual account per booking is needed for reliable matching.
+8. Staff logins (front desk) to review payments; only one admin login exists.
