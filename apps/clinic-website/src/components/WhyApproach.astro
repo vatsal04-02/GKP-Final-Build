@@ -12,7 +12,7 @@ import { principles } from '../data/site';
   <div class="container-site relative">
     <header class="head reveal">
       <div class="head__title">
-        <p class="eyebrow">03 / Why this approach</p>
+        <p class="eyebrow">Why this approach</p>
         <h2 id="why-title" class="h2">We listen before we treat.</h2>
       </div>
       <a class="link-arrow head__link" href="#doctors">
@@ -25,7 +25,6 @@ import { principles } from '../data/site';
       {
         principles.map((p, i) => (
           <li class="item reveal" data-reveal="group" style={`--i:${i}`}>
-            <span class="item__ghost" aria-hidden="true">{p.n}</span>
             <span class="item__n">{p.n}</span>
             <h3 class="item__title">{p.title}</h3>
             <p class="item__body">{p.body}</p>
@@ -82,16 +81,12 @@ import { principles } from '../data/site';
     transition: transform 800ms var(--ease-inout);
     transition-delay: var(--d);
   }
-  .item__ghost,
   .item__n,
   .item__title,
   .item__body {
     transition:
       opacity 650ms ease-out,
       transform 650ms ease-out;
-  }
-  .item__ghost {
-    transition-delay: calc(var(--d) + 150ms);
   }
   .item__n {
     transition-delay: calc(var(--d) + 220ms);
@@ -105,10 +100,6 @@ import { principles } from '../data/site';
   :global(.js) .item:not(.in-view)::before {
     transform: scaleX(0);
   }
-  :global(.js) .item:not(.in-view) .item__ghost {
-    opacity: 0;
-    transform: translate3d(0, 16px, 0);
-  }
   :global(.js) .item:not(.in-view) .item__n,
   :global(.js) .item:not(.in-view) .item__title,
   :global(.js) .item:not(.in-view) .item__body {
@@ -119,16 +110,6 @@ import { principles } from '../data/site';
     .item {
       --d: 0ms; /* stacked blocks enter one by one as you scroll, so no extra wait */
     }
-  }
-  /* Oversized background numerals — subtle, never competing with the text */
-  .item__ghost {
-    position: absolute;
-    right: -0.15rem;
-    top: 0.1rem;
-    font: 400 5.5rem/1 var(--font-serif);
-    color: rgb(250 248 242 / 0.06);
-    pointer-events: none;
-    user-select: none;
   }
   .item__n {
     position: relative;

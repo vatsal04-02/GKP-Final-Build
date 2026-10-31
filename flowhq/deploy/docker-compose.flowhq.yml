@@ -1,4 +1,6 @@
-# Adds FLOW HQ to the existing stack (Caddy -> n8n, Grist). Run from the repository root:
+# Adds FLOW HQ to the stack (Caddy -> n8n, Grist). scripts/deploy.sh does this for you once flowhq/.env and flowhq/config/users.json exist.
+# The proxy is the repository's root Caddyfile (admin editor restricted to ADMIN_ALLOW_CIDR); this file does NOT replace it.
+# By hand, from the repository root:
 #   docker compose -f docker-compose.yml -f flowhq/deploy/docker-compose.flowhq.yml up -d --build
 # FLOW HQ talks to Grist over the private Docker network; only Caddy is public. See flowhq/README.md (H).
 services:
@@ -20,16 +22,10 @@ services:
       - ./flowhq/config/clinic.json:/app/flowhq/clinic.json:ro    # clinic letterhead + invoice rules (README L); public details, no secrets
     depends_on:
       - grist
-
-  caddy:
-    environment:
-      - FLOWHQ_DOMAIN=${FLOWHQ_DOMAIN}
-    volumes:
-      # SECURITY: ./flowhq/deploy/Caddyfile (mounted below) publishes the WHOLE n8n editor / REST API / test webhooks and the n8n-only booking API to the internet
-      # (measured with a real Caddy: flowhq/deploy/staging/verify-caddy.ps1). BEFORE real patients are served, mount ./flowhq/deploy/Caddyfile.production instead
-      # (only /webhook/* public, the editor on an IP-restricted admin domain, /api/booking/* not published). It needs N8N_ADMIN_DOMAIN and ADMIN_ALLOW_CIDR: docs/production-readiness.md.
-      # the stack's Caddyfile plus the FLOW HQ site, so the Caddyfile does not need editing by hand (same target path = replaces the base mount)
-      - ./flowhq/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    mem_limit: ${FLOWHQ_MEM_LIMIT:-512m}
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
 
 volumes:
   flowhq_config:

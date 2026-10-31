@@ -10,7 +10,7 @@ const year = new Date().getFullYear();
   <div class="container-site">
     <div class="row">
       <div class="brand">
-        <span class="mark" aria-hidden="true">{clinic.monogram}</span>
+        <img class="logo" src="/brand/gkp-mark-cream.webp" alt="" width="94" height="46" loading="lazy" decoding="async" />
         <div>
           <p class="name">{clinic.name}</p>
           <p class="sub">Gomti Nagar, Lucknow</p>
@@ -55,15 +55,10 @@ const year = new Date().getFullYear();
     align-items: center;
     gap: 0.9rem;
   }
-  .mark {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-    background: linear-gradient(145deg, var(--color-teal), var(--color-pine));
-    color: var(--color-ivory);
-    font: 400 1.2rem/1 var(--font-serif);
+  .logo {
+    display: block;
+    height: 46px;
+    width: auto;
   }
   .name {
     margin: 0;
@@ -143,6 +138,12 @@ const year = new Date().getFullYear();
     }
     .contact {
       justify-content: flex-end;
+    }
+    /* Four links per line (4 + 3) instead of six and a lone "Visit" */
+    .links ul {
+      display: grid;
+      grid-template-columns: repeat(4, max-content);
+      gap: 0.4rem 1.6rem;
     }
   }
   /* The page has 76px of bottom padding for the fixed mobile bar; the footer's colour is painted into it */

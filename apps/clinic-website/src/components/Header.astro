@@ -7,7 +7,8 @@ import { clinic, hours, links, nav } from '../data/site';
   <div class="site-header__inner">
     <div class="bar">
       <a class="brand" href="#top">
-        <span class="brand__mark">{clinic.monogram}</span>
+        <img class="brand__logo brand__logo--pine" src="/brand/gkp-mark-pine.webp" alt="" width="90" height="44" decoding="async" />
+        <img class="brand__logo brand__logo--cream" src="/brand/gkp-mark-cream.webp" alt="" width="90" height="44" decoding="async" />
         <span class="brand__text">
           <span class="brand__name">{clinic.shortName}</span>
           <span class="brand__sub">Physiotherapy</span>
@@ -185,17 +186,22 @@ import { clinic, hours, links, nav } from '../data/site';
     color: var(--color-ink);
     text-decoration: none;
   }
-  .brand__mark {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: linear-gradient(145deg, var(--color-teal), var(--color-pine));
-    color: var(--color-ivory);
-    font: 400 1.0625rem/1 var(--font-serif);
-    letter-spacing: 0.02em;
-    box-shadow: 0 6px 14px -6px rgb(12 59 54 / 0.6);
+  /* The clinic's GKP mark. Two transparent versions: pine for the light bar, cream while the bar floats over the hero video
+     (the same "has the page scrolled" switch that already turns the type light). Without JavaScript the bar is always the
+     light one, so the pine mark is the default. */
+  .brand__logo {
+    display: block;
+    height: 44px;
+    width: auto;
+  }
+  .brand__logo--cream {
+    display: none;
+  }
+  :global(.js .site-header:not(.is-scrolled)) .brand__logo--pine {
+    display: none;
+  }
+  :global(.js .site-header:not(.is-scrolled)) .brand__logo--cream {
+    display: block;
   }
   .brand__text {
     display: flex;

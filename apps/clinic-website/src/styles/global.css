@@ -44,8 +44,8 @@
   --dur-editorial: 850ms;
 
   --header-h: 76px;
-  --section-pad: clamp(64px, 4.5vw + 34px, 100px);
-  --curve: 28px; /* depth of the curved edge between sections */
+  --section-pad: clamp(40px, 2.6vw + 26px, 68px); /* tighter rhythm: sections feel like a page, not a poster */
+  --curve: 0px; /* sections meet on a straight edge with a hairline (was a 28-44px dome) */
   --teal-light: color-mix(in srgb, #0f766e 55%, white); /* tint of brand teal for dark surfaces */
   --focus-ring: #0f766e;
   /* A whisper of sand over ivory: lets neighbouring light sections alternate without a hard colour change */
@@ -190,15 +190,9 @@ html {
   color: var(--color-ivory);
 }
 
-/* Curved dividers. A .curve section rises over the bottom padding of the one above and its top edge
-   is a soft dome, so light and dark bands never meet in a hard cut.
-   The dome is a painted pseudo-element: nothing is ever clipped to a rounded rectangle (doing that
-   to a whole section made scrolling drop frames — see README "Performance"). */
-@media (min-width: 768px) {
-  :root {
-    --curve: 44px;
-  }
-}
+/* Section edges. --curve is 0, so a .curve section starts on a straight edge; a 1px hairline marks the join
+   (dark ink on light surfaces, ivory on dark ones). The old dome machinery stays in case a depth is wanted
+   again, but nothing is clipped or curved by default. */
 .curve {
   position: relative;
   margin-top: calc(var(--curve) * -1);
@@ -215,10 +209,21 @@ html {
   left: 0;
   right: 0;
   top: 0;
-  height: var(--curve);
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  background: var(--surface);
+  height: 1px;
+  z-index: 1;
+  background: rgb(12 59 54 / 0.14);
   pointer-events: none;
+}
+.curve.on-dark::before,
+.curve.surface-pine::before {
+  background: rgb(250 248 242 / 0.16);
+}
+/* Flat, quiet backgrounds: the stacked dots, grids, rings, glow orbs and film grain behind sections are gone
+   (one tone per section; fewer composited layers). The hero keeps its own treatment. */
+.depth,
+.fx,
+section > .bg {
+  display: none !important;
 }
 .section.curve {
   padding-top: calc(var(--section-pad) + var(--curve));
@@ -279,19 +284,34 @@ section[id] {
   letter-spacing: -0.016em;
 }
 .h2 {
-  font-size: min(clamp(28px, 7vw, 56px), clamp(1.875rem, 1.2rem + 1.9vw, 2.875rem)); /* desktop 30 → 46 */
-  line-height: 1.12;
+  font-size: min(clamp(30px, 8vw, 56px), clamp(2rem, 1.1rem + 2.5vw, 3.25rem)); /* desktop 32 → 52 */
+  line-height: 1.08;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
 }
 .h3 {
   font-size: clamp(1.3125rem, 1.1rem + 0.6vw, 1.75rem); /* 21 → 28 */
   line-height: 1.2;
 }
 :root {
-  --lead-fs: clamp(1rem, 0.95rem + 0.2vw, 1.125rem); /* 16 → 18 */
+  --lead-fs: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem); /* 17 → 19 */
+}
+/* Body copy: no one-word last lines; headings already balance. Optical sizing and kerning stay on for the serif. */
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+h1,
+h2,
+h3 {
+  font-kerning: normal;
+  font-optical-sizing: auto;
 }
 .lead {
   font-size: var(--lead-fs);
-  line-height: 1.65;
+  line-height: 1.7;
+  max-width: 62ch;
   color: color-mix(in srgb, var(--color-ink) 78%, transparent);
 }
 .on-dark .lead {
@@ -363,10 +383,13 @@ section[id] {
   -webkit-tap-highlight-color: transparent;
   transition:
     transform 200ms ease,
+    translate 220ms var(--ease-soft),
     background-color 200ms ease,
     border-color 200ms ease,
     color 200ms ease,
     box-shadow 200ms ease;
+  /* Set by main.ts on mouse devices only: the main buttons lean a few pixels toward the pointer */
+  translate: var(--mx, 0px) var(--my, 0px);
 }
 .btn .icon-arrow {
   transition: transform 200ms ease;
@@ -658,6 +681,58 @@ section[id] {
   }
 }
 
+
+/* ---------- Scroll-driven typography (native CSS, compositor-only, no scroll listener) ----------
+   1. The hairline on top of every section draws from left to right as the section rises into view.
+   2. The lead paragraph under each heading fills in word by word (main.ts splits it) as it travels up the screen,
+      so the reader's eye is led down the copy.
+   Both are progressive enhancement: browsers without scroll-driven animations (and reduced-motion users) simply
+   see the finished state, and the paragraph is never split. Longhands on purpose (see the note above). */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @keyframes hair-draw {
+      from {
+        transform: scaleX(0);
+      }
+      to {
+        transform: scaleX(1);
+      }
+    }
+    @keyframes word-in {
+      from {
+        opacity: 0.2;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    .curve {
+      view-timeline-name: --sec;
+      view-timeline-axis: block;
+    }
+    .curve::before {
+      transform-origin: left;
+      animation-name: hair-draw;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --sec;
+      animation-range: entry 0% entry 30%;
+    }
+    .is-scrub {
+      view-timeline-name: --lead;
+      view-timeline-axis: block;
+    }
+    .is-scrub .sw {
+      animation-name: word-in;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --lead;
+      /* each word starts a little after the one before it, spread over the first ~30% of the paragraph's travel */
+      animation-range: cover calc(var(--wi) / var(--wn) * 30%) cover calc(var(--wi) / var(--wn) * 30% + 14%);
+    }
+  }
+}
+
 /* ---------- Entrances ---------- */
 
 /* Hero stagger — pure CSS so CTAs never depend on JavaScript (design.md §10) */
@@ -722,6 +797,29 @@ section[id] {
 }
 .js .reveal.in-view {
   opacity: 1;
+  transform: none;
+}
+
+/* Section titles arrive word by word, each sliding up out of its own line mask (main.ts splits them; no-JS and
+   reduced-motion visitors get the plain heading). The header itself then only fades, so the words are the one
+   thing that moves. The mask is padded so ascenders and descenders are never cut. */
+.js .reveal:has(.is-split) {
+  --ry: 0px;
+}
+.js .is-split .w {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding: 0.1em 0.04em 0.16em;
+  margin: -0.1em -0.04em -0.16em;
+}
+.js .is-split .w__i {
+  display: inline-block;
+  transform: translate3d(0, 110%, 0);
+  transition: transform 750ms var(--ease-soft);
+  transition-delay: calc(var(--wi, 0) * 45ms + 120ms);
+}
+.js .reveal.in-view .is-split .w__i {
   transform: none;
 }
 

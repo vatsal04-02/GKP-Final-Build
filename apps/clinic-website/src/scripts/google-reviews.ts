@@ -1,17 +1,12 @@
 /* ============================================================================================
- * LIVE GOOGLE REVIEWS — paste your own values here.
+ * LIVE GOOGLE REVIEWS — served by the Vercel function api/reviews.mjs.
  *
- * Both constants are shipped to the browser, so restrict the key in Google Cloud Console
- * (Credentials → the key → "Websites" referrer restriction for your domain, and "API restrictions"
- * → Places API (New) only).
- *
- * While either value is still a placeholder this module does nothing at all: no request is made and
- * the page keeps its built-in reviews (`reviews` in src/data/site.ts).
+ * The page never holds a Google key: it asks /api/reviews, which keeps the key on the server and
+ * caches Google's answer for a day. Set GOOGLE_PLACES_API_KEY and GOOGLE_PLACE_ID in Vercel (see
+ * README → Live Google reviews). Until then the function answers 204 and this module leaves the
+ * built-in, clinic-approved reviews (`reviews` in src/data/site.ts) exactly as they are.
  * ============================================================================================ */
-const GOOGLE_PLACES_API_KEY = 'PASTE_KEY_HERE';
-const GOOGLE_PLACE_ID = 'PASTE_PLACE_ID_HERE';
-
-/* -------------------------------------------------------------------------------------------- */
+const ENDPOINT = '/api/reviews';
 
 interface PlacesReview {
   rating?: number;
@@ -21,6 +16,7 @@ interface PlacesReview {
   authorAttribution?: { displayName?: string; uri?: string };
 }
 interface PlacesResponse {
+  placeId?: string;
   rating?: number;
   userRatingCount?: number;
   reviews?: PlacesReview[];
@@ -30,21 +26,19 @@ const CACHE_KEY = 'gk-google-places';
 const MAX_REVIEWS = 5;
 const TIMEOUT_MS = 8000;
 
-const isPlaceholder = (v: string) => !v || /^PASTE_.*_HERE$/.test(v);
-
-function readCache(placeId: string): PlacesResponse | null {
+function readCache(): PlacesResponse | null {
   try {
     const raw = sessionStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    const cached = JSON.parse(raw) as { id?: string; data?: PlacesResponse };
-    return cached.id === placeId && cached.data ? cached.data : null;
+    const cached = JSON.parse(raw) as { data?: PlacesResponse };
+    return cached.data ?? null;
   } catch {
     return null;
   }
 }
-function writeCache(placeId: string, data: PlacesResponse): void {
+function writeCache(data: PlacesResponse): void {
   try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ id: placeId, data }));
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data }));
   } catch {
     /* storage unavailable (private mode…) — the in-memory result is enough for this page view */
   }
@@ -113,6 +107,17 @@ function buildCard(tpl: HTMLTemplateElement, r: PlacesReview, i: number, total: 
 
   const author = card.querySelector<HTMLElement>('[data-author]')!;
   const name = r.authorAttribution?.displayName?.trim() || 'Google reviewer';
+  const av = card.querySelector<HTMLElement>('[data-av]');
+  if (av) {
+    av.textContent =
+      name
+        .replace(/[^\p{L}\s]/gu, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0]!.toUpperCase())
+        .join('') || 'G';
+  }
   const uri = r.authorAttribution?.uri;
   if (uri && /^https:\/\//.test(uri)) {
     const a = document.createElement('a');
@@ -137,20 +142,9 @@ function buildCard(tpl: HTMLTemplateElement, r: PlacesReview, i: number, total: 
 }
 
 export function initGoogleReviews(): void {
-  const key = GOOGLE_PLACES_API_KEY.trim();
-  const placeId = GOOGLE_PLACE_ID.trim();
-  if (isPlaceholder(key) || isPlaceholder(placeId)) return; // not configured: keep the built-in reviews, say nothing
-
-  // "Read all reviews on Google" → the clinic's own listing
-  document.querySelectorAll<HTMLAnchorElement>('[data-reviews-link]').forEach((a) => {
-    a.href = `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(placeId)}`;
-  });
-
   const slider = document.querySelector<HTMLElement>('[data-slider]');
   const track = slider?.querySelector<HTMLElement>('[data-slider-track]') ?? null;
   const cardTpl = slider?.querySelector<HTMLTemplateElement>('template[data-review-card]') ?? null;
-  const skelTpl = slider?.querySelector<HTMLTemplateElement>('template[data-review-skeleton]') ?? null;
-  const builtIn = track ? Array.from(track.children) : [];
 
   const show = (nodes: Element[]) => {
     if (!slider || !track || nodes.length === 0) return;
@@ -161,42 +155,40 @@ export function initGoogleReviews(): void {
 
   const apply = (data: PlacesResponse) => {
     applyAggregate(data.rating, data.userRatingCount);
+    // "Read all reviews on Google" → the clinic's own listing
+    if (data.placeId && /^[A-Za-z0-9_-]{10,200}$/.test(data.placeId)) {
+      document.querySelectorAll<HTMLAnchorElement>('[data-reviews-link]').forEach((a) => {
+        a.href = `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(data.placeId!)}`;
+      });
+    }
     if (!cardTpl) return;
     const live = (data.reviews ?? []).filter((r) => (r.text?.text ?? r.originalText?.text ?? '').trim()).slice(0, MAX_REVIEWS);
     const cards = live.map((r, i) => buildCard(cardTpl, r, i, live.length)).filter((c): c is HTMLElement => c !== null);
-    show(cards.length > 0 ? cards : builtIn);
-    slider?.removeAttribute('aria-busy');
+    if (cards.length > 0) show(cards);
   };
 
   // Fetched once per visit: later page views in the same tab reuse the stored response
-  const cached = readCache(placeId);
+  const cached = readCache();
   if (cached) {
     apply(cached);
     return;
   }
 
-  if (skelTpl && track) {
-    show(Array.from({ length: 3 }, () => skelTpl.content.firstElementChild!.cloneNode(true) as Element));
-    slider?.setAttribute('aria-busy', 'true');
-  }
-
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?fields=rating,userRatingCount,reviews&key=${encodeURIComponent(key)}`;
 
-  fetch(url, { signal: controller.signal })
+  fetch(ENDPOINT, { signal: controller.signal, headers: { Accept: 'application/json' } })
     .then((res) => {
-      if (!res.ok) throw new Error(String(res.status));
+      // 204 = not configured yet; anything else that is not OK = Google or the function is unavailable
+      if (res.status === 204 || !res.ok) throw new Error(String(res.status));
       return res.json() as Promise<PlacesResponse>;
     })
     .then((data) => {
-      writeCache(placeId, data);
+      writeCache(data);
       apply(data);
     })
     .catch(() => {
-      // Network error, quota, bad key, blocked referrer… → the built-in reviews, never an empty section
-      show(builtIn);
-      slider?.removeAttribute('aria-busy');
+      // Not configured, network error, quota, outage… → the built-in reviews stay as they are, never an empty section
     })
     .finally(() => window.clearTimeout(timeout));
 }

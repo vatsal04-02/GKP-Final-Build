@@ -1,13 +1,68 @@
+# Public front door for the server. Four addresses, one certificate each (Let's Encrypt, automatic):
+#   N8N_DOMAIN        ONLY n8n's webhooks (/webhook/*: the website form, WhatsApp, booking events) and a plain health answer.
+#                     The n8n editor, its REST API and the test webhooks (/webhook-test/*) are NOT reachable here, except while
+#                     N8N_EXTRA_WEBHOOK_PATH=/webhook-test/* is set in .env for the controlled test (remove it afterwards).
+#   N8N_ADMIN_DOMAIN  the n8n editor, for ADMIN_ALLOW_CIDR only (your own IP address; see scripts/allow-admin-ip.sh). Anyone else gets 403.
+#   GRIST_DOMAIN      the CRM database (Grist, behind Google sign-in).
+#   FLOWHQ_DOMAIN     the staff app (FlowHQ, behind its own login).
+# The defaults after the colons keep Caddy starting before FlowHQ or the admin address are configured; a *.localhost name is
+# served with Caddy's own local certificate and nothing real ever points at it.
 {
 	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_body 10s
+			read_header 10s
+		}
+	}
+}
+
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
 }
 
 {$N8N_DOMAIN} {
+	import secure_headers
 	encode gzip
-	reverse_proxy n8n:5678
+	request_body {
+		max_size 4MB
+	}
+	@webhooks path /webhook/* {$N8N_EXTRA_WEBHOOK_PATH:/__disabled__}
+	handle @webhooks {
+		reverse_proxy n8n:5678
+	}
+	handle /healthz {
+		respond "ok" 200
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$N8N_ADMIN_DOMAIN:admin.localhost} {
+	import secure_headers
+	@allowed remote_ip {$ADMIN_ALLOW_CIDR:127.0.0.1/32}
+	handle @allowed {
+		reverse_proxy n8n:5678
+	}
+	handle {
+		respond "Forbidden" 403
+	}
 }
 
 {$GRIST_DOMAIN} {
+	import secure_headers
 	encode gzip
 	reverse_proxy grist:8484
+}
+
+{$FLOWHQ_DOMAIN:flowhq.localhost} {
+	import secure_headers
+	encode gzip
+	reverse_proxy flowhq:8787
 }

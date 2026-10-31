@@ -22,7 +22,7 @@ staff ── FlowHQ app (flowhq/, React + Hono)  ──►  the same Grist docum
 | `flowhq/` | The existing CRM application (FlowHQ: React + Hono, reads/writes the clinic's Grist). Unchanged from `Geeta-krishna-CRM` |
 | `grist/` | Grist schema documents (`schema.md`, `clinic-records-schema.md`); `n8n/production/schema/production-schema.json` adds `Send_Ledger` and the consent columns |
 | `n8n/` (rest) | Earlier source lineage (snippets, per-workflow builders, 48 test files) kept because the workflow code is pasted from `n8n/snippets/`. Not authoritative: see `n8n/workflows/LEGACY.md` |
-| `docker-compose.yml`, `Caddyfile`, `scripts/` | The server stack (Caddy → n8n + Grist). `docker-compose.yml` now passes the `FLOWHQ_*` settings to n8n |
+| `docker-compose.yml`, `Caddyfile`, `scripts/` | The server stack (Caddy → n8n + Grist, FlowHQ via `flowhq/deploy/`). **`docs/DEPLOY_HOSTINGER.md`** is the step-by-step for a fresh VPS; `scripts/deploy.sh` starts and checks it, `backup.sh`/`restore.sh`/`install-cron.sh` back it up, `allow-admin-ip.sh` controls who may open the n8n editor |
 | `config/` | Safe examples: `env/n8n-flowhq.env.example`, `env/vercel-server.env.example`, `clinic.example.json` |
 | `docs/` | `INSTALL`, `OPENROUTER`, `ARCHITECTURE`, `INTEGRATION_AUDIT`, `INTEGRATION_PLAN`, `FIELD_MAPPING`, `CREDENTIAL_AUDIT`, `KNOWN_FINDINGS`, `PRIVACY_DRAFT`, `TESTING`, `ROLLBACK`, `SOURCES`, `PRODUCTION_CHECKLIST` |
 

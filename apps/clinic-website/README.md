@@ -36,7 +36,7 @@ src/components/Booking.astro + src/scripts/booking.ts   The "Book your visit" re
 src/styles/global.css   Design tokens, glass surfaces, buttons, motion system, reduced-motion rules
 src/scripts/main.ts     Progressive enhancement (every feature degrades without JS)
 src/assets/clinic/      Drop real photos here (see below)
-scripts/make-brand-assets.mjs   Regenerates public/og.png and the iOS icon
+scripts/make-logo-assets.mjs    Rebuilds the logo marks, tab icon, iOS icon and public/og.png from src/assets/brand/ (the clinic's two logo files)
 ```
 
 ## Adding real photography
@@ -57,21 +57,18 @@ No stock or generated imagery is ever substituted. **Patient photos need the pat
 
 ## Live Google reviews
 
-`src/scripts/google-reviews.ts` — the first two lines are:
+The page asks its own Vercel function, `api/reviews.mjs`, which calls Google's Places API (New) with a key that stays on the server and lets Vercel cache the answer for 24 hours (one Google call a day, not one per visitor). Nothing Google-related is in the page source.
 
-```ts
-const GOOGLE_PLACES_API_KEY = 'PASTE_KEY_HERE';
-const GOOGLE_PLACE_ID = 'PASTE_PLACE_ID_HERE';
-```
+**Set up (once):**
+1. Find the clinic's place id with Google's free *Place ID Finder*.
+2. In Google Cloud Console create an API key, restrict it to **Places API (New)** only, and make sure billing is enabled on the project (Google requires it for this API; usage at this volume stays inside Google's free monthly allowance, but check the current pricing page).
+3. In Vercel → Project → Settings → Environment Variables add `GOOGLE_PLACES_API_KEY` and `GOOGLE_PLACE_ID` (never with a `PUBLIC_` prefix), then redeploy.
 
-While either is still a placeholder the module does nothing (no request, no console noise) and the section shows the three built-in reviews from `reviews` in `src/data/site.ts`. Once both are set, on page load it fetches `places.googleapis.com/v1/places/<id>?fields=rating,userRatingCount,reviews` once per visit (kept in `sessionStorage`), shows shimmer skeletons while waiting, then:
-
-- updates the hero badge, the stats strip and the reviews score with the live rating and review count (exact count, so the "+" goes away);
-- replaces the cards with up to 5 live reviews (author linked to their Google profile, stars, "x months ago", text clamped to 3 lines with Read more / Show less);
-- falls back silently to the built-in cards on any failure (bad key, quota, blocked referrer, offline, no reviews, or no answer within 8 s);
-- points "Read all reviews on Google" at the clinic's listing (`place_id:`).
-
-Things to know: the key is visible in the page source, so **restrict it** in Google Cloud (HTTP referrer = your domain, API = Places API (New) only). Place Details with reviews is a billable SKU and this calls it for every new visit, so watch the quota — fetching at build time or through a small proxy would cache it centrally. Google's terms ask that review authors stay attributed (they do) and that the content isn't stored long-term (only the tab's session storage is used). The structured data (`aggregateRating`) is generated at build time from `clinic.rating`, so update that occasionally too.
+**Behaviour** (`src/scripts/google-reviews.ts`):
+- Until both variables are set the function answers 204 and the section keeps the three built-in, clinic-approved reviews from `reviews` in `src/data/site.ts`. The same happens on any Google error, timeout, a missing function (local `npm run preview`) or an empty answer: the built-in cards stay, silently. There are no loading placeholders; the built-in cards are shown until live ones arrive.
+- With live data it updates the hero badge, the stats strip and the reviews score with the exact rating and review count (so the "+" goes away), replaces the cards with the live reviews (author linked to their Google profile, stars, "x months ago", text clamped to 3 lines with Read more / Show less) and points "Read all reviews on Google" at the clinic's listing (`place_id:`).
+- Google returns at most **5 reviews** for a place and decides which; the rating and the total count are exact. The response is kept in the tab's `sessionStorage` for the visit.
+- Tests: `tests/reviews-api.test.mjs` (fake Google, no network). The structured data (`aggregateRating`) is generated at build time from `clinic.rating`, so update that occasionally too.
 
 ## Launch checklist — details the clinic must confirm
 
@@ -81,7 +78,7 @@ Everything below is intentionally left as `[TBD - confirm with clinic]` (PRD §3
 - [ ] Gallery photos `gallery-4` … `gallery-7` (the large viewer): they show identifiable patients, so confirm consent; `gallery-6` has a wall board with fee amounts and a doctor's name that are legible at full size (the site deliberately lists no prices and no such doctor) — crop it, swap it, or confirm the board is current; the same board suggests home visits exist, which would settle the `[TBD]` FAQ answer, but nothing on the page claims it until the clinic confirms
 - [ ] Hero video + poster: the supplied loop and the entrance photo both look AI-generated (a small Google sparkle mark sits near the bottom right of the footage, and the signboard in it shows hours 9:00–1:30 / 4:30–8:30, "B.Sc. B.P.T." qualifications, a second phone number, "Since 2004" — none of which match the site). Patients will see this as the clinic, so replace it with real footage or confirm the sign with the clinic. The source is 1280×720, so it is a little soft on very large screens
 - [ ] Doctor specialisation, experience, certifications and bios (`doctors` in `src/data/site.ts`)
-- [ ] Paste the Google Places API key + place ID (see *Live Google reviews*); confirm the three built-in fallback reviews are approved for use
+- [ ] Set `GOOGLE_PLACES_API_KEY` + `GOOGLE_PLACE_ID` in Vercel (see *Live Google reviews*); confirm the three built-in fallback reviews are approved for use
 - [ ] Home visits: the booking form offers a "Home visit" chip and the FAQ answer is still `[TBD]` — confirm the clinic does them (or remove the chip in `Booking.astro`)
 - [ ] FAQ answers: home visits, session length (`faqs` — unconfirmed ones are excluded from FAQ structured data). The pricing section and the starting-price question were removed; add them back only once the clinic confirms real prices
 - [ ] Sign-off on promise-style copy — "Physiotherapy that puts an expiry date on your pain.", "Gomti Nagar's trusted physio clinic", the first built-in review ("within 3 days he became quite normal"), read as outcome commitments, which PRD §37 steers away from

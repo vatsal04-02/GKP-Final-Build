@@ -1,6 +1,10 @@
-# Clinic Autopilot — Option B stack (n8n + Grist behind Caddy)
-# Usage:  cp .env.example .env  ->  ./scripts/gen-secrets.sh  ->  docker compose up -d
-# Only Caddy is published to the internet. n8n and Grist sit on the private Docker network.
+# Clinic Autopilot: the backend stack (n8n + Grist behind Caddy; FlowHQ is added by flowhq/deploy/docker-compose.flowhq.yml)
+# Usage on a server:  cp .env.example .env  ->  ./scripts/gen-secrets.sh  ->  edit .env  ->  ./scripts/deploy.sh   (docs/DEPLOY_HOSTINGER.md)
+# Only Caddy is published to the internet. n8n and Grist sit on the private Docker network; the n8n editor is reachable only from ADMIN_ALLOW_CIDR.
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" } # rotated: logs can never fill the disk
 
 services:
   caddy:
@@ -11,7 +15,11 @@ services:
       - "443:443"
     environment:
       - N8N_DOMAIN=${N8N_DOMAIN}
+      - N8N_EXTRA_WEBHOOK_PATH=${N8N_EXTRA_WEBHOOK_PATH:-/__disabled__}
+      - N8N_ADMIN_DOMAIN=${N8N_ADMIN_DOMAIN:-admin.localhost}
+      - ADMIN_ALLOW_CIDR=${ADMIN_ALLOW_CIDR:-127.0.0.1/32}
       - GRIST_DOMAIN=${GRIST_DOMAIN}
+      - FLOWHQ_DOMAIN=${FLOWHQ_DOMAIN:-flowhq.localhost}
       - ACME_EMAIL=${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -20,29 +28,44 @@ services:
     depends_on:
       - n8n
       - grist
+    logging: *logging
 
   n8n:
-    # Pin a specific version before going live, e.g. docker.n8n.io/n8nio/n8n:1.xx.x
-    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.41.6}
+    # The workflow was tested against n8n 2.43.5 (n8n/production/TEST_REPORT.md). Change the version only after re-testing.
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-2.43.5}
     restart: unless-stopped
+    mem_limit: ${N8N_MEM_LIMIT:-2g}
     environment:
       - N8N_HOST=${N8N_DOMAIN}
       - N8N_PROTOCOL=https
       - N8N_PORT=5678
       - WEBHOOK_URL=https://${N8N_DOMAIN}/
+      - N8N_EDITOR_BASE_URL=https://${N8N_ADMIN_DOMAIN:-admin.localhost}/
+      - N8N_PROXY_HOPS=1
+      - N8N_SECURE_COOKIE=true
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - GENERIC_TIMEZONE=Asia/Kolkata
       - TZ=Asia/Kolkata
       - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
       - N8N_PERSONALIZATION_ENABLED=false
+      - N8N_PAYLOAD_SIZE_MAX=4
+      - N8N_LOG_LEVEL=info
+      # Executions hold patient phone numbers and message text: keep failures only, 7 days, at most 5000
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=false
       - EXECUTIONS_DATA_PRUNE=true
-      - EXECUTIONS_DATA_MAX_AGE=336        # keep 14 days of run history
+      - EXECUTIONS_DATA_MAX_AGE=168
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=5000
+      # The workflow never runs shell commands or touches local files: those nodes are switched off
+      - NODES_EXCLUDE=["n8n-nodes-base.executeCommand","n8n-nodes-base.localFileTrigger","n8n-nodes-base.readWriteFile"]
       # --- FlowHQ workflow settings: read in the workflow as $env.FLOWHQ_*  (values come from .env)
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false  # required so Code/expression nodes can read $env.FLOWHQ_*; leave "true" if no workflow uses $env
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false  # required so Code/expression nodes can read $env.FLOWHQ_*
       - FLOWHQ_GRIST_URL=${FLOWHQ_GRIST_URL:-http://grist:8484}
       - FLOWHQ_REGISTRY_DOC_ID=${FLOWHQ_REGISTRY_DOC_ID:-}
       - FLOWHQ_DEFAULT_COUNTRY_CODE=${FLOWHQ_DEFAULT_COUNTRY_CODE:-91}
-      - FLOWHQ_WA_SEND_MODE=${FLOWHQ_WA_SEND_MODE:-allowlist}
+      - FLOWHQ_WA_SEND_MODE=${FLOWHQ_WA_SEND_MODE:-off}
       - FLOWHQ_WA_ALLOWLIST=${FLOWHQ_WA_ALLOWLIST:-}
       - FLOWHQ_WA_GRAPH_VERSION=${FLOWHQ_WA_GRAPH_VERSION:-v23.0}
       - FLOWHQ_WA_TEMPLATE_LANGUAGE=${FLOWHQ_WA_TEMPLATE_LANGUAGE:-en}
@@ -67,11 +90,18 @@ services:
       - FLOWHQ_BOOKING_API_URL=${FLOWHQ_BOOKING_API_URL:-}
     volumes:
       - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5678/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging: *logging
 
   grist:
-    # Pin a specific version before going live, e.g. gristlabs/grist:1.x.x
     image: gristlabs/grist:${GRIST_VERSION:-1.7.20}
     restart: unless-stopped
+    mem_limit: ${GRIST_MEM_LIMIT:-1g}
     environment:
       - APP_HOME_URL=https://${GRIST_DOMAIN}
       - GRIST_SESSION_SECRET=${GRIST_SESSION_SECRET}
@@ -90,6 +120,13 @@ services:
     #   - SYS_PTRACE
     volumes:
       - grist_data:/persist
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8484/status',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging: *logging
 
 volumes:
   caddy_data:
