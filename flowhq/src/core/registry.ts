@@ -29,15 +29,15 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   reminders: { key: 'reminders', core: false, label: 'Reminders', page: null, icon: 'bell', order: 53 },
   staff: { key: 'staff', core: false, label: '{staff.plural}', page: null, icon: 'user-cog', order: 54 },
   analytics: { key: 'analytics', core: false, label: 'Analytics', page: null, icon: 'line-chart', order: 55 },
-  // registered for future backends: no backend supports them yet, so they never appear
-  payments: { key: 'payments', core: false, label: 'Payments', page: null, icon: 'credit-card', order: 60 },
+  // registered for future backends: no backend supports them yet, so they never appear (payments is now supported by the clinic backend)
+  payments: { key: 'payments', core: false, label: 'Payment Management', page: '/payments', icon: 'credit-card', shortcut: 'g m', order: 4.4 },   // UPI payment review (src/web/clinical/PaymentManagement.tsx); appears only when the payment tables exist
   campaigns: { key: 'campaigns', core: false, label: 'Campaigns', page: null, icon: 'megaphone', order: 61 },
   forms: { key: 'forms', core: false, label: 'Forms', page: null, icon: 'file-text', order: 62 },
 };
 // Sidebar sections: the dashboard stays pinned at the top; everything else is grouped. A module that is not enabled simply does not show.
 export const NAV_GROUPS: Array<{ key: string; label: string; modules: ModuleKey[] }> = [
   { key: 'care', label: 'Care', modules: ['inbox', 'contacts', 'patients', 'bookings', 'schedule', 'prescriptions', 'visits'] },
-  { key: 'money', label: 'Money', modules: ['invoices'] },
+  { key: 'money', label: 'Money', modules: ['invoices', 'payments'] },
   { key: 'system', label: 'System', modules: ['automations', 'tasks', 'reports', 'activity', 'ai', 'settings'] },
 ];
 export const CORE_MODULES = (Object.values(MODULES).filter((m) => m.core).map((m) => m.key));
@@ -127,7 +127,7 @@ export interface WorkspaceProfileInput {
   modules?: { enable?: ModuleKey[]; disable?: ModuleKey[] };
   dashboardMetrics?: MetricKey[];
 }
-const RECORDS_MODULES: ModuleKey[] = ['patients', 'prescriptions', 'invoices', 'visits', 'schedule'];
+const RECORDS_MODULES: ModuleKey[] = ['patients', 'prescriptions', 'invoices', 'visits', 'schedule', 'payments'];
 export function resolveProfile(input: WorkspaceProfileInput, supported: { modules: ModuleKey[]; automations: AutomationKey[]; metrics: MetricKey[] }) {
   const p = INDUSTRIES[input.industry] || INDUSTRIES.custom;
   let terminology = mergeTerminology(p.terminology, input.terminology);
