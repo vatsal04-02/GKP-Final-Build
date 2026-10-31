@@ -2,6 +2,9 @@
 
 Reviewed from the ACTIVE production workflow (4D `F4dRetryd0c49396`, exported from n8n and compared with `n8n/final/workflows/FlowHQ_Clinic_Automation_production_candidate4d.json`) and the live Settings of the clinic document. **Nothing here was activated, changed or sent by this review.** None of these workflows sends by itself: every message goes through **W12**, the only sender (allowlist, quiet hours 21:00-08:00 IST, opt-out, pause, send ledger, consent by purpose).
 
+## Update 1 Nov 2026 (workflow 4E, owner directive)
+Quiet hours no longer apply to operational messages: **W9's weekly report goes to the owner at once** (it was already Monday 09:00), and staff alerts, hand-off alerts, booking confirmations and replies to patients who wrote in are not held at night. **W6, W7 and W8 still wait for 08:00** because they are messages WE start (follow-ups, rebook, outcome check-ins, review requests). The templates they use (`followup_day2`, `noshow_rebook`, `outcome_check`, `review_request`, `weekly_owner_report`) are expected to be absent on the WhatsApp number now connected (Meta's test number): the two templates actually tried on 1 Nov (`new_lead_staff_alert`, `booking_confirmation`) were rejected as non-existent, so Meta would most likely reject these too, even in test mode. Details: `docs/operations-handover.md` item 9.
+
 ## What stops a message reaching a real patient today
 1. `FLOWHQ_WA_SEND_MODE=allowlist` and the allowlist holds only the authorized test number: W12 refuses every other recipient.
 2. Settings `TEST_MODE=TRUE`: the recipient is replaced by `TEST_PHONE` (the same authorized number) before W12 is called.
