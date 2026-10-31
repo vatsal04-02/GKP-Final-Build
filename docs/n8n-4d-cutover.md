@@ -86,7 +86,7 @@ The supervised test (section 6) needs 4D active, so the order is: steps 10-60, o
 CONFIRM=yes ./scripts/4d/70-swap.sh               # V4 off, 4D on (one n8n restart); self-checks; auto-rollback on failure
 ./scripts/4d/80-verify.sh
 ```
-Owner action at the swap: set Vercel `N8N_WEBHOOK_SECRET` to `cat ~/.4d-secrets/w1-webhook-secret` (read it yourself; never paste it anywhere) and redeploy the website, **or** leave the form on the n8n test URL until then. Until then website enquiries to the production webhook get 403 (V4 accepted a different header).
+The website enquiry form is **not connected today** (Vercel has no environment variables and V4's webhook uses the wrong credential): the full diagnosis, the five Vercel variables and the exact commands are in `docs/website-lead-integration.md`; the 4D swap is what fixes the n8n side. Owner action at the swap: set Vercel `N8N_WEBHOOK_SECRET` to `cat ~/.4d-secrets/w1-webhook-secret` (read it yourself; never paste it anywhere) and redeploy the website, **or** leave the form on the n8n test URL until then. Until then website enquiries to the production webhook get 403 (V4 accepted a different header).
 
 ## 6. Supervised real-model and real-WhatsApp test (needs the authorized test number)
 Preconditions: 4D active, `booking_enabled` OFF, `FLOWHQ_WA_SEND_MODE=allowlist` with ONLY the authorized test number, `TEST_MODE=true` in Grist Settings with `TEST_PHONE` = that number, window 08:00-20:30 IST, staff told. The allowlist gate means other patients' messages are skipped, not sent to the model.

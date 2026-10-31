@@ -19,7 +19,7 @@ docker network connect $Network $Grist *> $null
 $ErrorActionPreference = 'Stop'
 $inner = @'
 set -e
-mkdir -p /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=.git flowhq n8n | tar xf - -C /work
+mkdir -p /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=.git flowhq n8n apps/clinic-website/api apps/clinic-website/src/lib | tar xf - -C /work
 cd /work/flowhq && npm ci --no-audit --no-fund --loglevel=error
 npx vitest run __FILTER__ --reporter=default
 '@.Replace('__FILTER__', $Filter)
