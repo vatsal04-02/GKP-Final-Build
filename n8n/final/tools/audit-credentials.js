@@ -17,7 +17,7 @@ const roleOf = (n) => {
   if (/\/api\/booking\//.test(url) || /^W13 [–-] Booking (availability|API)$/.test(n.name || '')) return 'booking-api';   // Slice 4C: W13 calls the FLOW HQ booking API (its URL is built in a Code node, so the node name is the reliable signal)
   if (/\/api\/docs\//.test(url)) return 'grist';
   if (/chat\/completions|ai_base_url|openrouter/i.test(url)) return 'ai-provider';
-  if (/graph|WA_GRAPH|graph_api|w12_graph/i.test(url) || /\/messages$/.test(url) || /Meta send/i.test(n.name)) return 'whatsapp-meta';
+  if (/graph|WA_GRAPH|graph_api|w12_graph/i.test(url) || /\/messages$/.test(url) || /Meta send/i.test(n.name) || /^W16N? [–-] (Media bytes|Media info|Upload QR to Meta)$/.test(n.name || '')) return 'whatsapp-meta';   // 4F: Meta media download (payment screenshots) and upload (the QR)
   return 'other-http';
 };
 

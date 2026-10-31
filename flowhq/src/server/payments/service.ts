@@ -322,17 +322,19 @@ export class PaymentService {
   }
 
   // ---------------------------------------------------------------- 7. what n8n should tell WhatsApp patients (website patients see their status on the page)
-  async outbox(): Promise<Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string }>> {
-    const out: Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string }> = [];
-    const g = await this.settings();
+  async outbox(): Promise<Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string; last_inbound_at: number }>> {
+    const out: Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string; last_inbound_at: number }> = [];
+    const g = await this.settings(); const files = await this.rows(PT.files);
     for (const r of (await this.rows(PT.payments)).filter((x) => t(x.fields.Channel) === 'whatsapp' && n(x.fields.Notify_Attempts) < 5)) {
       const s = t(r.fields.Status) as PaymentStatus; const ref = t(r.fields.Booking_UID); const phone = t(r.fields.Patient_Phone); const amt = rupees(n(r.fields.Amount_Paise));
+      // WhatsApp's 24-hour reply window starts when the patient last wrote: the booking chat (request) or the screenshot (everything after)
+      const win = Math.max(n(r.fields.Created_At), ...files.filter((f) => t(f.fields.Payment_ID) === t(r.fields.Payment_ID) && t(f.fields.Source) === 'whatsapp').map((f) => n(f.fields.At)));
       if (s === 'PENDING_PAYMENT' && !on(r.fields.Request_Sent)) {
         const ap = await this.apptSummary(ref); const mins = Math.max(1, Math.round((n(r.fields.Expires_At) - this.ts()) / 60));
-        out.push({ payment_ref: ref, kind: 'payment_request', status: s, phone, amount_inr: amt, text: `Your appointment time${ap ? ` (${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''})` : ''} is held for you. To confirm it, pay ₹${amt} to the QR code shown above (any UPI app), then send the payment screenshot here. Booking reference: ${ref}. Please pay within ${Math.min(mins, g.expiryMin)} minutes. Never share your UPI PIN, OTP or bank password with anyone, including us.` });
-      } else if (['REVIEW_REQUIRED', 'PAID', 'REJECTED', 'EXPIRED', 'REFUNDED'].includes(s) && t(r.fields.Notified_Status) !== s && (s !== 'REVIEW_REQUIRED' || t(r.fields.Notified_Status) !== 'SCREENSHOT_RECEIVED')) {
+        out.push({ payment_ref: ref, kind: 'payment_request', status: s, phone, amount_inr: amt, last_inbound_at: win, text: `Your appointment time${ap ? ` (${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''})` : ''} is held for you. To confirm it, pay ₹${amt} to the QR code shown above (any UPI app), then send the payment screenshot here. Booking reference: ${ref}. Please pay within ${Math.min(mins, g.expiryMin)} minutes. Never share your UPI PIN, OTP or bank password with anyone, including us.` });
+      } else if (['SCREENSHOT_RECEIVED', 'REVIEW_REQUIRED', 'PAID', 'REJECTED', 'EXPIRED', 'REFUNDED'].includes(s) && t(r.fields.Notified_Status) !== s && (s !== 'REVIEW_REQUIRED' || t(r.fields.Notified_Status) !== 'SCREENSHOT_RECEIVED')) {
         const ap = s === 'PAID' ? await this.apptSummary(ref) : null;
-        out.push({ payment_ref: ref, kind: 'status', status: s, phone, amount_inr: amt, text: `${PATIENT_STATUS[s]!.text}${ap ? ` ${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''}.` : ''} Reference: ${ref}.` });
+        out.push({ payment_ref: ref, kind: 'status', status: s, phone, amount_inr: amt, last_inbound_at: win, text: `${PATIENT_STATUS[s]!.text}${ap ? ` ${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''}.` : ''} Reference: ${ref}.` });
       }
     }
     return out;
