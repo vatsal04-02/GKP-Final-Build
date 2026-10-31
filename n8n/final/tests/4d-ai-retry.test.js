@@ -5,7 +5,9 @@
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
-const { patch, N, ADDED, NEW_ID } = require('../tools/patch-4d-ai-retry');
+const { patch: retryPatch, N, ADDED, NEW_ID } = require('../tools/patch-4d-ai-retry');
+const gatePatch = require('../tools/patch-4d-allowlist-gate');
+const { build } = require('../tools/build-4d');
 
 const dir = path.join(__dirname, '..', 'workflows');
 const file4c = path.join(dir, 'FlowHQ_Clinic_Automation_production_candidate4c.json');
@@ -17,7 +19,8 @@ const node = (wf, n) => wf.nodes.find((x) => x.name === n);
 let failed = 0;
 const t = (name, fn) => { try { fn(); console.log(`  ok ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}: ${String(e.message).split('\n')[0]}`); } };
 
-t('the committed 4D file is exactly patch(4C): reproducible', () => assert.deepStrictEqual(d4, patch(c4)));
+t('the committed 4D file is exactly build(4C) = allowlist gate(retry(4C)): reproducible', () => assert.deepStrictEqual(d4, build(c4)));
+const s1 = retryPatch(c4);   // stage 1: 4C + the retry nodes only
 t('4D is inactive, has its own id and name (never the id of the deployed workflow: an import must not overwrite it)', () => {
   assert.strictEqual(d4.active, false); assert.strictEqual(d4.id, NEW_ID); assert.notStrictEqual(d4.id, c4.id); assert.notStrictEqual(d4.name, c4.name);
 });
@@ -26,10 +29,11 @@ t('exactly 3 nodes were added, with the intended names', () => {
   assert.deepStrictEqual(added, [...ADDED].sort()); assert.strictEqual(d4.nodes.length, c4.nodes.length + 3);
   assert.strictEqual(new Set(d4.nodes.map((n) => n.id)).size, d4.nodes.length, 'node ids are unique');
 });
-t('every other node is identical to 4C, except "W13 - Ask Model" (HTTP options only)', () => {
+t('every other node is identical to 4C, except "W13 - Ask Model" (HTTP options only) and the two nodes the allowlist gate touches (W13 Config, W13 Build Context: see 4d-allowlist-gate.test.js)', () => {
   for (const o of c4.nodes) {
     const n = node(d4, o.name); assert.ok(n, `missing ${o.name}`);
     if (o.name === N.ask) { assert.deepStrictEqual({ ...n, parameters: { ...n.parameters, options: null } }, { ...o, parameters: { ...o.parameters, options: null } }); continue; }
+    if ([gatePatch.CONFIG, gatePatch.BUILD].includes(o.name)) { assert.deepStrictEqual(n, node(gatePatch.patch(s1), o.name), `${o.name} differs from stage 1 + the gate`); continue; }
     assert.deepStrictEqual(n, o, `node changed: ${o.name}`);
   }
 });

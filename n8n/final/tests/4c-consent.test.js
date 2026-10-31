@@ -41,7 +41,7 @@ test('build: 13 nodes added (6 consent + 7 W13 booking), 15 changed, the 4C cand
   // The 4D file is 4C + the AI retry nodes (n8n/final/tools/patch-4d-ai-retry.js): the same identity holds one layer up, and everything below is checked on the 4C part.
   const is4d = wf.nodes.some((x) => x.name === 'W13 – Ask Model Retry Check');
   const wf4c = is4d ? JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4c.json'), 'utf8')) : wf;
-  if (is4d) assert.strictEqual(JSON.stringify(require('../tools/patch-4d-ai-retry').patch(wf4c)), JSON.stringify(wf), 'the committed 4D candidate is exactly patch4d(4C)');
+  if (is4d) assert.strictEqual(JSON.stringify(require('../tools/build-4d').build(wf4c)), JSON.stringify(wf), 'the committed 4D candidate is exactly build4d(4C)');
   assert.strictEqual(wf4c.nodes.length, base.nodes.length + 13);
   for (const n of ADDED) { assert(wf.nodes.some((x) => x.name === n), `${n} missing`); assert(!base.nodes.some((x) => x.name === n), `${n} was already in the base`); }
   assert.strictEqual(JSON.stringify(build(base)), JSON.stringify(wf4c), 'the committed 4C candidate is exactly build(candidate)');

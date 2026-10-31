@@ -69,7 +69,7 @@ jobs:
         run: |
           docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -e N8N_DOMAIN=n8n.example.test -e GRIST_DOMAIN=crm.example.test -e ACME_EMAIL=ops@example.test caddy:2 caddy validate --config /etc/caddy/Caddyfile
       - name: Shell scripts parse
-        run: for f in scripts/*.sh; do bash -n "$f"; done
+        run: for f in scripts/*.sh scripts/4d/*.sh; do bash -n "$f"; done
       - name: deploy.sh refuses an untouched .env.example
         run: |
           cp .env.example .env && chmod 600 .env

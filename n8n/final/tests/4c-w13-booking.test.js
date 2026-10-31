@@ -19,6 +19,9 @@ const DAY1 = '2026-10-07';                                   // tomorrow (Wed): 
 const CHAN = 'FlowHQ Booking API';
 const BASE = 'http://flowhq:8787';
 
+const CONTRACT = require('./helpers/booking-contract');
+const contractViolations = [];   // every request the workflow sent that the real API would have refused with 400; the last test requires this to be empty
+
 // ---------------------------------------------------------------- a fake FLOW HQ booking API (the contract of docs/booking-api.md, in miniature)
 function fakeBooking(o = {}) {
   const st = { available: o.available !== false, down: !!o.down, status: o.status || null, taken: new Set(o.taken || []), race: new Set(), appts: new Map(), idem: new Map(), seq: 0 };
@@ -28,6 +31,10 @@ function fakeBooking(o = {}) {
   const fn = (method, url, headers, body) => {
     calls.push({ method, url, headers: { ...headers }, body: body === undefined ? undefined : clone(body) });
     if (st.down) throw new Error('connect ECONNREFUSED 172.18.0.5:8787');
+    // the REAL API's request contract (helpers/booking-contract.js, kept honest against the real routes by flowhq/tests/booking-contract.test.ts):
+    // a request the real server would refuse with 400 fails the journey here too.
+    const broken = CONTRACT.validate({ method, url, headers, body });
+    if (broken) { contractViolations.push(`${method} ${url}: ${broken.why}`); return { status: 400, body: { error: { code: broken.code, message: broken.why } } }; }
     if (st.status) return { status: st.status, body: { error: { code: st.status === 401 ? 'unauthorized' : 'backend_error' } } };
     const u = new URL(url);
     const m = u.pathname.match(/^\/api\/booking\/(availability|appointments)(?:\/([^/]+?))?(\/cancel)?$/);
@@ -269,6 +276,10 @@ test('a clinic\'s OWN (non-Cal.com) booking link is still usable when times are 
   say('Book me for tomorrow at 10', { g: own, booking: fakeBooking({ down: true }), meta, decide: () => decision('book_slot', { booking: { date: DAY1, time: '10:00', time_window: null }, reply: 'Please choose a time: {{BOOKING_LINK}}' }) });
   assert(patientTexts(meta).some((t) => t.includes('https://www.demophysio.example/book')));
   noCal(sentTexts(meta));
+});
+
+test('CONTRACT: across every journey above, no request broke the real booking API contract (strict bodies, patient_phone on get / move / cancel, Idempotency-Key, no V4-shaped bodies)', () => {
+  assert.deepStrictEqual(contractViolations, [], contractViolations.join('\n'));
 });
 
 finish('4c-w13-booking');
