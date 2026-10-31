@@ -24,8 +24,11 @@ healthy() { [ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}
 wait_healthy() { for _ in $(seq 1 40); do healthy "$1" && return 0; sleep 5; done; return 1; }
 # "id|1" per workflow (1 = active), read through n8n's own export into a temp file inside the container (a read; nothing changes)
 active_ids() { docker exec "$(cid n8n)" sh -c 'n8n export:workflow --all --output=/tmp/wf-ids.json >/dev/null 2>&1 && node -e "for (const w of JSON.parse(require(\"fs\").readFileSync(\"/tmp/wf-ids.json\",\"utf8\"))) console.log(w.id+\"|\"+(w.active?1:0))"; rm -f /tmp/wf-ids.json'; }
-is_active() { active_ids | grep -qx "$1|1"; }
-only_active() { [ "$(active_ids | grep -c '|1$')" = 1 ] && is_active "$1"; }
+# NOTE: never `active_ids | grep -q`: grep -q exits early, the upstream docker exec then dies of SIGPIPE and `set -o pipefail` turns a true match into a failure.
+# So the answer is captured first.
+has_state() { local a; a="$(active_ids)"; printf '%s\n' "$a" | grep -qx "$1|$2"; }
+is_active() { has_state "$1" 1; }
+only_active() { local a; a="$(active_ids)"; [ "$(printf '%s\n' "$a" | grep -c '|1$')" = 1 ] && printf '%s\n' "$a" | grep -qx "$1|1"; }
 # GET from inside the n8n container (the private Docker network); the token is read from stdin, never put on a command line
 fhq_get() { docker exec -i "$(cid n8n)" sh -c 'read T; wget -qO- -T 10 --header="Authorization: Bearer $T" "http://flowhq:8787$1"' _ "$1" < "$SECRETS/booking-token"; }
 fhq_status() { docker exec -i "$(cid n8n)" sh -c 'read T; wget -qO /dev/null -T 10 --server-response --header="Authorization: Bearer $T" "http://flowhq:8787$1" 2>&1 | awk "/HTTP\\//{print \$2; exit}"' _ "$1" < "$SECRETS/booking-token"; }

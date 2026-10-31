@@ -7,7 +7,7 @@
 . "$(dirname "$0")/common.sh"; need_confirm
 only_active "$V4_ID" || { say "V4 is not the one active workflow: stop"; exit 1; }
 is_active "$D4_ID" && { say "4D is already active"; exit 1; }
-active_ids | grep -qx "$D4_ID|0" || { say "4D is not imported (step 50)"; exit 1; }
+has_state "$D4_ID" 0 || { say "4D is not imported (step 50)"; exit 1; }
 [ -s "$SECRETS/booking-token" ] && [ -s "$SECRETS/w1-webhook-secret" ] || { say "steps 30/40 are not done"; exit 1; }
 say "unpublish V4, publish 4D"
 docker exec "$(cid n8n)" n8n unpublish:workflow --id="$V4_ID" 2>&1 | tail -2

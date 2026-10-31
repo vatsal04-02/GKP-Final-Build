@@ -5,8 +5,8 @@
 #   CONFIRM=yes ./scripts/4d/90-rollback.sh
 . "$(dirname "$0")/common.sh"; need_confirm
 say "1/5 workflows: 4D off, V4 on"
-active_ids | grep -qx "$D4_ID|1" && docker exec "$(cid n8n)" n8n unpublish:workflow --id="$D4_ID" 2>&1 | tail -1
-active_ids | grep -qx "$V4_ID|1" || docker exec "$(cid n8n)" n8n publish:workflow --id="$V4_ID" 2>&1 | tail -1
+if has_state "$D4_ID" 1; then docker exec "$(cid n8n)" n8n unpublish:workflow --id="$D4_ID" 2>&1 | tail -1; fi
+if ! has_state "$V4_ID" 1; then docker exec "$(cid n8n)" n8n publish:workflow --id="$V4_ID" 2>&1 | tail -1; fi
 say "2/5 .env back to the copy saved before step 20"
 pre="$(ls -1t .env.pre-4d-* 2>/dev/null | head -1 || true)"
 if [ -n "$pre" ]; then cp -p "$pre" .env && chmod 600 .env && say "   restored from $pre"; else say "   no .env.pre-4d-* copy: .env left as it is"; fi
