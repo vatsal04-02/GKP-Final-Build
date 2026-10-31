@@ -1,0 +1,93 @@
+---
+import { schedule } from '../data/site';
+
+/**
+ * "Book and pay online": pick a real time with a doctor, reserve it, pay the fee with any UPI app using the clinic's QR, and send the payment screenshot.
+ * It is HIDDEN until /api/pay?action=config says payments are open (the clinic has recorded its authorization and set the fee), so the page is unchanged
+ * while that is not so. The existing request form above stays as it is. A screenshot is never proof of payment: the clinic confirms the appointment after it
+ * has checked that the money arrived. Logic: src/scripts/paybooking.ts.
+ */
+---
+
+<section id="pay" class="section surface-tint pay" data-pay data-schedule={JSON.stringify(schedule)} hidden aria-labelledby="pay-title">
+  <div class="container-site">
+    <div class="pay-panel">
+      <header>
+        <p class="eyebrow">Book and pay online</p>
+        <h2 id="pay-title" class="h2">Reserve a time. Pay. Done.</h2>
+        <p class="lead">Choose a doctor's time, pay the consultation fee of <strong>₹<span data-pay-fee>–</span></strong> with any UPI app, and send us the screenshot. We confirm your visit once the payment is checked.</p>
+        <p class="safe">We never ask for your UPI PIN, OTP or banking password. Do not share them with anyone.</p>
+      </header>
+
+      <div data-pay-step="pick">
+        <h3>1. Choose a day and time</h3>
+        <div class="chips" data-pay-days role="radiogroup" aria-label="Day"></div>
+        <div class="slots" data-pay-slots aria-live="polite"><p class="muted">Choose a day to see the free times.</p></div>
+        <div class="who" data-pay-who hidden>
+          <h3>2. Your details</h3>
+          <div class="row">
+            <label>Name<input data-pay-name type="text" autocomplete="name" maxlength="60" /></label>
+            <label>Mobile number<input data-pay-phone type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" /></label>
+          </div>
+          <p class="muted" data-pay-chosen></p>
+          <p class="err" data-pay-err role="alert" hidden></p>
+          <button class="btn" type="button" data-pay-reserve>Reserve this time</button>
+        </div>
+      </div>
+
+      <div data-pay-step="pay" hidden>
+        <div class="card ok" data-pay-summary></div>
+        <p class="status" data-pay-status role="status" aria-live="polite"></p>
+        <div class="payrow" data-pay-howto>
+          <figure>
+            <img data-pay-qr alt="UPI QR code to pay the clinic's consultation fee" width="260" />
+            <figcaption><span data-pay-payee></span></figcaption>
+          </figure>
+          <ol>
+            <li>Open any UPI app (Google Pay, PhonePe, Paytm, BHIM…) and scan this QR.</li>
+            <li>Pay exactly <strong>₹<span data-pay-fee2>–</span></strong>. The payment screen shows the receiver's name.</li>
+            <li>Take a screenshot of the successful payment and upload it below.</li>
+          </ol>
+        </div>
+        <div class="upload" data-pay-upload>
+          <label>UPI transaction reference (UTR), if you can see it<input data-pay-utr type="text" inputmode="numeric" maxlength="24" placeholder="12 digits" /></label>
+          <label>Payment screenshot<input data-pay-file type="file" accept="image/png,image/jpeg,image/webp" /></label>
+          <p class="err" data-pay-uerr role="alert" hidden></p>
+          <button class="btn" type="button" data-pay-send>Send screenshot</button>
+        </div>
+        <p class="muted">Your reference: <strong data-pay-ref></strong> (keep it). <button class="link" type="button" data-pay-reset>Start again</button></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .pay { padding-block: var(--section-pad); }
+  .pay-panel { max-width: 62rem; margin-inline: auto; display: grid; gap: 1.5rem; background: var(--color-ivory); border: 1px solid color-mix(in srgb, var(--color-teal) 18%, transparent); border-radius: 1.25rem; padding: clamp(1.25rem, 3vw, 2.25rem); }
+  h3 { font-size: 1.05rem; margin: 0 0 .6rem; }
+  .safe { font-size: .9rem; color: var(--color-pine); background: color-mix(in srgb, var(--color-teal) 9%, white); border-radius: .6rem; padding: .55rem .8rem; display: inline-block; }
+  .chips, .slots { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .chips button, .slots button { border: 1px solid color-mix(in srgb, var(--color-teal) 40%, transparent); background: white; border-radius: .7rem; padding: .55rem .9rem; font: inherit; cursor: pointer; min-height: 44px; }
+  .chips button[aria-checked='true'], .slots button[aria-checked='true'] { background: var(--color-teal); color: white; border-color: var(--color-teal); }
+  .slots .grp { flex-basis: 100%; font-weight: 600; margin-top: .4rem; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; margin-bottom: .75rem; }
+  label { display: grid; gap: .3rem; font-weight: 600; font-size: .92rem; }
+  input { font: inherit; padding: .65rem .8rem; border: 1px solid #b9c4c2; border-radius: .6rem; min-height: 44px; background: white; font-weight: 400; }
+  .btn { background: var(--color-cta); color: white; border: 0; border-radius: .8rem; padding: .8rem 1.3rem; font: inherit; font-weight: 700; cursor: pointer; min-height: 48px; }
+  .btn[disabled] { opacity: .55; cursor: progress; }
+  .link { background: none; border: 0; color: var(--color-teal); text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+  .muted { color: #566; font-size: .92rem; }
+  .err { color: #b42318; font-weight: 600; }
+  .card { border: 1px solid color-mix(in srgb, var(--color-teal) 30%, transparent); border-radius: 1rem; padding: 1rem 1.2rem; background: white; }
+  .status { font-weight: 700; font-size: 1.05rem; margin: .8rem 0; }
+  .status[data-tone='ok'] { color: #05603a; } .status[data-tone='warn'] { color: #8a5a00; } .status[data-tone='bad'] { color: #b42318; }
+  .payrow { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; }
+  .payrow figure { margin: 0; text-align: center; } .payrow img { max-width: 100%; height: auto; border-radius: .8rem; border: 1px solid #d5dedc; }
+  .payrow ol { flex: 1 1 18rem; padding-left: 1.2rem; display: grid; gap: .5rem; }
+  .upload { display: grid; gap: .8rem; max-width: 30rem; margin-top: 1rem; }
+</style>
+
+<script>
+  import { initPayBooking } from '../scripts/paybooking';
+  initPayBooking();
+</script>

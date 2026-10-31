@@ -1,4 +1,4 @@
-﻿// Adds the payment tables (Booking_Payments, Payment_Events, Payment_Files) to ONE clinic's Grist doc. Additive only. Dry run unless --apply.
+// Adds the payment tables (Booking_Payments, Payment_Events, Payment_Files) to ONE clinic's Grist doc. Additive only. Dry run unless --apply.
 //   npm run provision-payments -- <clinic-slug>            show what would change
 //   npm run provision-payments -- <clinic-slug> --apply     create the tables / columns
 // Reads GRIST_BASE_URL, GRIST_API_KEY and GRIST_REGISTRY_DOC_ID from the environment. Prints no secrets. Run it against a COPY first when in doubt.

@@ -1,4 +1,4 @@
-﻿// Creates the three payment tables (docs/payments.md) in ONE clinic's Grist doc. ADDITIVE ONLY (like provision-booking): missing tables / columns are created, nothing is renamed,
+// Creates the three payment tables (docs/payments.md) in ONE clinic's Grist doc. ADDITIVE ONLY (like provision-booking): missing tables / columns are created, nothing is renamed,
 // retyped, deleted or cleared. Dry run unless --apply. Needs the booking tables to exist already (Appointments, Booking_Config).
 import { provision, type ProvisionClient } from '../records/provision';
 import { PAYMENT_TABLES } from './schema';

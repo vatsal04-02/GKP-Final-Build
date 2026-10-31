@@ -1,4 +1,4 @@
-﻿// Provisioning the payment tables: additive only, refuses to run without the booking tables, never touches existing tables. Synthetic data only.
+// Provisioning the payment tables: additive only, refuses to run without the booking tables, never touches existing tables. Synthetic data only.
 import { describe, expect, it } from 'vitest';
 import type { ProvisionClient } from '../src/server/records/provision';
 import { provisionPayments } from '../src/server/payments/provision';

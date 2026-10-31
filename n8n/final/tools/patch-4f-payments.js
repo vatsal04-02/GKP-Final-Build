@@ -66,7 +66,7 @@ const http = (name, method, url, cred, x, y, o = {}) => add(name, 'n8n-nodes-bas
 const CONFIG_ASSIGNS = [
   ['booking_api', "={{ String($env.FLOWHQ_BOOKING_API_URL || 'http://flowhq:8787').replace(/\\/+$/, '') }}"],
   ['graph_base_url', "={{ $env.FLOWHQ_WA_GRAPH_BASE_URL || 'https://graph.facebook.com' }}"], ['graph_version', "={{ $env.FLOWHQ_WA_GRAPH_VERSION || 'v23.0' }}"],
-  ['ai_external_enabled', "={{ String($env.FLOWHQ_AI_EXTERNAL_ENABLED || '').trim().toLowerCase() === 'true' }}", 'boolean'], ['ocr_website', "={{ String($env.FLOWHQ_PAYMENT_OCR_WEBSITE || '').trim().toLowerCase() === 'true' }}", 'boolean'],
+  ['ocr_ai_enabled', "={{ String($env.FLOWHQ_AI_EXTERNAL_ENABLED || '').trim().toLowerCase() === 'true' }}", 'boolean'], ['ocr_website', "={{ String($env.FLOWHQ_PAYMENT_OCR_WEBSITE || '').trim().toLowerCase() === 'true' }}", 'boolean'],
   ['wa_send_mode', "={{ String($env.FLOWHQ_WA_SEND_MODE || '').trim().toLowerCase() }}"], ['wa_allowlist', "={{ String($env.FLOWHQ_WA_ALLOWLIST || '') }}"],
   ['ai_model', "={{ $env.FLOWHQ_AI_MODEL || 'openai/gpt-4o-mini' }}"], ['ai_base_url', "={{ $env.FLOWHQ_AI_BASE_URL || 'https://openrouter.ai/api/v1' }}"],
 ];
@@ -79,7 +79,7 @@ const cfg = $('${P} ${D} Config').first().json; const c = $('${ctxNode}').item.j
 const digits = (s) => String(s || '').replace(/\\D/g, '');
 const allowed = String(cfg.wa_allowlist || '').split(/[,;]+/).map(digits).filter(Boolean);
 let skip = '';
-if (cfg.ai_external_enabled !== true) skip = 'external_ai_off';
+if (cfg.ocr_ai_enabled !== true) skip = 'external_ai_off';
 else if (c.source === 'website' && cfg.ocr_website !== true) skip = 'website_ocr_off';
 else if (c.source !== 'website' && cfg.wa_send_mode === 'allowlist' && !allowed.includes(digits(c.patient_phone))) skip = 'not_on_allowlist';
 const base = { payment_ref: c.payment_ref, patient_phone: c.patient_phone, source: c.source };
