@@ -12,7 +12,7 @@ BP="$pass" openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BP -in 
 a="$(sha256sum < "$out/wf-all.json" | cut -d' ' -f1)"; b="$(BP="$pass" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BP -in "$out/n8n-workflows.json.enc" | sha256sum | cut -d' ' -f1)"
 [ "$a" = "$b" ] && say "   the encrypted export decrypts to the identical file" || { say "   ENCRYPTED EXPORT MISMATCH: stop"; shred_file "$out/wf-all.json"; exit 1; }
 shred_file "$out/wf-all.json"
-say "2/4 tag the running FLOW HQ image for rollback"; docker tag "$(docker inspect -f '{{.Image}}' "$(cid flowhq)")" "gkp-final-build-flowhq:rollback-4d-$(date +%Y%m%d)" && docker image ls gkp-final-build-flowhq --format '   {{.Repository}}:{{.Tag}} {{.ID}}' | head -5
+say "2/4 tag the running FLOW HQ image for rollback"; docker tag "$(docker image inspect -f '{{.Id}}' "$(docker inspect -f '{{.Config.Image}}' "$(cid flowhq)")")" "gkp-final-build-flowhq:rollback-4d-$(date +%Y%m%d)" && docker image ls gkp-final-build-flowhq --format '   {{.Repository}}:{{.Tag}} {{.ID}}' | head -5
 say "3/4 full volume + env backup (scripts/backup.sh)"; BACKUP_DIR="$out" ./scripts/backup.sh | sed 's/^/   /'
 say "4/4 checksums"; (cd "$out" && sha256sum *.enc > SHA256SUMS && cat SHA256SUMS | sed 's/^/   /' && sha256sum -c SHA256SUMS >/dev/null && say "   all checksums verify")
 chmod 600 "$out"/*; say "BACKUP DONE: $out   (copy it off the server: scp -r deploy@<server>:backups/4d-cutover-$stamp .)"

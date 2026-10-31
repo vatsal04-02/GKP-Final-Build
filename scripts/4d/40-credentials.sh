@@ -9,7 +9,7 @@
 umask 077; [ -s "$SECRETS/booking-token" ] || { say "run step 30 first (no booking token file)"; exit 1; }
 [ -s "$SECRETS/w1-webhook-secret" ] || { openssl rand -hex 32 > "$SECRETS/w1-webhook-secret"; chmod 600 "$SECRETS/w1-webhook-secret"; say "generated a new website-webhook secret in $SECRETS/w1-webhook-secret"; }
 printf 'FLOWHQ_BOOKING_API_TOKEN=%s\nFLOWHQ_W1_WEBHOOK_SECRET=%s\n' "$(cat "$SECRETS/booking-token")" "$(cat "$SECRETS/w1-webhook-secret")" > "$SECRETS/cred.env"; chmod 600 "$SECRETS/cred.env"
-docker run --rm -v "$PWD":/r:ro -v "$SECRETS":/s node:20-alpine node /r/n8n/production/scripts/create-credentials.js --env-file /s/cred.env --only FhqCredBooking01,FhqCredW1Hook001 --out /s/creds.import.json
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/r:ro -v "$SECRETS":/s node:20-alpine node /r/n8n/production/scripts/create-credentials.js --env-file /s/cred.env --only FhqCredBooking01,FhqCredW1Hook001 --out /s/creds.import.json
 docker cp "$SECRETS/creds.import.json" "$(cid n8n):/tmp/creds.import.json" >/dev/null
 docker exec "$(cid n8n)" n8n import:credentials --input=/tmp/creds.import.json 2>&1 | grep -viE 'data|secret|token|password' || true
 docker exec "$(cid n8n)" rm -f /tmp/creds.import.json
