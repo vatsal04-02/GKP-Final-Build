@@ -5,11 +5,11 @@ Verified against production, not assumed. "LIVE" means observed working on produ
 | Component | Status | Evidence |
 |---|---|---|
 | FLOW HQ CRM, audit outbox | LIVE | `/api/health` ok, `audit_outbox: ok` |
-| n8n workflow | **4D `F4dRetryd0c49396` is the one active workflow**; V4 `VaZ0abHwRICrx6C0` preserved inactive | `00-preflight` / `80-verify` |
+| n8n workflow | **4E `F4eNoQuietHrs001` is the one active workflow** (4D `F4dRetryd0c49396` + no quiet hours for staff alerts and replies, live since 1 Nov 01:34 IST); 4D and V4 `VaZ0abHwRICrx6C0` preserved inactive | `75-update-to-4e`, `80-verify` |
 | Booking schema (`demo-clinic`) | LIVE (7 booking tables, Appointments columns, LEADS consent columns) | verified; every existing row unchanged |
 | Website form -> n8n -> Grist | **LIVE** | production probe 422 `consent_required`; synthetic lead stored with every field; a genuine visitor lead (`L-20261101-0001`) arrived through it |
 | Staff alert for new website leads | held by quiet hours (21:00-08:00 IST); `owner_phone` in Settings is a placeholder | Run_Log "staff alert not sent now: quiet hours" |
-| `booking_enabled` | **OFF** (waiting for the owner's approval of the schedules below) | Booking_Config |
+| `booking_enabled` | **ON since 1 Nov 2026 (owner directive)**, switched through Grist with a `Booking_Audit` row. Production API test PASSED with it ON (synthetic booking created, replayed safely, full slot refused, wrong phone refused, moved, cancelled, 5 audit entries). The supervised WhatsApp test from +919322146560 has NOT been run yet (it needs the owner's phone); the AI is reachable only from that number (allowlist) | `97-ai-booking-api-test` output, Booking_Config |
 | External AI | **ON, TEST ONLY**: allowlist = the authorized number only, `TEST_MODE=TRUE`, 12 replies/hour; other numbers are skipped before the AI is called | `95-ai-external.sh` interlocks |
 | WhatsApp sending | allowlist mode; with `TEST_MODE=TRUE` every outgoing message is redirected to `TEST_PHONE` (+919322146560) | Settings, env |
 | Reminders / follow-ups / review requests to patients | **OFF in effect**: `Reminder_Consent` is empty (no one is eligible), send mode is allowlist | Send_Ledger unchanged |

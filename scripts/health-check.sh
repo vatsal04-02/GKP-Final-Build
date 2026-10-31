@@ -11,7 +11,7 @@ say() { [ -n "${QUIET:-}" ] || echo "$@"; }
 bad() { echo "FAIL  $*"; fail=1; }
 ok()  { say "ok    $*"; }
 
-code() { curl -s -o /dev/null -w '%{http_code}' --max-time "$T" "$@" 2>/dev/null || echo 000; }
+code() { local c; c="$(curl -s -o /dev/null -w '%{http_code}' --max-time "$T" "$@" 2>/dev/null || true)"; echo "${c:-000}"; }
 
 # 1. public website (Vercel)
 c=$(code "https://$D/");               [ "$c" = 200 ] && ok "website $c" || bad "website https://$D/ answered $c (expected 200)"
