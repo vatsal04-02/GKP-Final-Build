@@ -1,0 +1,17 @@
+# Build context for flowhq/Dockerfile (built from the repository root). Keep host dependencies, build output, secrets and
+# unrelated apps out: the image installs its own node_modules, and no .env or users.json may ever end up in a build layer.
+.git
+.github
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/users.json
+backups
+*.tar.gz
+*.enc
+apps
+docs
+grist
+privacy-policy.html
