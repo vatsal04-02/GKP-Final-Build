@@ -25,6 +25,6 @@ npx vitest run __FILTER__ --reporter=default
 '@.Replace('__FILTER__', $Filter)
 docker run --rm --network $Network `
   -v "${repo}:/src:ro" -v "gkp-npm-cache:/root/.npm" -v "${KeyFile}:/run/grist.key:ro" `
-  -e REAL_GRIST_URL="http://${Grist}:8484" -e REAL_GRIST_KEY_FILE=/run/grist.key -e CI=1 `
+  -e REAL_GRIST_URL="http://${Grist}:8484" -e REAL_GRIST_KEY_FILE=/run/grist.key -e CI=1 -e STAGING_WORKFLOW="$env:STAGING_WORKFLOW" `
   $Image sh -c $inner
 exit $LASTEXITCODE

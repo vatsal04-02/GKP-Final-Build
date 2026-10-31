@@ -113,7 +113,7 @@ ${await gristDiag()}`); };
     flow = await startServer(s);
     meta = await startMeta(); ai = await startAi(FX);
     // the workflow under test: the 4C candidate, with credentials re-pointed BY ROLE to the ids create-credentials.js makes (test-only remap), and the W5 schedule trigger replaced by a webhook (STAGING ONLY: a 15-minute schedule cannot be waited for)
-    const wf = remap(JSON.parse(fs.readFileSync(path.resolve('..', 'n8n', 'final', 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4c.json'), 'utf8'))).wf;
+    const wf = remap(JSON.parse(fs.readFileSync(path.resolve('..', 'n8n', 'final', 'workflows', process.env.STAGING_WORKFLOW || 'FlowHQ_Clinic_Automation_production_candidate4c.json'), 'utf8'))).wf;   // STAGING_WORKFLOW=FlowHQ_Clinic_Automation_production_candidate4d.json stages the 4D candidate
     const w5 = wf.nodes.find((n: any) => n.name === 'W5 – Every 15 minutes'); Object.assign(w5, { type: 'n8n-nodes-base.webhook', typeVersion: 2, parameters: { httpMethod: 'POST', path: 'staging-w5', options: {} }, webhookId: crypto.randomUUID() });
     dir = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'stg-n8n-')); const file = path.join(dir, 'workflow.staging.json'); fs.writeFileSync(file, JSON.stringify(wf));
     const env = {
