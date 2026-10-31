@@ -115,6 +115,9 @@ services:
       - GRIST_OIDC_IDP_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GRIST_OIDC_IDP_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GRIST_OIDC_IDP_SCOPES=openid email profile
+      # Added by hand on the production server as the Google sign-in (OIDC) fix (see docker-compose.yml.before-oidc-fix there).
+      # It lives here so a deploy from git cannot silently revert it.
+      - GRIST_OIDC_IDP_SKIP_END_SESSION_ENDPOINT=true
     # If formulas fail to run with the gvisor sandbox on your host, uncomment:
     # cap_add:
     #   - SYS_PTRACE
