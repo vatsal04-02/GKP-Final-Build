@@ -5,7 +5,8 @@ Verified against production, not assumed. "LIVE" means observed working on produ
 | Component | Status | Evidence |
 |---|---|---|
 | FLOW HQ CRM, audit outbox | LIVE | `/api/health` ok, `audit_outbox: ok` |
-| n8n workflow | **4E `F4eNoQuietHrs001` is the one active workflow** (4D `F4dRetryd0c49396` + no quiet hours for staff alerts and replies, live since 1 Nov 01:34 IST); 4D and V4 `VaZ0abHwRICrx6C0` preserved inactive | `75-update-to-4e`, `80-verify` |
+| UPI payments | **deployed, CLOSED**: tables `Booking_Payments` / `Payment_Events` / `Payment_Files` created (additive), 4F active, website section hidden, QR refused (403) until authorization + fee are recorded | production checks of 2 Nov 2026 (`docs/payments-status.md`) |
+| n8n workflow | **4F `F4fPayments0001` is the one active workflow** (4E `F4eNoQuietHrs001` + UPI payments, live since 2 Nov 03:53 IST); previously: 4E (4D `F4dRetryd0c49396` + no quiet hours for staff alerts and replies, live since 1 Nov 01:34 IST); 4D and V4 `VaZ0abHwRICrx6C0` preserved inactive | `75-update-to-4e`, `80-verify` |
 | Booking schema (`demo-clinic`) | LIVE (7 booking tables, Appointments columns, LEADS consent columns) | verified; every existing row unchanged |
 | Website form -> n8n -> Grist | **LIVE** | production probe 422 `consent_required`; synthetic lead stored with every field; a genuine visitor lead (`L-20261101-0001`) arrived through it |
 | Staff alert for new website leads | held by quiet hours (21:00-08:00 IST); `owner_phone` in Settings is a placeholder | Run_Log "staff alert not sent now: quiet hours" |
