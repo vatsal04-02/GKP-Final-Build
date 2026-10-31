@@ -273,7 +273,7 @@ describe('looking up, rescheduling and cancelling', () => {
     t.docs.D[BT.config]!.find((r) => r.fields.Key === 'booking_enabled')!.fields.Value = 'off';
     expect(await fail(t.svc.reschedule(ref, { slotId: M10, patientPhone: P1 }, AI))).toMatchObject({ status: 403, code: 'ai_booking_disabled' });
     expect((await t.svc.reschedule(ref, { slotId: M10 }, STAFF)).appointment.start_time).toBe('10:00');   // staff can, with AI off
-    await t.svc.cancel(ref, { patientPhone: P1 }, AI); expect(await fail(t.svc.reschedule(ref, { slotId: M09 }, STAFF))).toMatchObject({ status: 409, code: 'not_reschedulable' });
+    await t.svc.cancel(ref, { reason: 'test' }, STAFF); expect(await fail(t.svc.reschedule(ref, { slotId: M09 }, STAFF))).toMatchObject({ status: 409, code: 'not_reschedulable' });
   });
   it('a reschedule that loses a race with an outside writer is rolled back to the old time', async () => {
     let injected = false;
@@ -289,9 +289,13 @@ describe('looking up, rescheduling and cancelling', () => {
     expect((await t.svc.availability({ date: THU })).slots.map((s) => s.slot_id)).toContain(M09);
     expect((await t.svc.cancel(ref, { patientPhone: P1 }, AI)).alreadyCancelled).toBe(true); expect((await book(t.svc, M09, { phone: P2 })).replayed).toBe(false);
   });
-  it('cancel: wrong phone is a 404, a finished visit cannot be cancelled, and cancelling still works while AI booking is off', async () => {
+  it('cancel: wrong phone is a 404, a finished visit cannot be cancelled, and the AI cannot cancel while AI booking is off (staff still can)', async () => {
     const t = setup(); const a = await book(t.svc); const ref = a.appointment.booking_reference; expect(await fail(t.svc.cancel(ref, { patientPhone: P2 }, AI))).toMatchObject({ status: 404 });
-    t.docs.D[BT.config]!.find((r) => r.fields.Key === 'booking_enabled')!.fields.Value = 'off'; expect((await t.svc.cancel(ref, { patientPhone: P1 }, AI)).appointment.status).toBe('Cancelled');
+    t.docs.D[BT.config]!.find((r) => r.fields.Key === 'booking_enabled')!.fields.Value = 'off';
+    expect(await fail(t.svc.cancel(ref, { patientPhone: P1 }, AI))).toMatchObject({ status: 403, code: 'ai_booking_disabled' });
+    expect(await fail(t.svc.cancel(ref, { patientPhone: P2 }, AI))).toMatchObject({ status: 403, code: 'ai_booking_disabled' });   // same answer for a stranger: nothing is revealed
+    expect(t.appts()[0]!.fields.Status).not.toBe('Cancelled');
+    expect((await t.svc.cancel(ref, { reason: 'Patient called' }, STAFF)).appointment.status).toBe('Cancelled');
     const done = setup({ appts: [{ Booking_UID: 'wa-GKA-000050', Patient_Phone: '+919876543210', Start: ist(THU, '09:00'), End: ist(THU, '09:30'), Status: 'Completed' }] });
     expect(await fail(done.svc.cancel('wa-GKA-000050', { patientPhone: P1 }, AI))).toMatchObject({ status: 409, code: 'not_cancellable' });
   });

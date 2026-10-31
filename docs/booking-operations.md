@@ -9,12 +9,12 @@ It is OFF by default and OFF whenever the booking configuration is missing or in
 | See free times | none offered (`ai_booking.available:false`) | calendar and slot picker work |
 | Create | refused, 403 `ai_booking_disabled` | allowed |
 | Reschedule | refused, 403 `ai_booking_disabled` | allowed |
-| Cancel | **allowed** (with the patient's phone as proof; subject to `cancel_min_notice_minutes`) | allowed |
+| Cancel | refused, 403 `ai_booking_disabled` (the same answer whether or not the phone matches, so nothing is revealed) | allowed |
 | Look up | allowed with ownership proof (phone) | allowed |
 | Change status (check in, complete, no-show) | not available to the AI | allowed |
 
 AI reschedule/cancel are kept separate from staff permissions on purpose: the AI path needs a token scope AND the patient's phone; staff need a signed-in session and a role.
-If you would rather the AI also be unable to cancel while OFF, that is a one-line change in `BookingService.cancel` (decision for the owner). Verified by `tests/booking-staff.test.ts` and `tests/booking-service.test.ts`.
+While OFF the AI path is read-only: it cannot create, move OR cancel (cancel was gated on 1 Nov 2026 on the owner's instruction; with AI booking ON a patient can cancel their own booking with their phone, subject to `cancel_min_notice_minutes`). Staff cancellation is never gated by the switch. Verified by `tests/booking-staff.test.ts`, `tests/booking-service.test.ts` and `tests/booking-api.test.ts`.
 
 ## Who may do what (enforced inside the booking service, tested in `tests/booking-permissions.test.ts`)
 | | Admin | Front-desk staff | A doctor's own login |

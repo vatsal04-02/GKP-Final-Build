@@ -173,14 +173,21 @@ describe('the contract', () => {
 });
 
 describe('the booking switch, over HTTP', () => {
-  it('OFF: config and availability say so, create is 403, nothing is written; existing bookings stay and can be read and cancelled', async () => {
+  it('OFF: config and availability say so, create, move AND cancel are 403, nothing is written; existing bookings stay and can be read', async () => {
     const ref = (await post(M09)).json.appointment.booking_reference as string;
     docs[physioDoc]![BT.config]!.find((r) => r.fields.Key === 'booking_enabled')!.fields.Value = 'off';   // an admin flips it: effective on the very next call
     expect((await call('/config')).json).toMatchObject({ ai_booking: { enabled: false, reason: 'disabled' }, booking_enabled: false });
     expect((await call(`/availability?date=${THU}`)).json).toMatchObject({ ai_booking: { available: false, reason: 'disabled' }, slots: [] });
     const r = await post(M0930, { phone: P2 }); expect(r.status).toBe(403); expect(r.json).toMatchObject({ error: { code: 'ai_booking_disabled' }, reason: 'disabled' }); expect(appts()).toHaveLength(1);
-    expect((await call(`/appointments/${ref}/cancel`, { method: 'POST', body: { patient_phone: P1 } })).json.appointment.status).toBe('Cancelled'); expect(appts()).toHaveLength(1);
+    const before = JSON.stringify(appts());
+    const mv = await call(`/appointments/${ref}`, { method: 'PATCH', body: { patient_phone: P1, slot_id: M10 } }); expect(mv.status).toBe(403); expect(mv.json.error.code).toBe('ai_booking_disabled');
+    for (const body of [{ patient_phone: P1 }, { patient_phone: P2 }, { patient_phone: P1, reason: 'again' }]) {   // the owner or not: the AI path cannot cancel while the switch is off, and it does not reveal whether the booking exists
+      const c = await call(`/appointments/${ref}/cancel`, { method: 'POST', body }); expect(c.status).toBe(403); expect(c.json.error.code).toBe('ai_booking_disabled'); expect(c.json).toMatchObject({ reason: 'disabled' });
+    }
+    expect((await call(`/appointments/${ref}?patient_phone=${P1}`)).json.appointment.status).toBe('Confirmed');   // reading stays allowed
+    expect(JSON.stringify(appts())).toBe(before);   // nothing was written by any refused call
     docs[physioDoc]![BT.config]!.find((x) => x.fields.Key === 'booking_enabled')!.fields.Value = 'on'; expect((await post(M0930, { phone: P2 })).status).toBe(201);
+    expect((await call(`/appointments/${ref}/cancel`, { method: 'POST', body: { patient_phone: P1 } })).json.appointment.status).toBe('Cancelled');   // back ON: the owner can cancel again
   });
   it('the demo clinic has no booking tables: everything fails closed', async () => {
     for (const t of [BT.config, BT.doctors, BT.schedules, BT.blocks, BT.audit]) delete docs[physioDoc]![t];

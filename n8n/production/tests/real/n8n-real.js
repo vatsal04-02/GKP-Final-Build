@@ -47,7 +47,7 @@ class RealN8n {
     let wrapper;
     if (FAKETIME_LIB) {
       this.shifted = true;
-      wrapper = `#!/bin/sh\nexec env LD_PRELOAD=${FAKETIME_LIB} FAKETIME_DONT_FAKE_MONOTONIC=1 FAKETIME="${dayShiftSeconds()}s" ${real} "$@"\n`;
+      wrapper = `#!/bin/sh\nexec env LD_PRELOAD=${FAKETIME_LIB} FAKETIME_DONT_FAKE_MONOTONIC=1 FAKETIME="${dayShiftSeconds() >= 0 ? '+' : ''}${dayShiftSeconds()}s" ${real} "$@"\n`;
     } else wrapper = `#!/bin/sh\nexec ${real} "$@"\n`;
     fs.writeFileSync(path.join(this.wrapDir, 'node'), wrapper, { mode: 0o755 });
     this.env = {

@@ -349,6 +349,8 @@ export class BookingService {
     const detail = { source: a.source };
     return this.attempt('cancel', a, ref, detail, async (op) => this.lock.run(async () => {
       const st = await this.stateFor(a);
+      // the AI path is read-only while AI booking is off: it cannot create, move OR cancel. Staff cancellation is never gated by this switch.
+      if (this.channelOf(a) === 'ai' && !st.ai.available) throw bad('ai_booking_disabled', 'AI booking is switched off', 403, { reason: st.ai.reason });
       const row = await this.owned(st.rows.find((x) => t(x.fields.Booking_UID) === ref), a, i.patientPhone);
       this.guard(a, 'appointments:write', this.doctorIdOf(row, st), st.input.doctors);
       const status = displayStatus(t(row.fields.Status), t(row.fields.Appt_Stage));

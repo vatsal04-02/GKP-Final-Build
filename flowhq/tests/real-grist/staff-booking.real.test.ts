@@ -94,11 +94,13 @@ d('STAFF-MANAGED BOOKING (AI booking switch OFF): real Grist + real FLOW HQ serv
     expect(mk.status, mk.text).toBe(403); expect(mk.json.error.code).toBe('ai_booking_disabled');
     const mv = await srv.api(`/appointments/${eveRef}`, { method: 'PATCH', body: { patient_phone: P2, slot_id: MORNING2 } }); expect(mv.status, mv.text).toBe(403);
     expect((await rows('Appointments')).length).toBe(before);   // create and move wrote nothing
-    // BY DESIGN (docs/booking-operations.md; booking-api.test.ts "OFF ... existing bookings can be read and cancelled"): with the switch off the service token may still cancel a
-    // patient's OWN existing appointment. It needs the patient's phone (a wrong phone is a 404) and only frees a slot; it is not a booking. W13 does not do it while AI booking is off.
-    const wrong = await srv.api(`/appointments/${eveRef}/cancel`, { method: 'POST', body: { patient_phone: '+919000049999' } }); expect(wrong.status).toBe(404);
+    // Owner decision (1 Nov 2026): the AI path is read-only while the switch is off, so it cannot cancel either (the owner's phone or a stranger's: the same 403).
+    for (const phone of ['+919000049999', P2]) { const c = await srv.api(`/appointments/${eveRef}/cancel`, { method: 'POST', body: { patient_phone: phone } }); expect(c.status, c.text).toBe(403); expect(c.json.error.code).toBe('ai_booking_disabled'); }
     expect((await rows('Appointments')).find((r) => r.fields.Booking_UID === eveRef)!.fields.Status).not.toBe('Cancelled');
-    const own = await srv.api(`/appointments/${eveRef}/cancel`, { method: 'POST', body: { patient_phone: P2 } }); expect(own.status, own.text).toBe(200);
+    expect((await rows('Appointments')).length).toBe(before);
+    // staff cancellation is not gated by the AI switch
+    const staffCx = await srv.staff('desk', `/appointments/${eveRef}/cancel`, { method: 'POST', body: { reason: 'synthetic cleanup' } }); expect(staffCx.status, staffCx.text).toBe(200);
+    expect((await rows('Appointments')).find((r) => r.fields.Booking_UID === eveRef)!.fields.Status).toBe('Cancelled');
   });
 
   it('8. the permissions table: front desk and admin may book; settings, the AI switch and the audit log are admin only', async () => {

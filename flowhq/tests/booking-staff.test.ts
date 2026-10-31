@@ -19,7 +19,7 @@ beforeEach(async () => { vi.spyOn(console, 'error').mockImplementation(() => {})
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('the booking switch is an AI switch, not a staff switch', () => {
-  it('AI OFF: staff can create, move, cancel and change status; the AI cannot create or move, but can still look up and cancel with the patient\'s phone', async () => {
+  it('AI OFF: staff can create, move, cancel and change status; the AI cannot create, move OR cancel, but can still look up with the patient\'s phone', async () => {
     const a = await book('desk'); expect(a.status).toBe(201); const ref = a.json.appointment.booking_reference as string;
     expect(a.json.appointment).toMatchObject({ source: 'Staff', booking_reference: 'GKA-000001', status: 'Confirmed' });
     expect((await fx.s('desk', `/appointments/${ref}`, { method: 'PATCH', body: { slot_id: M10 } })).status).toBe(200);
@@ -28,7 +28,9 @@ describe('the booking switch is an AI switch, not a staff switch', () => {
     expect((await fx.api(`/appointments/${ref}`, { method: 'PATCH', body: { patient_phone: P1, slot_id: M0930 } })).status).toBe(403);   // ...including moving an appointment
     expect((await fx.api(`/appointments/${ref}?patient_phone=${P1}`)).status).toBe(200);   // lookup works (ownership proven by phone)
     expect((await fx.api(`/appointments/${ref}?patient_phone=${P2}`)).status).toBe(404);
-    expect((await fx.api(`/appointments/${ref}/cancel`, { method: 'POST', body: { patient_phone: P1 } })).json.appointment.status).toBe('Cancelled');   // and cancelling
+    const aiCancel = await fx.api(`/appointments/${ref}/cancel`, { method: 'POST', body: { patient_phone: P1 } }); expect(aiCancel.status).toBe(403); expect(aiCancel.json.error.code).toBe('ai_booking_disabled');   // ...and cancelling
+    expect(appts()[0]!.fields.Status).not.toBe('Cancelled');   // the refused AI cancel changed nothing
+    expect((await fx.s('desk', `/appointments/${ref}/cancel`, { method: 'POST', body: { reason: 'Patient called' } })).json.appointment.status).toBe('Cancelled');   // staff cancellation is never gated by the AI switch
     expect(appts()).toHaveLength(1);
   });
   it('AI ON: staff still work exactly the same; one slot, whoever asks first wins', async () => {
