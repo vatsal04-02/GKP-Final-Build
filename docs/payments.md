@@ -44,3 +44,7 @@ Real file type from the bytes (JPEG/PNG/WebP only, 5 MB max, SVG/PDF/GIF refused
 
 ## Not done / needs the owner or an outside party
 See `docs/payments-status.md` (fee, written payee authorization, Meta production number and approved templates, authoritative bank verification, Vercel variable).
+
+## Payment Management (sidebar: Money > Payment Management, route /w/<workspace>/payments)
+The review queue lives in its own sidebar item (it replaced the Payments tab inside Schedule). Cards: total collected (sum of verified PAID amounts), awaiting verification, review required, rejected, cancelled; filters All / Pending / Screenshot received / Review required / Paid / Rejected / Cancelled and a search; a row opens the details (patient and booking, screenshot preview, what the reader found and the flags, UTR, history) with the verification form (bank amount, bank UTR, receipt tick: Approve) and Reject (reason). Admins also see the payment settings on that page and can record a refund. Front desk and admins only (a doctor login is refused by the server). Screenshots of the page on STAGING with synthetic data: docs/img/payment-management-*.png. Browser test: flowhq/tests/e2e/payment-management.e2e.ts.
+

@@ -9,6 +9,7 @@ import type { GristClient, GristRecord } from '../grist';
 import { bad, maxSeq, Mutex, pad } from '../records/ids';
 import { normalizePhone } from '../adapters/autopilot/shared';
 import { displayStatus } from '../booking/engine';
+import { dayKey, localParts } from '../time';
 import { can } from '../booking/permissions';
 import type { BookingActor } from '../booking/service';
 import type { StaffBooking } from '../booking/staff-service';
@@ -24,6 +25,7 @@ const SYSTEM: BookingActor = { kind: 'staff', id: 'system:payments', name: 'Paym
 const FILE_RE = /^\d{6}\/[0-9a-f]{32}\.(jpg|png|webp)$/;
 const rupees = (paise: number) => (paise % 100 === 0 ? String(paise / 100) : (paise / 100).toFixed(2));
 export const DEFAULT_PAYEE = 'VATSAL TRIPATHI';
+const hhmm = (ms: number, tz: string) => { const p = localParts(ms, tz); return `${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`; };
 
 export interface PaymentView { payment_ref: string; payment_id: string; status: PaymentStatus; patient_status: string; patient_message: string; amount_inr: string; expires_at: string | null; can_upload: boolean; appointment: { status: string; date: string; start_time: string; doctor_name: string | null } | null }
 
@@ -206,25 +208,28 @@ export class PaymentService {
   private reviewer(a: BookingActor) { if (a.kind !== 'staff' || !can(a, 'payments:review')) throw bad('forbidden', 'Only front-desk staff and admins can review payments', 403); }
   async list(q: { status?: string; q?: string; limit?: number }, a: BookingActor) {
     this.reviewer(a);
-    const all = await this.rows(PT.payments); const appts = await this.rows('Appointments').catch(() => [] as GristRecord[]);
-    const counts: Record<string, number> = {}; for (const r of all) counts[t(r.fields.Status)] = (counts[t(r.fields.Status)] || 0) + 1;
+    const all = await this.rows(PT.payments); const appts = await this.rows('Appointments').catch(() => [] as GristRecord[]); const shots = await this.lastShots();
+    const counts: Record<string, number> = {}; let collected = 0; for (const r of all) { counts[t(r.fields.Status)] = (counts[t(r.fields.Status)] || 0) + 1; if (t(r.fields.Status) === 'PAID') collected += n(r.fields.Received_Paise) || n(r.fields.Amount_Paise); }
     const needle = t(q.q).toLowerCase(); const st = t(q.status);
     const rows = all.filter((r) => (!st || t(r.fields.Status) === st) && (!needle || [r.fields.Booking_UID, r.fields.Payment_ID, r.fields.UTR, r.fields.Patient_Name, r.fields.Patient_Phone].some((x) => t(x).toLowerCase().includes(needle))))
-      .sort((x, y) => n(y.fields.Last_Event_At) - n(x.fields.Last_Event_At)).slice(0, Math.min(200, q.limit || 100)).map((r) => this.staffRow(r, appts));
-    return { rows, counts, needs_review: (counts.REVIEW_REQUIRED || 0) + (counts.SCREENSHOT_RECEIVED || 0), refund_due: rows.filter((x) => x.refund_due).length };
+      .sort((x, y) => n(y.fields.Last_Event_At) - n(x.fields.Last_Event_At)).slice(0, Math.min(500, q.limit || 200)).map((r) => this.staffRow(r, appts, shots));
+    return { rows, counts, totals: { collected_inr: rupees(collected), collected_count: counts.PAID || 0 }, total: all.length, needs_review: (counts.REVIEW_REQUIRED || 0) + (counts.SCREENSHOT_RECEIVED || 0), refund_due: rows.filter((x) => x.refund_due).length };
   }
-  private staffRow(r: GristRecord, appts: GristRecord[]) {
+  /** payment id -> when its newest screenshot was submitted (epoch seconds) */
+  private async lastShots(): Promise<Map<string, number>> { const m = new Map<string, number>(); try { for (const f of await this.rows(PT.files)) { const id = t(f.fields.Payment_ID); m.set(id, Math.max(m.get(id) || 0, n(f.fields.At))); } } catch { /* no files table */ } return m; }
+  private staffRow(r: GristRecord, appts: GristRecord[], shots: Map<string, number> = new Map()) {
     const f = r.fields; const ap = appts.find((x) => t(x.fields.Booking_UID) === t(f.Booking_UID)); const as = ap ? displayStatus(t(ap.fields.Status), t(ap.fields.Appt_Stage)) : null;
     const ts = (v: unknown) => (n(v) ? new Date(n(v) * 1000).toISOString() : null);
     return { id: t(f.Payment_ID), booking_reference: t(f.Booking_UID), channel: t(f.Channel), status: t(f.Status), appointment_status: as, patient: { name: t(f.Patient_Name), phone: t(f.Patient_Phone) }, amount_inr: rupees(n(f.Amount_Paise)), utr: t(f.UTR), utr_source: t(f.UTR_Source),
       screenshots: n(f.Screenshot_Count), flags: t(f.Flags).split(',').filter(Boolean), extracted: { amount_inr: n(f.OCR_Amount_Paise) ? rupees(n(f.OCR_Amount_Paise)) : null, utr: t(f.OCR_UTR), txn_at: ts(f.OCR_Txn_At), payee: t(f.OCR_Payee), payer: t(f.OCR_Payer), status: t(f.OCR_Status), confidence: t(f.OCR_Confidence) },
       verification_method: t(f.Verification_Method), received_inr: n(f.Received_Paise) ? rupees(n(f.Received_Paise)) : null, reviewed_by: t(f.Reviewed_By), reviewed_at: ts(f.Reviewed_At), review_note: t(f.Review_Note), refunded_at: ts(f.Refunded_At), refunded_by: t(f.Refunded_By),
-      expires_at: ts(f.Expires_At), created_at: ts(f.Created_At), refund_due: t(f.Status) === 'PAID' && as === 'Cancelled' };
+      appointment: ap && n(ap.fields.Start) ? { date: dayKey(n(ap.fields.Start) * 1000, this.o.tz || 'Asia/Kolkata'), start_time: hhmm(n(ap.fields.Start) * 1000, this.o.tz || 'Asia/Kolkata') } : null,
+      submitted_at: ts(shots.get(t(f.Payment_ID))), expires_at: ts(f.Expires_At), created_at: ts(f.Created_At), refund_due: t(f.Status) === 'PAID' && as === 'Cancelled' };
   }
   async detail(id: string, a: BookingActor) {
     this.reviewer(a); const r = (await this.rows(PT.payments)).find((x) => t(x.fields.Payment_ID) === id); if (!r) throw bad('not_found', 'Payment not found', 404);
     const events = (await this.rows(PT.events)).filter((e) => t(e.fields.Payment_ID) === id).sort((x, y) => n(x.fields.At) - n(y.fields.At)).map((e) => ({ at: new Date(n(e.fields.At) * 1000).toISOString(), actor: t(e.fields.Actor), action: t(e.fields.Action), from: t(e.fields.From_Status), to: t(e.fields.To_Status), outcome: t(e.fields.Outcome), detail: t(e.fields.Detail) }));
-    return { payment: this.staffRow(r, await this.rows('Appointments').catch(() => [] as GristRecord[])), events, appointment: await this.apptSummary(t(r.fields.Booking_UID)) };
+    return { payment: this.staffRow(r, await this.rows('Appointments').catch(() => [] as GristRecord[]), await this.lastShots()), events, appointment: await this.apptSummary(t(r.fields.Booking_UID)) };
   }
   async screenshot(id: string, a: BookingActor): Promise<{ data: Buffer; mime: string }> {
     this.reviewer(a); const r = (await this.rows(PT.payments)).find((x) => t(x.fields.Payment_ID) === id); const ref = t(r?.fields.Screenshot_Ref);

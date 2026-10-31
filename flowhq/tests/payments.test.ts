@@ -291,3 +291,24 @@ describe('what n8n tells WhatsApp patients (website patients see their status on
     const a = await request(M09, P1); const b = await request(M0930, P2); const o = (await fx.api(`/payments/open?patient_phone=${P1}`)).json.payments; expect(o).toHaveLength(1); expect(o[0].payment_ref).toBe(a.json.payment.payment_ref); void b; expect((await fx.api('/payments/open?patient_phone=9000000099')).json.payments).toHaveLength(0);
   });
 });
+
+describe('Payment Management page: the data it needs and who sees it', () => {
+  beforeEach(async () => { await open(); });
+  it('the sidebar module appears only when the payment tables exist, and every role can load the workspace', async () => {
+    const mods = async (f: Fixture, who: string) => (await (await f.app.request('/api/w/demo-physio/workspace', { headers: { cookie: f.cookies[who]! } })).json()).modules as string[];
+    expect(await mods(fx, 'admin')).toContain('payments'); expect(await mods(fx, 'desk')).toContain('payments');
+    const without = await buildFixture({ bookingOn: true }); expect(await mods(without, 'admin')).not.toContain('payments'); expect(await mods(without, 'admin')).toContain('schedule');
+  });
+  it('the list carries what the table shows (appointment date/time, amount, UTR, submitted time) and the totals for the cards', async () => {
+    const r0 = (await fx.s('desk', '/payments')).json; expect(r0.totals).toEqual({ collected_inr: '0', collected_count: 0 });
+    const { ref, id } = await reviewed(); const row = (await fx.s('desk', '/payments')).json.rows.find((x: { id: string }) => x.id === id);
+    expect(row).toMatchObject({ booking_reference: ref, amount_inr: '500', utr: '412345678901', status: 'REVIEW_REQUIRED', appointment: { date: '2026-10-08', start_time: '09:00' }, patient: { name: 'Zed Test Patient' } }); expect(typeof row.submitted_at).toBe('string');
+    expect((await fx.s('desk', '/payments')).json.totals.collected_inr).toBe('0');   // nothing is collected until staff verify the money
+    await approve(id); const after = (await fx.s('desk', '/payments')).json; expect(after.totals).toEqual({ collected_inr: '500', collected_count: 1 }); expect(after.counts).toMatchObject({ PAID: 1 });
+    expect((await fx.s('desk', '/payments?status=PAID')).json.rows).toHaveLength(1); expect((await fx.s('desk', '/payments?status=CANCELLED')).json.rows).toHaveLength(0);
+  });
+  it('the decisions are logged with the signed-in staff identity and a time; a doctor login gets nothing', async () => {
+    const { id } = await reviewed(); await approve(id); const d = (await fx.s('desk', `/payments/${id}`)).json; const a = d.events.find((e: { action: string }) => e.action === 'approved'); expect(a.actor).toBe('desk@test'); expect(new Date(a.at).getTime()).toBeGreaterThan(0);
+    expect((await fx.s('mahesh', '/payments')).status).toBe(403); expect((await fx.s('none', '/payments')).status).toBe(401);
+  });
+});

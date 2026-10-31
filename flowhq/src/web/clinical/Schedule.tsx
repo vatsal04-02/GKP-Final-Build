@@ -16,10 +16,9 @@ import { DayCalendar } from './schedule/DayCalendar';
 import { DoctorsTab } from './schedule/DoctorsTab';
 import { WeekCalendar } from './schedule/WeekCalendar';
 import { AuditTab, SettingsTab } from './schedule/SettingsTab';
-import { PaymentsTab } from './schedule/PaymentsTab';
 import { Confirm, problem, when, type Overview } from './schedule/shared';
 
-type Tab = 'calendar' | 'week' | 'list' | 'doctors' | 'settings' | 'audit' | 'payments';
+type Tab = 'calendar' | 'week' | 'list' | 'doctors' | 'settings' | 'audit';
 interface Pending { title: string; body: string; label: string; danger?: boolean; values: Record<string, string> }
 const WORKING: Record<string, { text: string; tone: 'green' | 'amber' | 'neutral' | 'red' }> = { working: { text: 'Working today', tone: 'green' }, on_leave: { text: 'On leave today', tone: 'amber' }, inactive: { text: 'Not taking bookings', tone: 'neutral' }, not_scheduled: { text: 'No hours today', tone: 'neutral' } };
 
@@ -84,7 +83,7 @@ export default function Schedule() {
   const [tab, setTab] = useState<Tab>('calendar'); const [open, setOpen] = useState<string | null>(null); const [booking, setBooking] = useState<{ date: string; slotId: string } | 'new' | null>(null);
   const ov = useQuery({ queryKey: ['sched', ws.id, 'overview'], queryFn: () => api<Overview>(wsPath(ws.id, '/schedule/overview')), refetchInterval: 60000 });
   const doctors = (ov.data?.doctors || []).map((d) => ({ doctor_id: d.doctor_id, name: d.name, qualification: d.qualification, default_shift: d.default_shift, active: d.active, notes: '' }));
-  const tabs = [{ value: 'calendar', label: 'Day calendar' }, { value: 'week', label: 'Week' }, { value: 'list', label: 'Appointments' }, { value: 'doctors', label: 'Doctors & hours' }, { value: 'settings', label: 'Settings' }, ...(me.user.clinician && !admin ? [] : [{ value: 'payments', label: 'Payments' }]), ...(admin ? [{ value: 'audit', label: 'History' }] : [])] as Array<{ value: Tab; label: string }>;
+  const tabs = [{ value: 'calendar', label: 'Day calendar' }, { value: 'week', label: 'Week' }, { value: 'list', label: 'Appointments' }, { value: 'doctors', label: 'Doctors & hours' }, { value: 'settings', label: 'Settings' }, ...(admin ? [{ value: 'audit', label: 'History' }] : [])] as Array<{ value: Tab; label: string }>;
   return (
     <Page wide title="Schedule" subtitle="Book, move and cancel appointments, manage doctors and hours, and control WhatsApp AI booking."
       actions={<Button variant="primary" icon={<CalendarPlus className="h-4 w-4" />} onClick={() => setBooking('new')}>New appointment</Button>}>
@@ -98,7 +97,6 @@ export default function Schedule() {
         {tab === 'list' && <AppointmentsList doctors={doctors} onOpen={setOpen} />}
         {tab === 'doctors' && <DoctorsTab />}
         {tab === 'settings' && <SettingsTab />}
-        {tab === 'payments' && <PaymentsTab admin={admin} />}
         {tab === 'audit' && admin && <AuditTab />}
       </div>
       <AppointmentDrawer reference={open} onClose={() => setOpen(null)} />

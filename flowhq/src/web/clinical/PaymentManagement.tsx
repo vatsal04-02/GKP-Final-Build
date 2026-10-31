@@ -3,27 +3,28 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { api, ws as wsPath } from '../../lib/api';
-import { useWs } from '../../lib/workspace';
-import { Badge, Button, Card, Input, Segmented, Switch, Textarea } from '../../components/ui/primitives';
-import { Drawer, ErrorState, SkeletonRows, useToast } from '../../components/ui/feedback';
-import { Field } from '../common';
-import { Confirm, problem, when } from './shared';
+import { api, ws as wsPath } from '../lib/api';
+import { useWs } from '../lib/workspace';
+import { Badge, Button, Card, Input, Segmented, Switch, Textarea } from '../components/ui/primitives';
+import { Page } from '../components/layout/Shell';
+import { cn } from '../lib/cn';
+import { Drawer, ErrorState, SkeletonRows, useToast } from '../components/ui/feedback';
+import { Field, useDebounced } from './common';
+import { Confirm, problem, when } from './schedule/shared';
 
 interface Row { id: string; booking_reference: string; channel: string; status: string; appointment_status: string | null; patient: { name: string; phone: string }; amount_inr: string; utr: string; utr_source: string; screenshots: number; flags: string[];
-  extracted: { amount_inr: string | null; utr: string; txn_at: string | null; payee: string; payer: string; status: string; confidence: string }; verification_method: string; received_inr: string | null; reviewed_by: string; reviewed_at: string | null; review_note: string; refunded_at: string | null; refunded_by: string; expires_at: string | null; created_at: string | null; refund_due: boolean }
-interface ListData { rows: Row[]; counts: Record<string, number>; needs_review: number; refund_due: number }
+  extracted: { amount_inr: string | null; utr: string; txn_at: string | null; payee: string; payer: string; status: string; confidence: string }; verification_method: string; received_inr: string | null; reviewed_by: string; reviewed_at: string | null; review_note: string; refunded_at: string | null; refunded_by: string; expires_at: string | null; created_at: string | null; submitted_at: string | null; appointment: { date: string; start_time: string } | null; refund_due: boolean }
+interface ListData { rows: Row[]; counts: Record<string, number>; totals: { collected_inr: string; collected_count: number }; total: number; needs_review: number; refund_due: number }
 interface Detail { payment: Row; events: Array<{ at: string; actor: string; action: string; from: string; to: string; outcome: string; detail: string }>; appointment: { status: string; date: string; start_time: string; doctor_name: string | null } | null }
 interface PaySettings { enabled: boolean; payee_authorized: boolean; payee_authorization_note: string; fee_inr: string; expiry_minutes: number; review_hold_minutes: number; payee_name: string; open_to_patients: boolean; closed_because: string[]; provider_webhook: boolean }
 
-const LABEL: Record<string, string> = { PENDING_PAYMENT: 'Pending payment', SCREENSHOT_RECEIVED: 'Screenshot received', REVIEW_REQUIRED: 'Verification pending', PAID: 'Paid', REJECTED: 'Rejected', REFUNDED: 'Refunded', EXPIRED: 'Expired', CANCELLED: 'Booking cancelled' };
+const LABEL: Record<string, string> = { PENDING_PAYMENT: 'Pending', SCREENSHOT_RECEIVED: 'Screenshot received', REVIEW_REQUIRED: 'Review required', PAID: 'Paid', REJECTED: 'Rejected', REFUNDED: 'Refunded', EXPIRED: 'Expired', CANCELLED: 'Cancelled' };
 const TONE: Record<string, 'green' | 'amber' | 'red' | 'neutral' | 'blue'> = { PENDING_PAYMENT: 'neutral', SCREENSHOT_RECEIVED: 'amber', REVIEW_REQUIRED: 'amber', PAID: 'green', REJECTED: 'red', REFUNDED: 'neutral', EXPIRED: 'neutral', CANCELLED: 'neutral' };
 const FLAG: Record<string, string> = { amount_mismatch: 'Amount on the screenshot is not the fee', amount_missing: 'No amount could be read', utr_missing: 'No UTR could be read', utr_format: 'UTR is not 12 digits', utr_already_used: 'This UTR is already on another payment', utr_differs_from_patient: 'UTR differs from what the patient typed',
   payee_mismatch: 'Payee on the screenshot is not the clinic\'s payee', status_not_success: 'The screenshot does not say the payment succeeded', time_missing: 'No payment time could be read', time_outside_window: 'Payment time is outside the booking window', low_confidence: 'The reader was not confident',
   duplicate_image: 'This picture was already used for another payment', edited_by_software: 'The picture carries photo-editing software marks', ai_suspects_edit: 'The reader suspects the picture was edited', not_a_payment_screenshot: 'Not a payment screenshot', ocr_unavailable: 'The picture could not be read automatically',
   provider_amount_mismatch: 'Provider amount is not the fee', paid_after_release: 'Money arrived after the held time was released' };
 const flagText = (f: string) => FLAG[f] || (f.startsWith('ocr_error') ? 'The picture could not be read automatically' : f);
-const FILTERS = ['REVIEW_REQUIRED', 'SCREENSHOT_RECEIVED', 'PENDING_PAYMENT', 'PAID', 'REJECTED', 'REFUNDED', 'EXPIRED', 'ALL'];
 
 function PaymentSettings() {
   const { ws } = useWs(); const qc = useQueryClient(); const toast = useToast();
@@ -63,7 +64,7 @@ function ReviewDrawer({ id, onClose, admin }: { id: string | null; onClose: () =
   return (
     <Drawer open={!!id} onClose={onClose} title={p ? `${p.booking_reference} · ₹${p.amount_inr}` : 'Payment'} subtitle={p ? LABEL[p.status] : ''} width={620}>
       {q.isLoading ? <SkeletonRows rows={6} /> : q.isError ? <ErrorState error={q.error} retry={() => q.refetch()} /> : p && (
-        <div className="space-y-5 text-[13.5px]">
+        <div className="space-y-5 p-5 text-[13.5px]">
           <div className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-[12.5px] text-warn">A screenshot is not proof of payment. Mark it paid only after you see the money (with the same UTR) in the clinic's bank account.</div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5"><span className="text-fg-2">Patient</span><span>{p.patient.name} · {p.patient.phone}</span><span className="text-fg-2">Appointment</span><span>{a ? `${a.date} ${a.start_time}${a.doctor_name ? ` · ${a.doctor_name}` : ''} (${a.status})` : '—'}</span><span className="text-fg-2">Booked from</span><span className="capitalize">{p.channel}</span><span className="text-fg-2">Pay before</span><span>{when(p.expires_at)}</span></div>
           {p.refund_due && <div role="alert" className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-bad">This paid booking was cancelled: a refund is due. {admin ? 'Record it below.' : 'Ask an admin to record the refund.'}</div>}
@@ -90,28 +91,54 @@ function ReviewDrawer({ id, onClose, admin }: { id: string | null; onClose: () =
   );
 }
 
-export function PaymentsTab({ admin }: { admin: boolean }) {
-  const { ws } = useWs(); const [filter, setFilter] = useState('REVIEW_REQUIRED'); const [open, setOpen] = useState<string | null>(null);
-  const q = useQuery({ queryKey: ['sched', ws.id, 'payments', filter], queryFn: () => api<ListData>(wsPath(ws.id, `/schedule/payments${filter === 'ALL' ? '' : `?status=${filter}`}`)), refetchInterval: 20000 });
-  const counts = q.data?.counts || {};
+const CARDS: Array<{ key: string; label: string; tone: string; filter: string }> = [
+  { key: 'SCREENSHOT_RECEIVED', label: 'Awaiting verification', tone: 'text-warn', filter: 'SCREENSHOT_RECEIVED' },
+  { key: 'REVIEW_REQUIRED', label: 'Review required', tone: 'text-warn', filter: 'REVIEW_REQUIRED' },
+  { key: 'REJECTED', label: 'Rejected', tone: 'text-bad', filter: 'REJECTED' },
+  { key: 'CANCELLED', label: 'Cancelled', tone: '', filter: 'CANCELLED' },
+];
+const FILTER_OPTIONS = [{ v: 'ALL', l: 'All' }, { v: 'PENDING_PAYMENT', l: 'Pending' }, { v: 'SCREENSHOT_RECEIVED', l: 'Screenshot received' }, { v: 'REVIEW_REQUIRED', l: 'Review required' }, { v: 'PAID', l: 'Paid' }, { v: 'REJECTED', l: 'Rejected' }, { v: 'CANCELLED', l: 'Cancelled' }];
+
+function Stat({ label, value, tone, onClick, active }: { label: string; value: string; tone?: string; onClick?: () => void; active?: boolean }) {
+  return <button type="button" onClick={onClick} aria-pressed={active} className={cn('bg-surface px-5 py-3.5 text-left transition-colors hover:bg-surface-2', active && 'bg-surface-2')}><div className={cn('num-display text-[28px] leading-none', tone)}>{value}</div><div className="label mt-1.5">{label}</div></button>;
+}
+
+export default function PaymentManagement() {
+  const { ws, me } = useWs(); const admin = me.user.role === 'admin'; const [filter, setFilter] = useState('ALL'); const [text, setText] = useState(''); const dq = useDebounced(text); const [open, setOpen] = useState<string | null>(null);
+  const blocked = !!me.user.clinician && !admin;   // a doctor's own login: payment records are front desk / admin only (the server refuses it too)
+  const q = useQuery({ queryKey: ['sched', ws.id, 'payments', filter, dq], enabled: !blocked, queryFn: () => api<ListData>(wsPath(ws.id, `/schedule/payments?limit=300${filter === 'ALL' ? '' : `&status=${filter}`}${dq ? `&q=${encodeURIComponent(dq)}` : ''}`)), refetchInterval: 20000 });
+  const all = useQuery({ queryKey: ['sched', ws.id, 'payments-totals'], enabled: !blocked, queryFn: () => api<ListData>(wsPath(ws.id, '/schedule/payments?limit=1')), refetchInterval: 20000 });
+  const counts = all.data?.counts || {};
+  if (blocked) return <Page title="Payment Management" subtitle="Payment records are limited to the front desk and admins."><Card className="p-5 text-[13.5px] text-fg-2">Your login is a doctor's login, so payment records are not shown. Ask the front desk or an admin.</Card></Page>;
   return (
-    <div className="space-y-4">
-      {admin && <PaymentSettings />}
-      {q.data && q.data.refund_due > 0 && <div role="alert" className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-[13px] text-bad">{q.data.refund_due} paid booking{q.data.refund_due === 1 ? ' was' : 's were'} cancelled: a refund is due.</div>}
-      <Segmented variant="tabs" value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ value: f, label: f === 'ALL' ? 'All' : LABEL[f]!, count: f === 'ALL' ? undefined : counts[f] || 0 }))} />
-      {q.isLoading ? <Card><SkeletonRows rows={6} /></Card> : q.isError ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card> : (
-        <Card className="overflow-hidden"><div className="max-h-[calc(100vh-24rem)] overflow-auto"><table className="w-full min-w-[820px] border-separate border-spacing-0 text-[13px]">
-          <thead><tr>{['Reference', 'Patient', 'Amount', 'UTR', 'Status', 'Appointment', 'Updated', ''].map((x) => <th key={x} className="sticky top-0 z-[2] whitespace-nowrap border-b border-line-2 bg-[rgb(235_242_238)] px-3 py-2.5 text-left text-[12.5px] font-semibold">{x}</th>)}</tr></thead>
-          <tbody>{q.data!.rows.map((r) => (
-            <tr key={r.id} className="cursor-pointer even:bg-surface-2/60 hover:bg-surface-2" onClick={() => setOpen(r.id)}>
-              <td className="border-b border-line/60 px-3 py-2 font-mono text-[12px]">{r.booking_reference}</td><td className="border-b border-line/60 px-3 py-2">{r.patient.name}<div className="text-[12px] text-fg-2">{r.patient.phone}</div></td>
-              <td className="border-b border-line/60 px-3 py-2">₹{r.amount_inr}</td><td className="border-b border-line/60 px-3 py-2 font-mono text-[12px]">{r.utr || '—'}</td>
-              <td className="border-b border-line/60 px-3 py-2"><Badge tone={TONE[r.status] || 'neutral'}>{LABEL[r.status] || r.status}</Badge>{r.flags.length > 0 && <span className="ml-1.5 text-[12px] text-bad">{r.flags.length} flag{r.flags.length === 1 ? '' : 's'}</span>}{r.refund_due && <span className="ml-1.5 text-[12px] font-semibold text-bad">refund due</span>}</td>
-              <td className="border-b border-line/60 px-3 py-2">{r.appointment_status || '—'}</td><td className="border-b border-line/60 px-3 py-2 text-fg-2">{when(r.reviewed_at || r.created_at)}</td><td className="border-b border-line/60 px-3 py-2"><Button size="sm" onClick={(e) => { e.stopPropagation(); setOpen(r.id); }}>Open</Button></td>
-            </tr>))}</tbody>
-        </table></div>{!q.data!.rows.length && <p className="p-5 text-[13px] text-fg-2">Nothing here.</p>}</Card>
-      )}
+    <Page wide title="Payment Management" subtitle="UPI payments for appointments. A screenshot is not proof of payment: mark a payment paid only after the money has reached the clinic's bank account.">
+      <div className="space-y-5">
+        <Card className="overflow-hidden"><div className="grid grid-cols-2 gap-px overflow-hidden bg-line sm:grid-cols-3 lg:grid-cols-5">
+          <Stat label={`Total collected${all.data ? ` (${all.data.totals.collected_count} paid)` : ''}`} value={all.data ? `₹${all.data.totals.collected_inr}` : '–'} tone="text-ok" onClick={() => setFilter('PAID')} active={filter === 'PAID'} />
+          {CARDS.map((c) => <Stat key={c.key} label={c.label} value={String(counts[c.key] || 0)} tone={counts[c.key] ? c.tone : undefined} onClick={() => setFilter(c.filter)} active={filter === c.filter} />)}
+        </div></Card>
+        {all.data && all.data.refund_due > 0 && <div role="alert" className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-[13px] text-bad">{all.data.refund_due} paid booking{all.data.refund_due === 1 ? ' was' : 's were'} cancelled: a refund is due.</div>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Segmented variant="tabs" value={filter} onChange={setFilter} options={FILTER_OPTIONS.map((f) => ({ value: f.v, label: f.l, ...(f.v === 'ALL' ? {} : { count: counts[f.v] || 0 }) }))} />
+          <div className="ml-auto w-full max-w-xs sm:w-72"><Input placeholder="Search reference, name, number or UTR" value={text} onChange={(e) => setText(e.target.value)} aria-label="Search payments" /></div>
+        </div>
+        {q.isLoading ? <Card><SkeletonRows rows={6} /></Card> : q.isError ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card> : (
+          <Card className="overflow-hidden"><div className="max-h-[calc(100vh-26rem)] min-h-40 overflow-auto"><table className="w-full min-w-[980px] border-separate border-spacing-0 text-[13px]">
+            <thead><tr>{['Booking reference', 'Patient', 'Contact', 'Appointment', 'Amount', 'Payment status', 'UTR', 'Submitted', 'Actions'].map((x) => <th key={x} className="sticky top-0 z-[2] whitespace-nowrap border-b border-line-2 bg-[rgb(235_242_238)] px-3 py-2.5 text-left text-[12.5px] font-semibold">{x}</th>)}</tr></thead>
+            <tbody>{q.data!.rows.map((r) => (
+              <tr key={r.id} className="cursor-pointer even:bg-surface-2/60 hover:bg-surface-2" onClick={() => setOpen(r.id)}>
+                <td className="border-b border-line/60 px-3 py-2 font-mono text-[12px]">{r.booking_reference}</td><td className="border-b border-line/60 px-3 py-2">{r.patient.name}</td><td className="whitespace-nowrap border-b border-line/60 px-3 py-2">{r.patient.phone}</td>
+                <td className="whitespace-nowrap border-b border-line/60 px-3 py-2">{r.appointment ? `${r.appointment.date} · ${r.appointment.start_time}` : '—'}{r.appointment_status && r.appointment_status !== 'Pending confirmation' ? <div className="text-[12px] text-fg-2">{r.appointment_status}</div> : null}</td>
+                <td className="border-b border-line/60 px-3 py-2">₹{r.amount_inr}</td>
+                <td className="border-b border-line/60 px-3 py-2"><Badge tone={TONE[r.status] || 'neutral'}>{LABEL[r.status] || r.status}</Badge>{r.flags.length > 0 && <span className="ml-1.5 text-[12px] text-bad">{r.flags.length} flag{r.flags.length === 1 ? '' : 's'}</span>}{r.refund_due && <span className="ml-1.5 text-[12px] font-semibold text-bad">refund due</span>}</td>
+                <td className="border-b border-line/60 px-3 py-2 font-mono text-[12px]">{r.utr || '—'}</td><td className="whitespace-nowrap border-b border-line/60 px-3 py-2 text-fg-2">{when(r.submitted_at)}</td>
+                <td className="border-b border-line/60 px-3 py-2"><Button size="sm" onClick={(e) => { e.stopPropagation(); setOpen(r.id); }}>{['SCREENSHOT_RECEIVED', 'REVIEW_REQUIRED', 'PENDING_PAYMENT', 'REJECTED'].includes(r.status) ? 'Review' : 'View'}</Button></td>
+              </tr>))}</tbody>
+          </table></div>{!q.data!.rows.length && <p className="p-5 text-[13px] text-fg-2">No payments {filter === 'ALL' && !dq ? 'yet.' : 'match this filter.'}</p>}</Card>
+        )}
+        {admin && <PaymentSettings />}
+      </div>
       <ReviewDrawer id={open} onClose={() => setOpen(null)} admin={admin} />
-    </div>
+    </Page>
   );
 }

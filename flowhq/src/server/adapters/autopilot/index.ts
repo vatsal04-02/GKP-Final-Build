@@ -17,6 +17,7 @@ import { clinicModules, normalizePhone, parseOpenHours } from './shared';
 import { RecordsService, type ClinicConfig } from '../../records/service';
 import { StaffBooking } from '../../booking/staff-service';
 import { PaymentService } from '../../payments/service';
+import { PAYMENT_TABLES } from '../../payments/schema';
 import { BOOKING_TABLES } from '../../booking/schema';
 import { AuditOutbox, FileStore } from '../../booking/outbox';
 import path from 'node:path';
@@ -147,7 +148,7 @@ class AutopilotWorkspace implements WorkspaceBackend {
   private paymentSvc: PaymentService | null = null;
   /** ONE PaymentService per workspace (its lock only works if every payment write goes through the same instance). */
   payments() {
-    return (this.paymentSvc ||= new PaymentService(this.grist, this.docId, this.booking(), { ...(this.cfg.now ? { now: this.cfg.now } : {}), filesDir: this.cfg.payments?.filesDir || path.resolve('config/payment-files'), ...(this.cfg.payments?.qrFile ? { qrFile: this.cfg.payments.qrFile } : {}), ...(this.cfg.payments?.webhookSecret ? { webhookSecret: this.cfg.payments.webhookSecret } : {}) }));
+    return (this.paymentSvc ||= new PaymentService(this.grist, this.docId, this.booking(), { tz: this.cfg.timezone, ...(this.cfg.now ? { now: this.cfg.now } : {}), filesDir: this.cfg.payments?.filesDir || path.resolve('config/payment-files'), ...(this.cfg.payments?.qrFile ? { qrFile: this.cfg.payments.qrFile } : {}), ...(this.cfg.payments?.webhookSecret ? { webhookSecret: this.cfg.payments.webhookSecret } : {}) }));
   }
   // The clinical modules appear only when ALL Clinic Records tables exist in this clinic's doc (npm run provision-records creates them).
   // Concurrent requests share one probe: a request that arrives while the first probe is still running waits for its answer
@@ -166,7 +167,10 @@ class AutopilotWorkspace implements WorkspaceBackend {
     // the Schedule page (appointment booking control) appears only when ALL its tables exist (npm run provision-booking creates them)
     const noBooking: string[] = [];
     await Promise.all(Object.keys(BOOKING_TABLES).map(async (t) => { try { await this.grist.records(this.docId, t, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noBooking.push(t); else unreachable = true; } }));
-    const bookingModules: Supported['modules'] = noBooking.length === 0 ? ['schedule'] : [];
+    // Payment Management needs the booking tables AND the three payment tables (npm run provision-payments)
+    const noPay: string[] = [];
+    await Promise.all(Object.keys(PAYMENT_TABLES).map(async (t) => { try { await this.grist.records(this.docId, t, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noPay.push(t); else unreachable = true; } }));
+    const bookingModules: Supported['modules'] = noBooking.length === 0 ? (noPay.length === 0 ? ['schedule', 'payments'] : ['schedule']) : [];
     if (unreachable) { this.probedAt = Date.now() - 50000; return; }   // keep the last known state, look again in 10 s
     if (missing.length === 0) {
       this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...RECORD_MODULES, ...bookingModules] };
