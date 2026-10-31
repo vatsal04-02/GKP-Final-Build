@@ -1,0 +1,12 @@
+# STAGING ONLY. A Linux image that has a real n8n (the version the repo's real-n8n harness targets) plus libfaketime, used by the staging test
+# (flowhq/tests/real-grist/staging-n8n.real.test.ts) to import the repo's workflow candidate into a THROWAWAY n8n and drive it with real HTTP calls.
+# It is never pushed anywhere and never holds a clinic's data or credentials. Build:  docker build -f flowhq/deploy/staging/Dockerfile.n8n-runner -t gkp-staging-n8n:local flowhq/deploy/staging
+FROM node:24-bookworm
+ARG N8N_VERSION=2.43.5
+RUN apt-get update && apt-get install -y --no-install-recommends libfaketime ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /opt/n8n-runtime && cd /opt/n8n-runtime && npm init -y >/dev/null && npm install "n8n@${N8N_VERSION}" --no-audit --no-fund --loglevel=error
+ENV N8N_RUNTIME_DIR=/opt/n8n-runtime \
+    N8N_NODE_DIR=/usr/local/bin \
+    FAKETIME_LIB=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1 \
+    N8N_DIAGNOSTICS_ENABLED=false
+WORKDIR /work

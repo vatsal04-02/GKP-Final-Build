@@ -11,6 +11,7 @@
     { "name": "new_lead_staff_alert", "category": "UTILITY", "params": ["clinic_name", "lead_name", "lead_phone", "enquiry"], "body": "New lead for {{1}}: {{2}} ({{3}}). {{4}}", "sent_by": "W1, W2, W3", "audience": "staff", "needs_consent": false },
     { "name": "lead_escalation", "category": "UTILITY", "params": ["clinic_name", "lead_name", "lead_phone", "waiting_minutes"], "body": "{{1}}: {{2}} ({{3}}) has been waiting {{4}} minutes for a reply.", "sent_by": "(defined in W12; not used by a section today)", "audience": "staff", "needs_consent": false },
     { "name": "human_handoff_alert", "category": "UTILITY", "params": ["clinic_name", "lead_name", "lead_phone", "reason"], "body": "{{1}}: a patient needs a person. {{2}} ({{3}}). Reason: {{4}}", "sent_by": "W13", "audience": "staff", "needs_consent": false },
-    { "name": "weekly_owner_report", "category": "UTILITY", "params": ["clinic_name", "week", "summary", "action"], "body": "{{1}} weekly report for {{2}}: {{3}} Next step: {{4}}", "sent_by": "W9", "audience": "staff", "needs_consent": false }
+    { "name": "weekly_owner_report", "category": "UTILITY", "params": ["clinic_name", "week", "summary", "action"], "body": "{{1}} weekly report for {{2}}: {{3}} Next step: {{4}}", "sent_by": "W9", "audience": "staff", "needs_consent": false },
+    { "name": "followup_reminder", "category": "UTILITY", "params": ["name", "clinic_name", "date", "booking_link"], "body": "Hi {{1}}, a reminder from {{2}}: your follow-up visit is due on {{3}}. Please book or confirm your time here: {{4}} or simply reply to this message.", "sent_by": "W15", "audience": "patient", "needs_consent": true }
   ]
 }

@@ -164,3 +164,16 @@ describe('configuration safety', () => {
     expect(((await (await app.request('/api/me', { headers: { cookie: owner } })).json()) as { user: { clinician?: string } }).user.clinician).toBeUndefined();
   });
 });
+
+describe('invoices raised by an admin or the front desk name the doctor', () => {
+  it('the chosen doctor owns the invoice; the other doctor never sees it; an unknown name is refused; a doctor login ignores the field', async () => {
+    const a = await call(owner, '/invoices', 'POST', { ...inv(450), doctor: 'dr. mahesh tiwari' });
+    expect(a.status).toBe(201); expect(a.json.invoice.createdBy).toBe(MAHESH);                    // stored with the exact clinic spelling
+    const no = a.json.invoice.invoiceNo;
+    expect((await call(mahesh, `/invoices/${no}`)).status).toBe(200);
+    expect((await call(sandeep, `/invoices/${no}`)).status).toBe(404);
+    expect((await call(owner, '/invoices', 'POST', { ...inv(450), doctor: 'Dr. Nobody' })).status).toBe(400);
+    const own = await call(sandeep, '/invoices', 'POST', { ...inv(100), doctor: MAHESH });          // a doctor cannot raise a bill in the other doctor's name
+    expect(own.json.invoice.createdBy).toBe(SANDEEP);
+  });
+});

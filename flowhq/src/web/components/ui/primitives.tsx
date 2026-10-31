@@ -10,13 +10,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-[background-color,border-color,color,box-shadow,transform,filter] duration-150 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
-        size === 'sm' ? 'h-8 px-3 text-[13px]' : 'h-9 px-3.5 text-sm',
-        variant === 'primary' && 'btn-primary text-white shadow-[0_6px_16px_-8px_rgb(var(--accent)/0.7)] hover:-translate-y-px hover:shadow-[0_10px_20px_-8px_rgb(var(--accent)/0.75)] hover:brightness-110 active:translate-y-0 active:brightness-95',
-        variant === 'secondary' && 'border border-line bg-surface-2 text-fg hover:border-line-2 hover:bg-elevated',
-        variant === 'ghost' && 'text-fg-2 hover:bg-surface-2 hover:text-fg',
-        variant === 'subtle' && 'bg-blue/10 text-blue-soft hover:bg-blue/15',
-        variant === 'danger' && 'border border-bad/40 bg-bad/10 text-bad hover:bg-bad/15',
+        // Flat, square-ish buttons: colour changes on hover and press, nothing lifts, glows or scales.
+        'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-sans font-semibold transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50',
+        size === 'sm' ? 'h-8 px-3 text-[13px]' : 'h-9 px-4 text-[13.5px]',
+        variant === 'primary' && 'btn-primary text-white hover:bg-accent-strong/90 active:bg-accent-strong/80',
+        variant === 'secondary' && 'border border-line-2 bg-surface text-fg hover:bg-surface-2 active:bg-bg-2',
+        variant === 'ghost' && 'font-medium text-fg-2 hover:bg-bg-2/60 hover:text-fg active:bg-bg-2',
+        variant === 'subtle' && 'bg-sage/70 text-blue-bright hover:bg-sage active:bg-sage',
+        variant === 'danger' && 'border border-bad/50 bg-surface text-bad hover:bg-bad/10 active:bg-bad/15',
         className,
       )}
       {...p}
@@ -34,11 +35,11 @@ export function Card({ className, children, hover, ...p }: { className?: string;
 export function CardHeader({ title, subtitle, action, icon }: { title: ReactNode; subtitle?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 px-5 pt-4">
-      <div className="flex min-w-0 items-center gap-2.5">
-        {icon && <span className="text-blue-bright">{icon}</span>}
+      <div className="flex min-w-0 items-center gap-2">
+        {icon && <span className="text-fg-2">{icon}</span>}
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-fg">{title}</h3>
-          {subtitle && <p className="mt-0.5 truncate text-xs text-fg-2">{subtitle}</p>}
+          <h3 className="truncate text-[15px] font-semibold text-fg">{title}</h3>
+          {subtitle && <p className="mt-0.5 truncate text-[12.5px] text-fg-2">{subtitle}</p>}
         </div>
       </div>
       {action}
@@ -48,21 +49,22 @@ export function CardHeader({ title, subtitle, action, icon }: { title: ReactNode
 
 export type Tone = 'neutral' | 'blue' | 'amber' | 'red' | 'green';
 const TONES: Record<Tone, string> = {
-  neutral: 'border-line bg-surface-2 text-fg-2',
-  blue: 'border-blue/30 bg-blue/10 text-blue-soft',
-  amber: 'border-warn/30 bg-warn/10 text-warn',
-  red: 'border-bad/30 bg-bad/10 text-bad',
-  green: 'border-ok/30 bg-ok/10 text-ok',
+  neutral: 'bg-bg-2 text-fg-2',
+  blue: 'bg-sage text-blue-bright',
+  amber: 'bg-warn/15 text-warn',
+  red: 'bg-bad/10 text-bad',
+  green: 'bg-ok/15 text-ok',
 };
+// A quiet tag: a soft fill and no outline, so a row of them reads as text with emphasis rather than a row of stickers.
 export function Badge({ tone = 'neutral', children, className, icon }: { tone?: Tone; children: ReactNode; className?: string; icon?: ReactNode }) {
-  return <span className={cn('inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-md border px-1.5 text-[11.5px] font-medium', TONES[tone], className)}>{icon}{children}</span>;
+  return <span className={cn('inline-flex h-5 items-center gap-1 whitespace-nowrap rounded px-1.5 text-[12px] font-medium', TONES[tone], className)}>{icon}{children}</span>;
 }
 export function StatusDot({ tone = 'blue', pulse, className }: { tone?: Tone; pulse?: boolean; className?: string }) {
   const c = { neutral: 'bg-muted', blue: 'bg-blue-bright', amber: 'bg-warn', red: 'bg-bad', green: 'bg-ok' }[tone];
-  return <span className={cn('inline-block h-2 w-2 shrink-0 rounded-full', c, pulse && 'animate-pulse-dot', tone === 'blue' && 'shadow-[0_0_8px_rgb(var(--blue-bright)/0.8)]', className)} />;
+  return <span className={cn('inline-block h-2 w-2 shrink-0 rounded-full', c, pulse && 'animate-pulse-dot', className)} />;
 }
 
-const field = 'h-9 w-full rounded-lg border border-line-2 bg-field px-3 text-sm text-fg placeholder:text-muted transition-colors focus:border-blue/60 focus:outline-none focus:ring-2 focus:ring-blue/20 disabled:opacity-60';
+const field = 'h-9 w-full rounded-lg border border-line-2 bg-field px-3 text-[13.5px] text-fg placeholder:text-muted transition-colors hover:border-fg-2/40 focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/15 disabled:opacity-60';
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { icon?: ReactNode }>(({ className, icon, ...p }, ref) =>
   icon ? (
     <div className="relative">
@@ -79,36 +81,50 @@ export function Select({ className, children, ...p }: SelectHTMLAttributes<HTMLS
 export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
   return (
     <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
-      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-[background-color,border-color,box-shadow,opacity] duration-200 disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue/60 bg-blue glow-blue' : 'border-line-2 bg-surface-2')}>
-      <span className={cn('inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform duration-[260ms] ease-[cubic-bezier(0.3,1.25,0.5,1)]', checked ? 'translate-x-[18px]' : 'translate-x-[3px]')} />
+      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue bg-blue' : 'border-line-2 bg-bg-2')}>
+      <span className={cn('inline-block h-3.5 w-3.5 rounded-full transition-transform duration-150 ease-out', checked ? 'translate-x-[18px] bg-white' : 'translate-x-[3px] bg-fg-2')} />
     </button>
   );
 }
-export function Segmented<T extends string>({ value, onChange, options, size = 'md' }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode; count?: number }>; size?: 'sm' | 'md' }) {
+// `pill` is a compact choice group (filters, view switches); `tabs` is an underlined row for the page's main sections.
+export function Segmented<T extends string>({ value, onChange, options, size = 'md', variant = 'pill' }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode; count?: number }>; size?: 'sm' | 'md'; variant?: 'pill' | 'tabs' }) {
+  if (variant === 'tabs') {
+    return (
+      <div className="flex max-w-full gap-1 overflow-x-auto border-b border-line" role="tablist">
+        {options.map((o) => (
+          <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
+            className={cn('-mb-px inline-flex h-10 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-[13.5px] font-semibold transition-colors duration-150', value === o.value ? 'border-accent-strong text-fg' : 'border-transparent font-medium text-fg-2 hover:text-fg')}>
+            {o.label}
+            {o.count !== undefined && <span className="num text-[12px] font-medium text-muted">{o.count}</span>}
+          </button>
+        ))}
+      </div>
+    );
+  }
   return (
-    <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-line bg-bg-2 p-0.5" role="tablist">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-line-2 bg-surface p-0.5" role="tablist">
       {options.map((o) => (
         <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
-          className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-all duration-150', size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]', value === o.value ? 'bg-elevated text-fg shadow-[0_0_0_1px_rgb(var(--line-2))]' : 'text-fg-2 hover:text-fg')}>
+          className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors duration-150', size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]', value === o.value ? 'bg-blue text-white' : 'text-fg-2 hover:bg-surface-2 hover:text-fg')}>
           {o.label}
-          {o.count !== undefined && <span className={cn('num rounded px-1 text-[11px]', value === o.value ? 'bg-blue/15 text-blue-soft' : 'text-muted')}>{o.count}</span>}
+          {o.count !== undefined && <span className={cn('num px-0.5 text-[12px]', value === o.value ? 'text-white/80' : 'text-muted')}>{o.count}</span>}
         </button>
       ))}
     </div>
   );
 }
 export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-line bg-surface-2 px-1 font-mono text-[10.5px] text-fg-2">{children}</kbd>;
+  return <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-line bg-surface-2 px-1 font-mono text-[11.5px] text-fg-2">{children}</kbd>;
 }
 export function Avatar({ text, size = 32, tone = 'neutral', src }: { text: string; size?: number; tone?: 'neutral' | 'blue'; src?: string | null }) {
   if (src) return <img src={src} alt="" className="shrink-0 rounded-lg object-cover" style={{ width: size, height: size }} />;
   return (
-    <span className={cn('inline-flex shrink-0 items-center justify-center rounded-lg font-semibold', tone === 'blue' ? 'bg-gradient-to-br from-blue-bright to-blue text-white' : 'border border-line bg-surface-2 text-fg-2')}
+    <span className={cn('inline-flex shrink-0 items-center justify-center rounded-lg font-semibold', tone === 'blue' ? 'bg-blue text-white' : 'bg-bg-2 text-fg-2')}
       style={{ width: size, height: size, fontSize: Math.max(10, size * 0.36) }}>{text}</span>
   );
 }
 export function Progress({ value, tone = 'blue', className }: { value: number; tone?: Tone; className?: string }) {
-  const c = { neutral: 'bg-muted', blue: 'bg-gradient-to-r from-blue to-blue-bright', amber: 'bg-warn', red: 'bg-bad', green: 'bg-ok' }[tone];
+  const c = { neutral: 'bg-muted', blue: 'bg-blue', amber: 'bg-warn', red: 'bg-bad', green: 'bg-ok' }[tone];
   return <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-surface-2', className)}><div className={cn('h-full rounded-full transition-[width] duration-500', c)} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></div>;
 }
 

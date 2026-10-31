@@ -9,7 +9,16 @@ export class BackendError extends Error {
 }
 
 export class GristClient {
-  constructor(private baseUrl: string, private apiKey: string, private fetchImpl: FetchLike = fetch as unknown as FetchLike, private timeoutMs = 15000) {}
+  constructor(private baseUrl: string, private apiKey: string, private fetchImpl: FetchLike = fetch as unknown as FetchLike, private timeoutMs = 15000, private maxParallel = 4) {}
+
+  // Grist answers "429 Too many backlogged requests" when one document gets too many requests at once (one dashboard load used to send dozens).
+  // So: at most `maxParallel` requests are in flight, identical reads that overlap share one request, and a 429 is retried after a short pause.
+  private active = 0;
+  private waiting: Array<() => void> = [];
+  private reads = new Map<string, Promise<GristRecord[]>>();
+  private async acquire() { if (this.active < this.maxParallel) { this.active++; return; } await new Promise<void>((r) => this.waiting.push(r)); }   // the slot is handed over, so `active` stays as it is
+  private release() { const next = this.waiting.shift(); if (next) next(); else this.active--; }
+  private forget(doc: string, table?: string) { const k = table ? `${doc}|${table}|` : `${doc}|`; for (const key of [...this.reads.keys()]) if (key.startsWith(k)) this.reads.delete(key); }   // a write: later reads must not join a read that started before it
 
   private async call(method: string, path: string, body?: unknown, asBytes = false): Promise<unknown> {
     const url = `${this.baseUrl.replace(/\/+$/, '')}${path}`;
@@ -18,13 +27,18 @@ export class GristClient {
     const form = typeof FormData !== 'undefined' && body instanceof FormData;   // multipart: fetch sets its own Content-Type + boundary
     if (body !== undefined && !form) headers['Content-Type'] = 'application/json';
     let res;
-    try {
-      res = await Promise.race([
-        this.fetchImpl(url, { method, headers, body: body === undefined ? undefined : form ? (body as FormData) : JSON.stringify(body) }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), this.timeoutMs)),
-      ]);
-    } catch (e) {
-      throw new BackendError(502, 'backend_unreachable', `The data backend did not answer (${(e as Error).message === 'timeout' ? 'timeout' : 'network error'})`);
+    for (let attempt = 0; ; attempt++) {
+      await this.acquire();
+      try {
+        res = await Promise.race([
+          this.fetchImpl(url, { method, headers, body: body === undefined ? undefined : form ? (body as FormData) : JSON.stringify(body) }),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), this.timeoutMs)),
+        ]);
+      } catch (e) {
+        throw new BackendError(502, 'backend_unreachable', `The data backend did not answer (${(e as Error).message === 'timeout' ? 'timeout' : 'network error'})`);
+      } finally { this.release(); }
+      if (res.status !== 429 || attempt >= 4) break;           // "busy": nothing was processed, so trying again is safe
+      await new Promise((r) => setTimeout(r, 150 * 2 ** attempt + Math.random() * 100));
     }
     if (!res.ok) {
       // the backend's own error text stays in the server log (it can name documents); the browser gets the status only
@@ -39,7 +53,15 @@ export class GristClient {
     return t ? JSON.parse(t) : null;
   }
 
-  async records(doc: string, table: string, q: RecordsQuery = {}): Promise<GristRecord[]> {
+  records(doc: string, table: string, q: RecordsQuery = {}): Promise<GristRecord[]> {
+    const key = `${doc}|${table}|${JSON.stringify(q)}`;
+    const open = this.reads.get(key);
+    if (open) return open;                                      // the same read is already on its way: share its answer
+    const p = this.fetchRecords(doc, table, q).finally(() => { if (this.reads.get(key) === p) this.reads.delete(key); });
+    this.reads.set(key, p);
+    return p;
+  }
+  private async fetchRecords(doc: string, table: string, q: RecordsQuery): Promise<GristRecord[]> {
     const p = new URLSearchParams();
     if (q.filter) p.set('filter', JSON.stringify(q.filter));
     if (q.sort) p.set('sort', q.sort);
@@ -49,11 +71,15 @@ export class GristClient {
     return Array.isArray(r?.records) ? r!.records : [];
   }
   async add(doc: string, table: string, fields: Record<string, GristValue>[]): Promise<number[]> {
+    this.forget(doc, table);
     const r = (await this.call('POST', `/api/docs/${encodeURIComponent(doc)}/tables/${encodeURIComponent(table)}/records`, { records: fields.map((f) => ({ fields: f })) })) as { records?: Array<{ id: number }> } | null;
+    this.forget(doc, table);
     return (r?.records || []).map((x) => x.id);
   }
   async update(doc: string, table: string, records: GristRecord[]): Promise<void> {
+    this.forget(doc, table);
     await this.call('PATCH', `/api/docs/${encodeURIComponent(doc)}/tables/${encodeURIComponent(table)}/records`, { records });
+    this.forget(doc, table);
   }
 
   // Attachments (patient photos). The file lives in the Grist doc; a row keeps it by an Attachments-type cell (['L', id]).
@@ -67,6 +93,19 @@ export class GristClient {
   async downloadAttachment(doc: string, id: number): Promise<{ bytes: Uint8Array; mime: string }> {
     return (await this.call('GET', `/api/docs/${encodeURIComponent(doc)}/attachments/${id}/download`, undefined, true)) as { bytes: Uint8Array; mime: string };
   }
+
+  // New workspace: copy a clinic doc as a TEMPLATE (same tables, columns and settings; no rows) into the same Grist workspace.
+  async docWorkspaceId(doc: string): Promise<number> {
+    const r = (await this.call('GET', `/api/docs/${encodeURIComponent(doc)}`)) as { workspace?: { id?: number } } | null;
+    if (typeof r?.workspace?.id !== 'number') throw new BackendError(502, 'backend_workspace', 'Could not find the Grist workspace of the template document');
+    return r.workspace.id;
+  }
+  async copyAsTemplate(doc: string, workspaceId: number, name: string): Promise<string> {
+    const r = await this.call('POST', `/api/docs/${encodeURIComponent(doc)}/copy`, { workspaceId, documentName: name, asTemplate: true });
+    if (typeof r !== 'string' || !r) throw new BackendError(502, 'backend_copy', 'The data backend did not create the document');
+    return r;
+  }
+  async deleteDoc(doc: string): Promise<void> { await this.call('DELETE', `/api/docs/${encodeURIComponent(doc)}`); }
 
   // Schema (used only by the provisioning tool, and only to ADD): list / create tables and columns.
   async tableIds(doc: string): Promise<string[]> {

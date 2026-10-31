@@ -101,7 +101,7 @@ Example rows: `n8n/w13/knowledge-base.sample.csv` (fake demo data: replace with 
 Key (Text), Value (Text). Rows: clinic_name, open_time, close_time, working_days, owner_phone,
 staff_alert_phones, booking_link, review_link, services, TEST_MODE, TEST_PHONE,
 ai_mode, booking_mode, slot_minutes, booking_capacity, booking_notice_minutes, handoff_reply (W13, all optional),
-outcome_checkin, review_requests, weekly_report_whatsapp (W7, W8, W9; optional, missing = off)
+outcome_checkin, review_requests, weekly_report_whatsapp (W7, W8, W9; optional, missing = off), followup_reminders (W15; optional, missing = off)
 
 How the workflows read the values:
 - `open_time`, `close_time`: 24-hour `09:00`, `19:30` (`9:00 AM` also works). Missing or unreadable = 08:00-21:00.
@@ -117,6 +117,11 @@ How the workflows read the values:
 - `outcome_checkin` (W7), `review_requests` (W8), `weekly_report_whatsapp` (W9 owner copy): `on` to switch on for this clinic,
   missing or anything else = off. Switch each on only after its template (`outcome_check`, `review_request`,
   `weekly_owner_report`) is approved for the clinic's WhatsApp number.
+- `followup_reminders` (W15): `on` to send each patient ONE WhatsApp reminder the day before their follow-up date
+  (Clinic Records `Patients.Follow_Up_On`, copied there from the prescription), from 10:00 IST. Missing or anything else = off.
+  Switch it on only after the `followup_reminder` template is approved. It needs `booking_link` (https); a patient is reminded only
+  when the lead with the same phone has `Consent_WhatsApp` ticked (W12's rule for business-initiated templates) and is not opted out.
+  Patients held for any of these reasons are counted in one Run_Log line a day (`W15-followup-reminder`, Outcome skipped).
 - `review_link` (W8): the clinic's own review page (e.g. its Google review link). Must start with `https://`; W8 never makes one
   up: missing or not https = no review request, and a daily Run_Log warning (10:xx IST) says how many are waiting.
 - `handoff_reply`: what the patient gets when a person takes over (default: "Thank you for your message. A member of our team will reply to you shortly.").

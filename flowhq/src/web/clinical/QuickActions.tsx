@@ -16,7 +16,7 @@ export function QuickActions({ base }: { base: string }) {
   return (
     <nav aria-label="Quick actions" className="flex flex-wrap gap-2">
       {items.map((i) => (
-        <Link key={i.label} to={i.to} className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-[13px] font-medium text-fg shadow-card transition-all hover:-translate-y-px hover:border-blue/40 hover:text-blue-bright hover:shadow-lift">
+        <Link key={i.label} to={i.to} className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-[13px] font-medium text-fg shadow-card transition-all hover:border-line-2 hover:bg-surface-2">
           <span className="text-blue-bright">{i.icon}</span>{i.label}
         </Link>
       ))}

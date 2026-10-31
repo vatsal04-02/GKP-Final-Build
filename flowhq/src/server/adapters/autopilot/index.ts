@@ -15,6 +15,10 @@ import { AUTOMATIONS as CATALOGUE } from '../../../core/registry';
 import { AUTOMATIONS, AUTOMATION_BY_RUNLOG, BOOKING_SYSTEM, CHANNELS, COLUMNS, KNOWLEDGE_CATEGORIES, REPLY_WINDOW_SEC, SETTINGS, TABLES, isOn, isTestMode } from './schema';
 import { clinicModules, normalizePhone, parseOpenHours } from './shared';
 import { RecordsService, type ClinicConfig } from '../../records/service';
+import { StaffBooking } from '../../booking/staff-service';
+import { BOOKING_TABLES } from '../../booking/schema';
+import { AuditOutbox, FileStore } from '../../booking/outbox';
+import path from 'node:path';
 import { RECORD_TABLE_NAMES } from '../../records/schema';
 
 export interface AutopilotConfig {
@@ -28,6 +32,9 @@ export interface AutopilotConfig {
   fetchImpl?: FetchLike;
   cacheMs?: number;
   readLimit?: number;
+  now?: () => number;                                               // tests only: a fixed clock for the booking service (production uses the real one)
+  auditOutbox?: { dir: string; requireVolume?: boolean; breakGlass?: boolean; staleMs?: number; waitMs?: number };   // the durable audit outbox (one sub-directory per workspace). Omitted = a volatile one (tests, demo)
+  allowCreate?: boolean;                                            // real Grist only (not demo mode): lets an admin add a workspace
   clinic?: (slug: string, workspaceName: string) => ClinicConfig;   // letterhead + invoice rules (config/clinic.json)
 }
 const DAY = 86400000;
@@ -42,7 +49,7 @@ const HANDLED = ['replied', 'no_reply'];
 const PRIORITY_ORDER: Record<Priority, number> = { urgent: 0, high: 1, normal: 2 };
 const LEAD_STATUS_BACK: Record<string, string> = { new: 'New', contacted: 'Contacted', booked: 'Booked', converted: 'Converted', lost: 'Lost' };
 
-interface RegistryRow { slug: string; name: string; docId: string; waConnected: boolean }
+interface RegistryRow { slug: string; name: string; docId: string; waConnected: boolean; main?: boolean }
 
 export function createAutopilotAdapter(cfg: AutopilotConfig): BackendAdapter {
   const grist = new GristClient(cfg.gristBaseUrl, cfg.gristApiKey, cfg.fetchImpl);
@@ -51,13 +58,15 @@ export function createAutopilotAdapter(cfg: AutopilotConfig): BackendAdapter {
   const loadRegistry = async (): Promise<RegistryRow[]> => {
     if (registry && Date.now() - registry.at < 60000) return registry.rows;
     const rows = await grist.records(cfg.registryDocId, TABLES.registry);
+    const withDoc = rows.filter((r) => String(r.fields.Grist_Doc_ID || '').trim() && String(r.fields.Clinic_Slug || '').trim());
+    const mainId = withDoc.length ? Math.min(...withDoc.map((r) => r.id)) : -1;   // the first workspace ever registered is the main one
     const out = rows
       .filter((r) => String(r.fields.Active).toUpperCase() === 'TRUE' && String(r.fields.Grist_Doc_ID || '').trim() && String(r.fields.Clinic_Slug || '').trim())
-      .map((r) => ({ slug: String(r.fields.Clinic_Slug).trim(), name: String(r.fields.Clinic_Name || r.fields.Clinic_Slug).trim(), docId: String(r.fields.Grist_Doc_ID).trim(), waConnected: !!String(r.fields.WA_Phone_Number_ID || '').trim() }));
+      .map((r) => ({ slug: String(r.fields.Clinic_Slug).trim(), name: String(r.fields.Clinic_Name || r.fields.Clinic_Slug).trim(), docId: String(r.fields.Grist_Doc_ID).trim(), waConnected: !!String(r.fields.WA_Phone_Number_ID || '').trim(), main: r.id === mainId }));
     registry = { at: Date.now(), rows: out };
     return out;
   };
-  const info = (r: RegistryRow): BackendWorkspaceInfo => ({ id: r.slug, name: r.name, timezone: cfg.timezone, locale: cfg.locale, currency: cfg.currency, channels: r.waConnected ? CHANNELS : [] });
+  const info = (r: RegistryRow): BackendWorkspaceInfo => ({ id: r.slug, name: r.name, timezone: cfg.timezone, locale: cfg.locale, currency: cfg.currency, channels: r.waConnected ? CHANNELS : [], ...(r.main ? { protected: true } : {}) });
   return {
     key: 'autopilot-grist-n8n',
     label: 'Clinic Autopilot (Grist + n8n)',
@@ -71,8 +80,41 @@ export function createAutopilotAdapter(cfg: AutopilotConfig): BackendAdapter {
       await inst.probeRecords();
       return inst;
     },
+    // A new workspace = a new Grist document copied from an existing clinic doc as a template (structure only, no rows),
+    // registered in the Agency Registry. Nothing in the existing workspaces is touched.
+    ...(cfg.allowCreate ? { async createWorkspace({ name }: { name: string }) {
+      const label = name.trim().replace(/\s+/g, ' ');
+      if (label.length < 2 || label.length > 80) throw new BackendError(400, 'invalid', 'Give the workspace a name of 2 to 80 characters');
+      const all = await grist.records(cfg.registryDocId, TABLES.registry);
+      const taken = new Set(all.map((r) => String(r.fields.Clinic_Slug || '').trim()));
+      const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'workspace';
+      let slug = base; for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
+      const template = (await loadRegistry())[0]?.docId;
+      if (!template) throw new BackendError(400, 'no_template', 'There is no existing workspace to copy the structure from');
+      const doc = await grist.copyAsTemplate(template, await grist.docWorkspaceId(template), label);
+      try { await grist.add(cfg.registryDocId, TABLES.registry, [{ Clinic_Slug: slug, Clinic_Name: label, Grist_Doc_ID: doc, WA_Phone_Number_ID: '', Active: 'TRUE' }]); }
+      catch (e) { await grist.deleteDoc(doc).catch(() => {}); throw e; }   // no half-made workspace: remove the copy if it could not be registered
+      registry = null;
+      return info({ slug, name: label, docId: doc, waConnected: false });
+    } } : {}),
+    // Removing a workspace hides it from FLOW HQ (Active = FALSE in the registry). Its Grist document is NOT deleted, so nothing is lost
+    // and it can be switched back on in the registry. The main workspace can never be removed.
+    ...(cfg.allowCreate ? { async deleteWorkspace(id: string) {
+      const target = (await loadRegistry()).find((r) => r.slug === id);
+      if (!target) throw new BackendError(404, 'not_found', 'Workspace not found');
+      if (target.main) throw new BackendError(400, 'protected', 'The main workspace cannot be deleted');
+      const row = (await grist.records(cfg.registryDocId, TABLES.registry)).find((r) => String(r.fields.Clinic_Slug || '').trim() === id);
+      if (!row) throw new BackendError(404, 'not_found', 'Workspace not found');
+      await grist.update(cfg.registryDocId, TABLES.registry, [{ id: row.id, fields: { Active: 'FALSE' } }]);
+      registry = null; instances.delete(id);
+    } } : {}),
     async health() {
-      try { const n = (await loadRegistry()).length; return { ok: true, detail: `${n} active workspace(s) in the registry` }; } catch (e) { return { ok: false, detail: (e as Error).message }; }
+      try {
+        const n = (await loadRegistry()).length;
+        const rank = { ok: 0, amber: 1, red: 2 } as const; let worst: 'ok' | 'amber' | 'red' | null = null;   // the audit outbox of every workspace that has started its booking service
+        for (const w of instances.values()) { const l = w.auditLevel(); if (l && (worst === null || rank[l] > rank[worst])) worst = l; }
+        return { ok: true, detail: `${n} active workspace(s) in the registry`, audit: worst };
+      } catch (e) { return { ok: false, detail: (e as Error).message }; }
     },
   };
 }
@@ -90,6 +132,16 @@ class AutopilotWorkspace implements WorkspaceBackend {
   }
 
   records() { return this.recordsSvc; }
+  private bookingSvc: StaffBooking | null = null;
+  /** The audit-outbox state of this workspace's booking service, or null when it has not been started (used by /api/health). */
+  auditLevel(): 'ok' | 'amber' | 'red' | null { return this.bookingSvc ? this.bookingSvc.auditHealth().level : null; }
+  // ONE BookingService per workspace for the life of the process: its lock only works if every write goes through the same instance.
+  booking() {
+    return (this.bookingSvc ||= new StaffBooking(this.grist, this.docId, {
+      tz: this.cfg.timezone, leadsTable: this.leadsTable, ...(this.cfg.now ? { now: this.cfg.now } : {}),
+      ...(this.cfg.auditOutbox ? { outbox: new AuditOutbox(new FileStore({ dir: path.join(this.cfg.auditOutbox.dir, this.reg.slug.replace(/[^a-z0-9-]/gi, '_')), requireVolume: this.cfg.auditOutbox.requireVolume, staleMs: this.cfg.auditOutbox.staleMs, waitMs: this.cfg.auditOutbox.waitMs }), { breakGlass: this.cfg.auditOutbox.breakGlass, ...(this.cfg.now ? { now: this.cfg.now } : {}) }) } : {}),
+    }));
+  }
   // The clinical modules appear only when ALL Clinic Records tables exist in this clinic's doc (npm run provision-records creates them).
   // Concurrent requests share one probe: a request that arrives while the first probe is still running waits for its answer
   // (without this, the first page load after a restart could be served a workspace without the clinical pages).
@@ -104,12 +156,16 @@ class AutopilotWorkspace implements WorkspaceBackend {
     this.probedAt = Date.now();
     const missing: string[] = []; let unreachable = false;
     await Promise.all(RECORD_TABLE_NAMES.map(async (t) => { try { await this.grist.records(this.docId, t, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) missing.push(t); else unreachable = true; } }));
+    // the Schedule page (appointment booking control) appears only when ALL its tables exist (npm run provision-booking creates them)
+    const noBooking: string[] = [];
+    await Promise.all(Object.keys(BOOKING_TABLES).map(async (t) => { try { await this.grist.records(this.docId, t, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noBooking.push(t); else unreachable = true; } }));
+    const bookingModules: Supported['modules'] = noBooking.length === 0 ? ['schedule'] : [];
     if (unreachable) { this.probedAt = Date.now() - 50000; return; }   // keep the last known state, look again in 10 s
     if (missing.length === 0) {
-      this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...RECORD_MODULES] };
+      this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...RECORD_MODULES, ...bookingModules] };
       this.recordsSvc ||= new RecordsService(this.grist, this.docId, { tz: this.cfg.timezone, clinic: () => this.cfg.clinic ? this.cfg.clinic(this.info.id, this.info.name) : { idPrefix: 'GK', name: this.info.name, tagline: '', address: '', phones: [], timings: '', runBy: '', clinicians: [], tax: null } });
     } else {
-      this.supported = SUPPORTED; this.recordsSvc = null;
+      this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...bookingModules] }; this.recordsSvc = null;
       if (missing.length < RECORD_TABLE_NAMES.length) console.warn(`FLOW HQ: clinic records tables missing in ${this.info.id}: ${missing.join(', ')} (run npm run provision-records)`);
     }
   }

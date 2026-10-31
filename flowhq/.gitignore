@@ -5,3 +5,5 @@ config/workspaces.json
 config/users.json
 test-results/
 tests/e2e/screenshots/
+config/booking-tokens.json
+config/audit-outbox/

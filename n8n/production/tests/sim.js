@@ -61,6 +61,13 @@ const TOGGLE = new Set(['Leads.Opted_Out', 'Leads.Escalated', 'Leads.Followup_Se
   }
 }
 
+// ---- Slice 4B/4C: the reminder-consent table, the Clinic Records Patients table and the booking columns on Appointments (grist/booking-schema.md).
+// Taught here so any suite can use them; the 2026 candidates before 4C simply never read them.
+COLUMNS.Reminder_Consent = COLUMNS.Reminder_Consent || ['Consent_ID', 'Phone', 'Patient_ID', 'Reminder_Consent', 'Reminder_Consent_At', 'Reminder_Consent_Source', 'Evidence_Ref', 'Evidence_Date', 'Form_Version', 'Recorded_By', 'Previous_Value', 'Updated_At', 'Audit_ID'];
+COLUMNS.Patients = COLUMNS.Patients || ['Patient_ID', 'Serial_No', 'Name', 'Phone', 'Address', 'Age', 'Sex', 'Referred_By', 'Occupation', 'Main_Complaint', 'Registered_On', 'Status', 'Follow_Up_On', 'Followup_Reminded_For', 'Source_Lead_ID', 'Notes', 'Created_At', 'Created_By'];
+for (const c of ['Patient_ID', 'Patient_Name', 'Patient_Phone', 'Doctor_ID', 'Shift', 'Slot_Key', 'Booking_Source', 'Appt_Stage', 'Reason', 'Idem_Key', 'Cancel_Reason', 'Created_At', 'Updated_At', 'Created_By', 'Audit_ID']) if (!COLUMNS.Appointments.includes(c)) COLUMNS.Appointments.push(c);
+for (const k of ['Patients.Registered_On', 'Patients.Follow_Up_On', 'Patients.Followup_Reminded_For', 'Patients.Created_At', 'Appointments.Created_At', 'Appointments.Updated_At', 'Reminder_Consent.Reminder_Consent_At', 'Reminder_Consent.Updated_At']) DATETIME.add(k);
+
 class FakeGrist {
   constructor(docs = {}) { this.docs = docs; this.nextId = {}; this.calls = []; }
   table(doc, t) {
@@ -266,6 +273,17 @@ function simulate(wf, opts) {
                 if (r.status >= 400 && !resp.neverError) throw new Error(`Request failed with status code ${r.status}`);
                 return { json: r.body };
               }
+              // Slice 4C: the FLOW HQ booking API (opts.booking(method, url, headers, body) -> { status, body } or throws). ONLY its own credential may call it, and it may call nothing else.
+              if (/\/api\/booking\//.test(String(url))) {
+                if (credName !== 'FlowHQ Booking API') throw new Error(`HTTP ${name}: the booking API called with credential "${credName}"`);
+                if (!opts.booking) throw new Error('sim: no fake booking API (opts.booking)');
+                const headers = {};
+                if (p.sendHeaders) for (const hd of p.headerParameters.parameters) headers[hd.name] = resolve(hd.value, ctx);
+                const r = opts.booking(method, url, headers, body);   // { status, body } or throws (network error)
+                if (r.status >= 400 && !resp.neverError) throw new Error(`Request failed with status code ${r.status}`);
+                return { json: resp.fullResponse ? { statusCode: r.status, statusMessage: '', headers: {}, body: r.body } : r.body };
+              }
+              if (credName === 'FlowHQ Booking API') throw new Error(`HTTP ${name}: the booking credential used for ${url}`);
               if (credName === CRED.openrouter && !process.env.SIM_ALLOW_SHARED_CRED) throw new Error(`HTTP ${name}: the OpenRouter credential used for ${url}`);   // SIM_ALLOW_SHARED_CRED=1: an instance that links ONE credential to Grist and AI nodes (see docs/CREDENTIAL_AUDIT.md); the audit tool reports it instead
               if (/^https:\/\/api\.anthropic\.com\//.test(String(url))) {
                 if (credName !== 'Anthropic API') throw new Error(`HTTP ${name}: Claude called with credential "${credName}"`);

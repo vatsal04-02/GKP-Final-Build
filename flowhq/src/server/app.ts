@@ -11,6 +11,10 @@ import type { BackendAdapter, Ctx, WorkspaceBackend } from './adapters/types';
 import { COOKIE, canAccess, loginAllowed, loginFailed, loginSucceeded, readSession, signSession, verifyPassword, viewerOf, type UserRecord } from './auth';
 import type { ProfileStore } from './profiles';
 import { recordsRoutes } from './records/routes';
+import { bookingRoutes } from './booking/routes';
+import { scheduleRoutes } from './booking/staff-routes';
+import { clientKey } from './net';
+import type { TokenStore } from './booking/tokens';
 
 export interface AppDeps {
   adapter: BackendAdapter;
@@ -20,6 +24,8 @@ export interface AppDeps {
   secureCookies: boolean;
   demo: boolean;
   now?: () => number;
+  trustProxy?: boolean;         // behind the reverse proxy (default): rate limits use the address the proxy appended to X-Forwarded-For. false = no proxy in front: use the socket address.
+  bookingTokens?: TokenStore;   // service tokens for /api/booking (n8n). None configured = every call there is refused (401).
 }
 type Env = { Variables: { user: UserRecord; backend: WorkspaceBackend; ctx: Ctx } };
 
@@ -28,6 +34,7 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 export function createApp(d: AppDeps) {
   const app = new Hono<Env>();
   const now = d.now || (() => Date.now());
+  const trustProxy = d.trustProxy !== false;
   const err = (c: Context, status: number, code: string, message: string) => c.json({ error: { code, message } }, status as 400);
 
   app.onError((e, c) => {
@@ -44,22 +51,29 @@ export function createApp(d: AppDeps) {
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Referrer-Policy', 'same-origin');
   });
+  // The n8n booking API authenticates with a bearer service token (never a cookie), so it has no browser session and no CSRF header.
+  const isBookingApi = (path: string) => path === '/api/booking' || path.startsWith('/api/booking/');
   // CSRF: state-changing calls must carry a custom header (only our own pages can send it)
   app.use('/api/*', async (c, next) => {
+    if (isBookingApi(c.req.path)) return next();
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.req.header('x-flowhq-csrf') !== '1') return err(c, 403, 'csrf', 'Missing request header');
     await next();
   });
 
   app.get('/api/health', async (c) => {
     const h = await d.adapter.health();
-    return c.json({ ok: h.ok, backend: d.adapter.label, detail: h.ok ? h.detail : 'backend not reachable', demo: d.demo }, h.ok ? 200 : 503);
+    // audit_outbox: ok / amber / red / null. It never changes the status code (a container health check must not restart a healthy app because of it): an uptime monitor reads this field.
+    return c.json({ ok: h.ok, backend: d.adapter.label, detail: h.ok ? h.detail : 'backend not reachable', demo: d.demo, audit_outbox: h.ok ? h.audit ?? null : null }, h.ok ? 200 : 503);
   });
+
+  // ---------------------------------------------------------------- booking service API (token auth, mounted BEFORE the session check below)
+  app.route('/api/booking', bookingRoutes({ tokens: d.bookingTokens || ({ verify: () => null } as unknown as TokenStore), service: async (slug) => (await d.adapter.workspace(slug))?.booking?.() ?? null, now, clientKey: (c) => clientKey(c, trustProxy) }));
 
   // ---------------------------------------------------------------- session
   app.post('/api/auth/login', async (c) => {
     const body = z.object({ email: z.string().min(3).max(200), password: z.string().min(1).max(200) }).parse(await c.req.json());
     const email = body.email.trim().toLowerCase();
-    const key = `${c.req.header('x-forwarded-for') || 'local'}|${email}`;
+    const key = `${clientKey(c, trustProxy)}|${email}`;   // the real client behind the proxy; a header the client typed cannot dodge the limit
     if (!loginAllowed(key)) return err(c, 429, 'rate_limited', 'Too many attempts. Try again in 15 minutes.');
     const u = d.users.find((x) => x.email === email);
     if (!u || !verifyPassword(body.password, u.passwordHash)) { loginFailed(key); return err(c, 401, 'bad_login', 'Email or password is not correct'); }
@@ -84,9 +98,29 @@ export function createApp(d: AppDeps) {
     const list = all.filter((w) => canAccess(u, w.id)).map((w) => {
       const p = d.profiles.get(w.id);
       const name = p.displayName || w.name;
-      return { id: w.id, name, initials: initials(name), industry: p.industry, logoUrl: p.logoUrl || null };
+      return { id: w.id, name, initials: initials(name), industry: p.industry, logoUrl: p.logoUrl || null, ...(w.protected ? { protected: true } : {}) };
     });
-    return c.json({ user: viewerOf(u), workspaces: list, demo: d.demo, industries: INDUSTRY_KEYS.map((k) => ({ key: k, label: INDUSTRIES[k].label, description: INDUSTRIES[k].description })) });
+    return c.json({ user: viewerOf(u), workspaces: list, canCreateWorkspace: u.role === 'admin' && !!d.adapter.createWorkspace, demo: d.demo, industries: INDUSTRY_KEYS.map((k) => ({ key: k, label: INDUSTRIES[k].label, description: INDUSTRIES[k].description })) });
+  });
+
+  // Add a workspace (admin only): a separate, empty set of data. Everyone allowed on "*" can open it.
+  app.post('/api/workspaces', async (c) => {
+    const u = c.get('user');
+    if (u.role !== 'admin') throw new BackendError(403, 'forbidden', 'Only an admin can do this');
+    if (!d.adapter.createWorkspace) throw new BackendError(501, 'unsupported', 'This backend cannot add workspaces');
+    const body = z.object({ name: z.string().min(2).max(80) }).parse(await c.req.json());
+    const w = await d.adapter.createWorkspace({ name: body.name });
+    const p = d.profiles.get(w.id);
+    return c.json({ id: w.id, name: w.name, initials: initials(w.name), industry: p.industry, logoUrl: null }, 201);
+  });
+
+  // Remove a workspace (admin only). The main workspace refuses. The data stays in the backend (see the adapter).
+  app.delete('/api/workspaces/:id', async (c) => {
+    const u = c.get('user');
+    if (u.role !== 'admin') throw new BackendError(403, 'forbidden', 'Only an admin can do this');
+    if (!d.adapter.deleteWorkspace) throw new BackendError(501, 'unsupported', 'This backend cannot remove workspaces');
+    await d.adapter.deleteWorkspace(c.req.param('id'));
+    return c.json({ ok: true });
   });
 
   // ---------------------------------------------------------------- workspace scope
@@ -202,6 +236,7 @@ export function createApp(d: AppDeps) {
     return c.json(s);
   });
 
+  app.route('/api/w/:ws', scheduleRoutes());     // appointment booking control for staff and admins (rights enforced inside the booking service)
   app.route('/api/w/:ws', recordsRoutes());      // patients, prescriptions, invoices, payments, visits (only live when the clinic doc has the records tables)
 
   app.all('/api/*', (c) => err(c, 404, 'not_found', 'No such API route'));

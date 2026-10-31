@@ -51,7 +51,10 @@ const breakGrist = (g, test, fn) => { const real = g.handle.bind(g); g.handle = 
 test('the committed workflow is the build: 5 nodes added, only Prepare request and Return result changed, patch refuses to run twice', () => {
   assert.strictEqual(ADDED.length, 5);
   for (const n of ADDED) assert(after.nodes.some((x) => x.name === n), `${n} is missing`);
-  assert.strictEqual(JSON.stringify(patch(before)), JSON.stringify(after), 'patch(unpatch(file)) is the file');
+  // the patches stack (build-selected.js): W15 is applied after this one, so take it off before comparing node order
+  const w15 = require('../tools/patch-w15-followup');
+  const layered = after.nodes.some((x) => x.name === w15.ADDED[0]) ? w15.unpatch(after) : after;
+  assert.strictEqual(JSON.stringify(patch(unpatch(layered))), JSON.stringify(layered), 'patch(unpatch(file)) is the file');
   assert.throws(() => patch(after), /already exists/);
   const was = new Map(before.nodes.map((n) => [n.name, JSON.stringify(n)]));
   const changed = after.nodes.filter((n) => was.has(n.name) && was.get(n.name) !== JSON.stringify(n)).map((n) => n.name).sort();

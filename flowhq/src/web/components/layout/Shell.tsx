@@ -2,15 +2,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronsUpDown, LogOut, Menu, Search, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronsUpDown, LogOut, Menu, Plus, Search, Trash2, X } from 'lucide-react';
 import { MODULES, NAV_GROUPS } from '@core/registry';
 import { BRAND } from '@core/brand';
 import type { ModuleKey } from '@core/domain';
 import { useWs } from '../../lib/workspace';
 import { icon } from '../../lib/icons';
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
-import { Avatar, Badge, Kbd } from '../ui/primitives';
+import { Avatar, Badge, Button, Input, Kbd } from '../ui/primitives';
+import { Modal, useToast } from '../ui/feedback';
 import { initials } from '../../lib/format';
 import { CommandPalette } from './CommandPalette';
 
@@ -21,10 +22,89 @@ export function Logo({ compact, large, onDark }: { compact?: boolean; large?: bo
 
 export function pagePath(wsId: string, m: ModuleKey) { const p = MODULES[m].page; return p === '/' ? `/w/${wsId}` : `/w/${wsId}${p}`; }
 
+// Admin only: a new workspace is a separate, empty set of data (its own patients, records and settings).
+function AddWorkspace({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const nav = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
+  useEffect(() => { if (open) { setName(''); setErr(''); } }, [open]);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim().length < 2) { setErr('Enter a name of at least 2 characters'); return; }
+    setBusy(true); setErr('');
+    try {
+      const w = await api<{ id: string; name: string }>('/workspaces', { method: 'POST', body: { name: name.trim() } });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+      try { localStorage.setItem('fhq-ws', w.id); } catch { /* ignore */ }
+      toast('ok', `${w.name} created`);
+      onClose(); nav(`/w/${w.id}`);
+    } catch (e2) { setErr(e2 instanceof ApiError ? e2.message : (e2 as Error).message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Modal open={open} onClose={onClose} label="Add workspace" className="max-w-md">
+      <form onSubmit={submit} className="space-y-4 p-6">
+        <div>
+          <h2 className="font-display text-lg font-semibold">Add workspace</h2>
+          <p className="mt-1 text-[13px] text-fg-2">A separate workspace with its own empty data: its own records and settings. Nothing is shared with your other workspaces.</p>
+        </div>
+        <label className="block"><span className="mb-1.5 block text-[12.5px] text-fg-2">Workspace name</span><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="e.g. Branch 2" aria-invalid={!!err} /></label>
+        {err && <p className="text-[12.5px] text-bad" role="alert">{err}</p>}
+        <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" variant="primary" loading={busy}>Create workspace</Button></div>
+      </form>
+    </Modal>
+  );
+}
+
+// Admin only. This removes the workspace from FLOW HQ; its data is kept (nothing is erased). The main workspace has no delete button.
+function RemoveWorkspace({ target, currentId, mainId, onClose }: { target: { id: string; name: string } | null; currentId: string; mainId: string; onClose: () => void }) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const nav = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
+  useEffect(() => { setTyped(''); setErr(''); }, [target?.id]);
+  if (!target) return null;
+  const match = typed.trim().toLowerCase() === target.name.trim().toLowerCase();
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!match) return;
+    setBusy(true); setErr('');
+    try {
+      await api(`/workspaces/${encodeURIComponent(target.id)}`, { method: 'DELETE' });
+      await qc.invalidateQueries({ queryKey: ['me'] });
+      toast('ok', `${target.name} deleted`);
+      onClose();
+      if (currentId === target.id) { try { localStorage.setItem('fhq-ws', mainId); } catch { /* ignore */ } nav(`/w/${mainId}`); }
+    } catch (e2) { setErr(e2 instanceof ApiError ? e2.message : (e2 as Error).message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Modal open onClose={onClose} label="Delete workspace" className="max-w-md">
+      <form onSubmit={go} className="space-y-4 p-6">
+        <div>
+          <h2 className="font-display text-lg font-semibold">Delete “{target.name}”?</h2>
+          <p className="mt-1 text-[13px] text-fg-2">It disappears from FLOW HQ for everyone. Its data is kept safely and is not erased, so an administrator can bring it back.</p>
+        </div>
+        <label className="block"><span className="mb-1.5 block text-[12.5px] text-fg-2">Type <b className="font-medium text-fg">{target.name}</b> to confirm</span><Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} /></label>
+        {err && <p className="text-[12.5px] text-bad" role="alert">{err}</p>}
+        <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" variant="danger" loading={busy} disabled={!match}>Delete workspace</Button></div>
+      </form>
+    </Modal>
+  );
+}
+
 function WorkspaceSwitcher() {
   const { ws, me } = useWs();
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const nav = useNavigate();
+  const mainId = me.workspaces.find((w) => w.protected)?.id || me.workspaces[0]?.id || '';
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }; document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }, []);
   const industryLabel = (k: string) => me.industries.find((i) => i.key === k)?.label || k;
@@ -32,22 +112,33 @@ function WorkspaceSwitcher() {
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.07] p-2 text-left text-white transition-colors hover:border-white/20 hover:bg-white/[0.12]" aria-haspopup="listbox" aria-expanded={open}>
         <Avatar text={ws.initials} src={ws.logoUrl} size={34} tone="neutral" />
-        <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold">{ws.name}</div><div className="truncate text-[11px] text-side-muted">{industryLabel(ws.industry)}</div></div>
+        <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold">{ws.name}</div><div className="truncate text-[12px] text-side-muted">{industryLabel(ws.industry)}</div></div>
         <ChevronsUpDown className="h-4 w-4 text-side-muted" />
       </button>
       {open && (
-        <div role="listbox" className="absolute bottom-full left-0 z-30 mb-2 w-full rounded-xl border border-line bg-elevated p-1 shadow-pop animate-fade-up">
+        <div role="listbox" className="absolute bottom-full left-0 z-30 mb-2 w-full rounded-xl border border-line bg-elevated p-1 text-fg shadow-pop animate-fade-up">
           <div className="label px-2 pb-1 pt-1.5">Workspaces</div>
           {me.workspaces.map((w) => (
-            <button key={w.id} role="option" aria-selected={w.id === ws.id} onClick={() => { setOpen(false); try { localStorage.setItem('fhq-ws', w.id); } catch { /* ignore */ } nav(`/w/${w.id}`); }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2">
-              <Avatar text={w.initials} src={w.logoUrl} size={24} tone={w.id === ws.id ? 'blue' : 'neutral'} />
-              <div className="min-w-0 flex-1"><div className="truncate text-[13px]">{w.name}</div><div className="truncate text-[11px] text-muted">{industryLabel(w.industry)}</div></div>
-              {w.id === ws.id && <Check className="h-4 w-4 text-blue-bright" />}
-            </button>
+            <div key={w.id} role="option" aria-selected={w.id === ws.id} className="group flex items-center rounded-lg hover:bg-surface-2">
+              <button type="button" onClick={() => { setOpen(false); try { localStorage.setItem('fhq-ws', w.id); } catch { /* ignore */ } nav(`/w/${w.id}`); }} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left">
+                <Avatar text={w.initials} src={w.logoUrl} size={24} tone={w.id === ws.id ? 'blue' : 'neutral'} />
+                <div className="min-w-0 flex-1"><div className="truncate text-[13px]">{w.name}</div><div className="truncate text-[12px] text-muted">{w.protected ? 'Main workspace' : industryLabel(w.industry)}</div></div>
+                {w.id === ws.id && <Check className="h-4 w-4 shrink-0 text-blue-bright" />}
+              </button>
+              {me.canCreateWorkspace && !w.protected && (
+                <button type="button" aria-label={`Delete ${w.name}`} title="Delete workspace" onClick={() => { setOpen(false); setRemoving({ id: w.id, name: w.name }); }} className="mr-1 rounded-md p-1.5 text-muted opacity-60 transition hover:bg-bad/10 hover:text-bad hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+              )}
+            </div>
           ))}
+          {me.canCreateWorkspace && (
+            <button type="button" onClick={() => { setOpen(false); setAdding(true); }} className="mt-1 flex w-full items-center gap-2.5 rounded-lg border-t border-line px-2 py-2 text-left text-[13px] font-medium text-blue-bright hover:bg-surface-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-blue/50"><Plus className="h-3.5 w-3.5" /></span>Add workspace
+            </button>
+          )}
         </div>
       )}
+      <AddWorkspace open={adding} onClose={() => setAdding(false)} />
+      <RemoveWorkspace target={removing} currentId={ws.id} mainId={mainId} onClose={() => setRemoving(null)} />
     </div>
   );
 }
@@ -79,7 +170,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         return (
           <div key={grp.key} className="mt-2">
             <button type="button" onClick={() => g.toggle(grp.key)} aria-expanded={open} aria-controls={`nav-${grp.key}`}
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-side-muted transition-colors hover:text-white">
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1 text-[11.5px] font-semibold text-side-muted transition-colors hover:text-white">
               <span>{grp.label}</span><ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', !open && '-rotate-90')} />
             </button>
             {open && <ul id={`nav-${grp.key}`} className="mt-0.5 space-y-0.5">{mods.map(item)}</ul>}
@@ -154,7 +245,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {ws.demo && <Badge tone="blue" className="hidden sm:inline-flex">Demo data</Badge>}
             <div className="hidden items-center gap-2 border-l border-line pl-3 sm:flex">
               <Avatar text={initials(me.user.name)} size={28} />
-              <div className="leading-tight"><div className="text-[13px] font-medium">{me.user.name}</div><div className="text-[11px] capitalize text-muted">{me.user.role}</div></div>
+              <div className="leading-tight"><div className="text-[13px] font-medium">{me.user.name}</div><div className="text-[12px] capitalize text-muted">{me.user.role}</div></div>
             </div>
             <button onClick={signOut} className="rounded-lg p-2 text-fg-2 transition-colors hover:bg-surface hover:text-fg" aria-label="Sign out"><LogOut className="h-[18px] w-[18px]" /></button>
           </div>
@@ -166,9 +257,9 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-export function Page({ title, subtitle, actions, children, wide }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; wide?: boolean }) {
+export function Page({ title, subtitle, actions, children, wide, className }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; wide?: boolean; className?: string }) {
   return (
-    <div className={cn('mx-auto w-full animate-fade-up px-4 pb-12 pt-6 md:px-8', wide ? 'max-w-[1680px]' : 'max-w-[1400px]')}>
+    <div className={cn('mx-auto w-full animate-fade-up px-4 pb-12 pt-6 md:px-8', wide ? 'max-w-[1680px]' : 'max-w-[1400px]', className)}>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0"><h1 className="text-[26px] font-semibold tracking-tight">{title}</h1>{subtitle && <p className="mt-1 text-sm text-fg-2">{subtitle}</p>}</div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

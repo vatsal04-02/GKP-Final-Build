@@ -61,7 +61,10 @@ services:
       # AI: only the switch, model and rate limit are passed. FLOWHQ_AI_BASE_URL is deliberately NOT passed (the workflow defaults to OpenRouter); the key lives in an n8n credential.
       - FLOWHQ_AI_EXTERNAL_ENABLED=${FLOWHQ_AI_EXTERNAL_ENABLED:-false}
       - FLOWHQ_AI_MODEL=${FLOWHQ_AI_MODEL:-openai/gpt-4o-mini}
-      - FLOWHQ_AI_MAX_REPLIES_PER_HOUR=${FLOWHQ_AI_MAX_REPLIES_PER_HOUR:-6}
+      - FLOWHQ_AI_MAX_REPLIES_PER_HOUR=${FLOWHQ_AI_MAX_REPLIES_PER_HOUR:-6}   # with AI booking each booking / change costs 2 replies: set 12 BEFORE switching AI booking on (docs/n8n-4c-changes.md)
+      # Slice 4C (docs/n8n-4c-changes.md): where W13 reaches the FLOW HQ booking API, over the PRIVATE Docker network (http://flowhq:8787), never the public address.
+      # Empty (the default) = W13 offers and books nothing through the CRM. The token is the n8n credential "FlowHQ Booking API", not a variable.
+      - FLOWHQ_BOOKING_API_URL=${FLOWHQ_BOOKING_API_URL:-}
     volumes:
       - n8n_data:/home/node/.n8n
 

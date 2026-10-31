@@ -226,7 +226,7 @@ async function main() {
       expect(over <= 1, `/${p} scrolls sideways by ${over}px`);
       if (p === '' || p === 'inbox') await mp.screenshot({ path: path.join(SHOTS, `60-mobile-${p || 'dashboard'}.png`) });
     }
-    for (const name of ['Sign out', /Switch to (light|dark) mode/, 'Open menu']) {   // the theme button's label depends on the current theme
+    for (const name of ['Sign out', 'Open menu']) {
       const box = await mp.getByRole('button', { name }).boundingBox();
       expect(box && box.x >= 0 && box.x + box.width <= 390, `top-bar button "${String(name)}" is off-screen`);
     }

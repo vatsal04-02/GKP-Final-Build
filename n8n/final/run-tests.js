@@ -21,11 +21,37 @@ const TARGETS = {
     file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidatefinal.json'),
     env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }) },
     extraSuites: ['openrouter'],
-    finalSuites: ['w12-pause'],      // n8n/final/tests: only the authoritative file carries the W12 pause check
+    finalSuites: ['w12-pause', 'w15-followup'],   // n8n/final/tests: only the authoritative file carries the W12 pause check and W15
     known: [
       ['F-ID', /^identity: inactive, own id and name/],
       ['F-CRED-NAMES', /^credentials: only the production credentials/],
       ['F-CRED-NAMES', /SMTP credential "FlowHQ SMTP"/],
+    ],
+  },
+  // Slice 4C: the authoritative candidate + reminder consent / message purposes (n8n/final/tools/patch-4c-consent.js). The harness gives every made-up phone a recorded
+  // reminder-consent Yes (FOURC_CONSENT_YES) so the older suites still walk the reminder paths. What is expected to differ is listed here with its reason; the new
+  // behaviour is proved by n8n/final/tests/4c-consent.test.js.
+  fourc: {
+    file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4c.json'),
+    env: { SIM_CRED: JSON.stringify({ meta: 'WhatsApp Cloud API', openrouter: 'OpenRouter API' }), FOURC_CONSENT_YES: '1' },
+    extraSuites: ['openrouter'],
+    // w12-pause is NOT run here: its first lines rebuild the pause patch from the file (patch(unpatch(file))), which 4C's change to "W12 – Prepare request" breaks by design;
+    // its behaviour (a paused conversation blocks a W13 reply, after the consent step) is re-proved in 4c-consent.test.js.
+    finalSuites: ['w15-followup', '4c-consent', '4c-w13-booking', 'diff-workflows'],
+    known: [
+      ['F-ID', /^identity: inactive, own id and name/],
+      ['F-CRED-NAMES', /^credentials: only the production credentials/],
+      ['F-CRED-NAMES', /SMTP credential "FlowHQ SMTP"/],
+      // intended 4C behaviour: reminders are decided by reminder consent, not by the lead's Consent_WhatsApp
+      ['F-4C-INTENT', /^no consent on file \(empty, false, or unknown lead\)/],
+      ['F-4C-INTENT', /^consent: without consent W13 sends the patient only a free-text reply/],
+      ['F-4C-INTENT', /^multi-clinic isolation in W12/],
+      ['F-4C-INTENT', /^held, not claimed, ONE summary line: no consent, no lead, opted out, no booking link/],        // a patient with no lead and a reminder Yes IS reminded now
+      ['F-4C-INTENT', /^the summary is written once a day \(send_hour run\), and a held patient is reminded as soon as consent is recorded/],   // consent is now Reminder_Consent
+      // the w15-followup fixtures use https://cal.com/... as Settings > booking_link, which 4C refuses on purpose (a Cal.com link is "no link"); the same flows pass with a clinic-owned link in 4c-consent.test.js
+      ['F-4C-CAL', /^(the day before: ONE followup_reminder template|a second run the same day sends nothing|inside the 24 h window the same words|TEST_MODE: the reminder goes to TEST_PHONE|a send W12 refuses is logged failed|Automation_Paused \(rule 5\)|several patients: each gets their own reminder)/],
+      // the lineage-identity tests of the earlier patches assert patch(unpatch(file)) === file; 4C changes nodes those patches added or changed
+      ['F-4C-LAYER', /patch\(unpatch\(file\)\)|committed workflow carries|exactly the 2 changed|only the two W12 template lists/],
     ],
   },
 };
@@ -35,7 +61,7 @@ function runTarget(name, t) {
   console.log(`\n=== ${name}: ${path.relative(process.cwd(), file)}`);
   let unexpected = 0; let pass = 0; let known = 0;
   for (const s of [...SUITES, ...(t.extraSuites || []), ...(t.finalSuites || [])]) {
-    const r = cp.spawnSync(process.execPath, [(t.finalSuites || []).includes(s) ? path.join(__dirname, 'tests', `${s}.test.js`) : T(s)], { env: { ...process.env, ...t.env, PROD_FILE: file, STOP_ON_FIRST: '0' }, encoding: 'utf8', cwd: ROOT, timeout: 600000 });
+    const r = cp.spawnSync(process.execPath, [(t.finalSuites || []).includes(s) ? path.join(__dirname, 'tests', `${s}.test.js`) : T(s)], { env: { ...process.env, ...t.env, PROD_FILE: file, PAUSE_FILE: file, W15_FILE: file, FOURC_FILE: file, STOP_ON_FIRST: '0' }, encoding: 'utf8', cwd: ROOT, timeout: 600000 });
     const out = `${r.stdout || ''}${r.stderr || ''}`;
     const fails = [...out.matchAll(/^ {2}FAIL (.+)$/gm)].map((m) => m[1]);
     const ok = (out.match(/^ {2}ok /gm) || []).length || (Number((out.match(/(\d+)\/\d+ mutants killed/) || [])[1]) || 0);
@@ -58,7 +84,7 @@ function runTarget(name, t) {
   if (r.status !== 0) { console.log('  FAIL'); process.exit(1); }
 }
 const arg = process.argv[2];
-const names = arg ? [arg] : ['reference', 'authoritative'];
+const names = arg ? [arg] : ['reference', 'authoritative', 'fourc'];
 let bad = 0;
 for (const n of names) bad += runTarget(n, TARGETS[n] || { file: path.resolve(n), env: {}, known: [] });
 process.exit(bad ? 1 : 0);

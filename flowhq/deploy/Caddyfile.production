@@ -1,0 +1,81 @@
+# PRODUCTION reverse proxy for the full stack (n8n + Grist + FLOW HQ). Replaces flowhq/deploy/Caddyfile, which publishes the WHOLE n8n editor and REST API on the public n8n domain.
+# Verified with a real Caddy by flowhq/deploy/staging/verify-caddy.ps1 (docs/production-readiness.md section 4).
+#
+#   PUBLIC:    n8n  -> ONLY /webhook/* (Meta, Cal.com, the website form) and /healthz
+#              FLOW HQ -> the CRM app, but NOT /api/booking/* (that API is for n8n and is reached over the private Docker network at http://flowhq:8787)
+#              Grist -> behind its own Google sign-in
+#   RESTRICTED: the n8n editor / REST API / test webhooks -> N8N_ADMIN_DOMAIN, ADMIN_ALLOW_CIDR only (for example your office or VPN address, or a Tailscale range)
+#
+# New environment variables this file needs (add them to .env BEFORE switching to it, or Caddy will not start):
+#   N8N_ADMIN_DOMAIN   a DNS name pointing at this server (A record), for the n8n editor
+#   ADMIN_ALLOW_CIDR   who may open the editor, e.g. 203.0.113.7/32 (a space-separated list is allowed)
+# Switch: in flowhq/deploy/docker-compose.flowhq.yml change the Caddyfile mount to ./flowhq/deploy/Caddyfile.production, add the two variables to the caddy service
+# environment, then `docker compose ... up -d caddy`. Roll back by pointing the mount at ./flowhq/deploy/Caddyfile again (docs/runbooks.md).
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_body 30s
+			read_header 10s
+		}
+	}
+}
+
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}
+
+{$N8N_DOMAIN} {
+	import secure_headers
+	encode gzip
+	request_body {
+		max_size 2MB
+	}
+	@webhooks path /webhook/*
+	handle @webhooks {
+		reverse_proxy n8n:5678
+	}
+	handle /healthz {
+		respond "ok" 200
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+{$N8N_ADMIN_DOMAIN} {
+	import secure_headers
+	@allowed remote_ip {$ADMIN_ALLOW_CIDR}
+	handle @allowed {
+		reverse_proxy n8n:5678
+	}
+	handle {
+		respond "Forbidden" 403
+	}
+}
+
+{$GRIST_DOMAIN} {
+	import secure_headers
+	encode gzip
+	reverse_proxy grist:8484
+}
+
+{$FLOWHQ_DOMAIN} {
+	import secure_headers
+	encode gzip
+	request_body {
+		max_size 7MB          # the largest legitimate upload is a 5 MB prescription photo
+	}
+	# the booking API belongs to n8n and is reached over the private Docker network: it is not published
+	handle /api/booking/* {
+		respond "Not found" 404
+	}
+	handle {
+		reverse_proxy flowhq:8787
+	}
+}

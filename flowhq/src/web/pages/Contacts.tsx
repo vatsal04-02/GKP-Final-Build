@@ -45,7 +45,7 @@ export default function Contacts() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-left text-[13px]">
-              <thead><tr className="border-b border-line text-[11.5px] uppercase tracking-wide text-muted">
+              <thead><tr className="border-b border-line text-[12.5px] text-muted">
                 <th className="px-4 py-2.5 font-medium">Name</th><th className="px-3 py-2.5 font-medium">Status</th>
                 {fields.includes('stage') && <th className="px-3 py-2.5 font-medium">Stage</th>}
                 {fields.includes('interest') && <th className="px-3 py-2.5 font-medium">{t('service.singular')}</th>}
@@ -111,22 +111,22 @@ function ContactDrawer({ id, onClose }: { id: string | null; onClose: () => void
               <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-blue-soft"><Sparkles className="h-3.5 w-3.5" />{tt('{ai.name} summary')}</div>
               {c.aiSummary && <p className="text-[13.5px] leading-relaxed text-fg">{c.aiSummary}</p>}
               <div className="mt-3 grid grid-cols-2 gap-3 text-[12.5px]">
-                <div><div className="text-[11px] uppercase tracking-wide text-muted">{t('service.singular')}</div><div className="text-fg">{c.interest || '—'}</div></div>
-                <div><div className="text-[11px] uppercase tracking-wide text-muted">Next action</div><div className="text-fg">{c.nextActionAt ? dateTime(f, c.nextActionAt) : '—'}</div></div>
-                {c.attentionRequired && <div className="col-span-2"><div className="text-[11px] uppercase tracking-wide text-muted">Why a person is needed</div><div className="text-warn">{c.attentionReason || '—'}</div></div>}
+                <div><div className="text-[12.5px] text-muted">{t('service.singular')}</div><div className="text-fg">{c.interest || '—'}</div></div>
+                <div><div className="text-[12.5px] text-muted">Next action</div><div className="text-fg">{c.nextActionAt ? dateTime(f, c.nextActionAt) : '—'}</div></div>
+                {c.attentionRequired && <div className="col-span-2"><div className="text-[12.5px] text-muted">Why a person is needed</div><div className="text-warn">{c.attentionReason || '—'}</div></div>}
               </div>
             </section>
           )}
           <section className="grid grid-cols-2 gap-x-4 gap-y-3 text-[13px]">
             {caps.contactEditable.includes('status') ? (
-              <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Status</span>
+              <label className="block"><span className="mb-1 block text-[12.5px] text-muted">Status</span>
                 <Select value={draft.status ?? c.status ?? ''} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}>{STATUSES.map((s) => <option key={s} value={s}>{t(`contactStatus.${s}`)}</option>)}</Select></label>
             ) : <Field k="Status" v={c.status ? t(`contactStatus.${c.status}`) : null} />}
             {caps.contactEditable.includes('owner') ? (
-              <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Owner</span><Input value={draft.owner ?? c.owner ?? ''} onChange={(e) => setDraft((d) => ({ ...d, owner: e.target.value }))} placeholder={t('staff.singular')} /></label>
+              <label className="block"><span className="mb-1 block text-[12.5px] text-muted">Owner</span><Input value={draft.owner ?? c.owner ?? ''} onChange={(e) => setDraft((d) => ({ ...d, owner: e.target.value }))} placeholder={t('staff.singular')} /></label>
             ) : <Field k="Owner" v={c.owner} />}
             {caps.contactEditable.includes('nextActionAt') && (
-              <label className="col-span-2 block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Next action</span>
+              <label className="col-span-2 block"><span className="mb-1 block text-[12.5px] text-muted">Next action</span>
                 <Input type="datetime-local" value={draft.nextActionAt ?? (c.nextActionAt ? new Date(Date.parse(c.nextActionAt) - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '')} onChange={(e) => setDraft((d) => ({ ...d, nextActionAt: e.target.value }))} /></label>
             )}
             <Field k="Source" v={c.source} /><Field k="Created" v={c.createdAt ? dateTime(f, c.createdAt) : null} />
@@ -135,7 +135,7 @@ function ContactDrawer({ id, onClose }: { id: string | null; onClose: () => void
             {caps.contactFields.includes('campaign') && c.campaign && <Field k="Campaign" v={c.campaign} />}
             {c.lostReason && <Field k="Lost reason" v={c.lostReason} />}
             {caps.contactEditable.includes('notes') && (
-              <label className="col-span-2 block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Notes</span><Textarea value={draft.notes ?? c.notes ?? ''} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Internal notes (not sent to anyone)" /></label>
+              <label className="col-span-2 block"><span className="mb-1 block text-[12.5px] text-muted">Notes</span><Textarea value={draft.notes ?? c.notes ?? ''} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Internal notes (not sent to anyone)" /></label>
             )}
           </section>
           {has('bookings') && (
@@ -157,5 +157,5 @@ function ContactDrawer({ id, onClose }: { id: string | null; onClose: () => void
   );
 }
 function Field({ k, v }: { k: string; v: string | null }) {
-  return <div><div className="mb-1 text-[11px] uppercase tracking-wide text-muted">{k}</div><div className={v ? 'text-fg' : 'text-muted'}>{v || '—'}</div></div>;
+  return <div><div className="mb-1 text-[12.5px] text-muted">{k}</div><div className={v ? 'text-fg' : 'text-muted'}>{v || '—'}</div></div>;
 }

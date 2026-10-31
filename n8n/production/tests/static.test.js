@@ -76,7 +76,8 @@ test('settings that differ per environment are $env expressions; nothing secret 
 test('TLS is always verified; the temporary quiet-hours switch is off everywhere; hello_world is never a template choice', () => {
   assert(!/allowUnauthorizedCerts/.test(TEXT));
   assert(!/DISABLE_QUIET_HOURS_FOR_TEST = true/.test(TEXT));
-  assert.strictEqual((TEXT.match(/DISABLE_QUIET_HOURS_FOR_TEST = false/g) || []).length, 7);
+  const hasW15 = real.some((n) => n.name === 'W15 – Decide send');   // W15 (n8n/final/tools/patch-w15-followup.js) carries one more copy, off
+  assert.strictEqual((TEXT.match(/DISABLE_QUIET_HOURS_FOR_TEST = false/g) || []).length, 7 + (hasW15 ? 1 : 0));
   for (const n of real) assert(!/template\s*[:=]\s*'hello_world'/.test(JSON.stringify(n.parameters).replace(/\\n/g, '\n')) || n.name === 'W12 – Test input', n.name);
 });
 

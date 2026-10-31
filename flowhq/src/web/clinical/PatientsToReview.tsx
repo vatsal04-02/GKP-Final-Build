@@ -2,7 +2,7 @@
 // Computed from the patient register (latest attended visit, else registration date); nothing is stored or invented.
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, HeartPulse, Phone } from 'lucide-react';
+import { ArrowRight, CheckCircle2, HeartPulse } from 'lucide-react';
 import type { PatientList } from '@core/clinical';
 import { api, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
@@ -10,6 +10,8 @@ import { cn } from '../lib/cn';
 import { Card, CardHeader } from '../components/ui/primitives';
 import { ErrorState, SkeletonRows } from '../components/ui/feedback';
 import { patientsToReview } from './dashboardLogic';
+import { WhatsAppButton } from './WhatsAppButton';
+import { reviewMessage } from './whatsapp';
 
 const MIN_DAYS = 10;
 
@@ -34,7 +36,7 @@ export function PatientsToReview({ base, today, className }: { base: string; tod
                   <span className={cn('num shrink-0 rounded-md border px-2 py-0.5 text-[12px] font-medium', r.days >= 21 ? 'border-bad/25 bg-bad/10 text-bad' : 'border-warn/25 bg-warn/10 text-warn')}>
                     {r.never ? `No visit in ${r.days} days` : `Last seen ${r.days} days ago`}
                   </span>
-                  {r.phone && <a href={`tel:${r.phone}`} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-[12.5px] font-medium hover:border-line-2 hover:text-blue-bright" aria-label={`Call ${r.name}`}><Phone className="h-3.5 w-3.5" />Call</a>}
+                  <WhatsAppButton size="sm" phone={r.phone} name={r.name} message={(clinic) => reviewMessage({ name: r.name, clinic, days: r.days, never: r.never })} />
                 </li>
               ))}
             </ul>

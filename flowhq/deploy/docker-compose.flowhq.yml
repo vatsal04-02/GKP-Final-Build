@@ -7,6 +7,7 @@ services:
       context: .
       dockerfile: flowhq/Dockerfile
     restart: unless-stopped
+    stop_grace_period: 30s        # lets FLOW HQ finish the audit outbox and release its lock on SIGTERM
     env_file: flowhq/.env
     environment:
       - GRIST_BASE_URL=http://grist:8484
@@ -14,7 +15,7 @@ services:
       - FLOWHQ_USERS_FILE=/app/flowhq/users.json
       - FLOWHQ_CLINIC_FILE=/app/flowhq/clinic.json
     volumes:
-      - flowhq_config:/app/flowhq/config                          # workspace profiles written by Settings
+      - flowhq_config:/app/flowhq/config                          # workspace profiles written by Settings AND the durable audit outbox (config/audit-outbox): it MUST be a persistent volume
       - ./flowhq/config/users.json:/app/flowhq/users.json:ro      # create it first (README H); never committed
       - ./flowhq/config/clinic.json:/app/flowhq/clinic.json:ro    # clinic letterhead + invoice rules (README L); public details, no secrets
     depends_on:
@@ -23,6 +24,12 @@ services:
   caddy:
     environment:
       - FLOWHQ_DOMAIN=${FLOWHQ_DOMAIN}
+    volumes:
+      # SECURITY: ./flowhq/deploy/Caddyfile (mounted below) publishes the WHOLE n8n editor / REST API / test webhooks and the n8n-only booking API to the internet
+      # (measured with a real Caddy: flowhq/deploy/staging/verify-caddy.ps1). BEFORE real patients are served, mount ./flowhq/deploy/Caddyfile.production instead
+      # (only /webhook/* public, the editor on an IP-restricted admin domain, /api/booking/* not published). It needs N8N_ADMIN_DOMAIN and ADMIN_ALLOW_CIDR: docs/production-readiness.md.
+      # the stack's Caddyfile plus the FLOW HQ site, so the Caddyfile does not need editing by hand (same target path = replaces the base mount)
+      - ./flowhq/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
 
 volumes:
   flowhq_config:

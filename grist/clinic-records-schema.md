@@ -1,7 +1,8 @@
 # Grist tables: Clinic Records (patients, prescriptions, invoices, payments, visits)
 
 Added **inside each clinic's existing Grist doc**, next to Leads / Appointments / Messages. Purely additive: no existing table or column
-is renamed or changed, and no n8n workflow reads or writes these tables. Create them with `npm run provision-records` (in `flowhq/`),
+is renamed or changed. One n8n workflow touches them: **W15** (follow-up reminder) reads `Patients` and writes only
+`Patients.Followup_Reminded_For`; nothing else in n8n reads or writes these tables. Create them with `npm run provision-records` (in `flowhq/`),
 which adds only what is missing. Column names are exact: `flowhq/src/server/records/schema.ts` is generated from this file by hand
 and a test keeps the two in step.
 
@@ -24,7 +25,8 @@ Nothing is ever deleted through the app: records are voided or superseded, so hi
 | Main_Complaint | Text | the disorder, as recorded by the clinician |
 | Registered_On | Date | |
 | Status | Choice | Active, Completed, Inactive |
-| Follow_Up_On | Date | |
+| Follow_Up_On | Date | the next follow-up; FLOW HQ copies a prescription's Follow_Up_On here when a save sets or changes it |
+| Followup_Reminded_For | Date | set by n8n W15: the Follow_Up_On date already reminded on WhatsApp (sent flag: same date = never again, a new date = a new reminder) |
 | Source_Lead_ID | Text | optional link to Leads.Lead_ID, set only by a person, never automatically |
 | Notes | Text | |
 | Created_At, Created_By | DateTime, Text | |

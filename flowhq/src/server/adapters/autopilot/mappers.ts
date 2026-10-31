@@ -93,7 +93,7 @@ export function toBooking(a: GristRecord, ix: Indexes, now: number, showValue: b
     ref: uid,
     title: txt(f.Service) || '',
     contactId: lead ? String(lead.id) : null,
-    contactName: lead ? txt(lead.fields.Name) || txt(lead.fields.Phone) : null,
+    contactName: lead ? txt(lead.fields.Name) || txt(lead.fields.Phone) : txt(f.Patient_Name),   // a booking made without a lead (a walk-in) still names its patient
     start: iso(start),
     end: iso(f.End) || (start ? iso(start + 45 * 60) : null),
     status,

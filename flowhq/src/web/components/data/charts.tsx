@@ -37,8 +37,8 @@ export function AreaChart({ labels, series, height = 220, format = (n: number) =
         <defs>
           <linearGradient id="fhq-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="rgb(var(--blue))" stopOpacity="0.32" /><stop offset="1" stopColor="rgb(var(--blue))" stopOpacity="0" /></linearGradient>
         </defs>
-        {ticks.map((t) => (<g key={t}><line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="rgb(var(--line))" strokeDasharray={t ? '3 4' : undefined} /><text x={pad.l - 8} y={y(t) + 4} textAnchor="end" className="fill-muted text-[10.5px]">{format(t)}</text></g>))}
-        {labels.map((l, i) => (i % every === 0 || i === n - 1) && <text key={l + i} x={x(i)} y={H - 8} textAnchor="middle" className="fill-muted text-[10.5px]">{l}</text>)}
+        {ticks.map((t) => (<g key={t}><line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="rgb(var(--line))" strokeDasharray={t ? '3 4' : undefined} /><text x={pad.l - 8} y={y(t) + 4} textAnchor="end" className="fill-muted text-[11.5px]">{format(t)}</text></g>))}
+        {labels.map((l, i) => (i % every === 0 || i === n - 1) && <text key={l + i} x={x(i)} y={H - 8} textAnchor="middle" className="fill-muted text-[11.5px]">{l}</text>)}
         {series.map((s) => s.area && <path key={`${s.key}-a`} d={`${path(s.values)} L${x(n - 1)},${y(0)} L${x(0)},${y(0)} Z`} fill="url(#fhq-area)" />)}
         {series.map((s) => <path key={s.key} d={path(s.values)} fill="none" stroke={STROKE[s.tone]} strokeWidth={s.area ? 2 : 1.5} strokeDasharray={s.tone === 'muted' ? '4 4' : undefined} strokeLinejoin="round" strokeLinecap="round" className="transition-all duration-300" />)}
         {hover !== null && (<g><line x1={x(hover)} x2={x(hover)} y1={pad.t} y2={H - pad.b} stroke="rgb(var(--line-2))" />{series.map((s) => <circle key={s.key} cx={x(hover)} cy={y(s.values[hover])} r={3.5} fill="rgb(var(--bg))" stroke={STROKE[s.tone]} strokeWidth={2} />)}</g>)}

@@ -66,7 +66,7 @@ function ConversationItem({ c, active, onOpen }: { c: Conversation; active: bool
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className={cn('truncate text-[13.5px]', c.unread ? 'font-semibold text-fg' : 'font-medium text-fg')}>{c.contactName}</span>
-            <span className="ml-auto shrink-0 text-[11px] text-muted">{relative(c.lastMessageAt)}</span>
+            <span className="ml-auto shrink-0 text-[12px] text-muted">{relative(c.lastMessageAt)}</span>
           </div>
           <p className={cn('mt-0.5 truncate text-[12.5px]', c.unread ? 'text-fg-2' : 'text-muted')}>{c.lastMessageDirection === 'out' && <span className="text-muted">You: </span>}{c.lastMessagePreview || '—'}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -74,7 +74,7 @@ function ConversationItem({ c, active, onOpen }: { c: Conversation; active: bool
             {!c.attentionRequired && c.aiActive && <AiBadge label={tt('{ai.short} active')} />}
             {c.automationPaused && <Badge icon={<PauseCircle className="h-3 w-3" />}>Paused</Badge>}
             {c.optedOut && <Badge tone="red">Opted out</Badge>}
-            {c.unread > 0 && <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-blue-soft"><StatusDot tone="blue" />{c.unread}</span>}
+            {c.unread > 0 && <span className="ml-auto flex items-center gap-1 text-[12px] font-medium text-blue-soft"><StatusDot tone="blue" />{c.unread}</span>}
           </div>
         </div>
       </button>
@@ -134,7 +134,7 @@ function Thread({ id }: { id: string }) {
               const sep = day !== lastDay ? (lastDay = day) : null;
               return (
                 <div key={m.id}>
-                  {sep && <div className="my-4 flex items-center gap-3 text-[11px] text-muted"><span className="h-px flex-1 bg-line" />{sep}<span className="h-px flex-1 bg-line" /></div>}
+                  {sep && <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" />{sep}<span className="h-px flex-1 bg-line" /></div>}
                   <Bubble m={m} automationName={m.author.automationKey ? automation(m.author.automationKey).name : ''} aiName={t('ai.name')} showAi={has('ai')} />
                 </div>
               );
@@ -163,7 +163,7 @@ function Bubble({ m, automationName, aiName, showAi }: { m: Message; automationN
         (m.status === 'failed' || m.status === 'needs_template') && 'border-bad/40')}>
         <p className="whitespace-pre-wrap break-words">{m.body}</p>
       </div>
-      <div className={cn('mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-muted', out ? 'justify-end' : '')}>
+      <div className={cn('mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[12px] text-muted', out ? 'justify-end' : '')}>
         {out && (m.author.kind === 'ai' ? <Sparkles className="h-3 w-3 text-blue-bright" /> : m.author.kind === 'automation' ? <Bot className="h-3 w-3" /> : <UserRound className="h-3 w-3" />)}
         {out && <span>{who}</span>}
         {m.author.testMode && <Badge className="h-[18px]">test mode</Badge>}
@@ -220,7 +220,7 @@ function Composer({ c }: { c: Conversation }) {
             className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[13.5px] leading-relaxed text-fg outline-none placeholder:text-muted" />
           <div className="flex items-center justify-between gap-3 px-3 pb-2.5">
             <span className="text-[11.5px] text-muted">{c.replyWindow.closesAt ? `Reply window open until ${dateTime(f, c.replyWindow.closesAt)}` : ''}</span>
-            <div className="flex items-center gap-2"><span className="hidden text-[11px] text-muted sm:inline">⌘↵ to send</span><Button variant="primary" size="sm" icon={<Send className="h-3.5 w-3.5" />} loading={send.isPending} disabled={!text.trim()} onClick={submit}>Send</Button></div>
+            <div className="flex items-center gap-2"><span className="hidden text-[12px] text-muted sm:inline">⌘↵ to send</span><Button variant="primary" size="sm" icon={<Send className="h-3.5 w-3.5" />} loading={send.isPending} disabled={!text.trim()} onClick={submit}>Send</Button></div>
           </div>
         </div>
       )}
@@ -264,5 +264,5 @@ function ContextPanel({ c, contact }: { c: Conversation; contact: Contact | null
   );
 }
 function Row({ k, v, tone }: { k: string; v: string | null; tone?: 'amber' }) {
-  return <div><dt className="text-[11px] uppercase tracking-wide text-muted">{k}</dt><dd className={cn('mt-0.5', tone === 'amber' ? 'text-warn' : v ? 'text-fg' : 'text-muted')}>{v || '—'}</dd></div>;
+  return <div><dt className="text-[12.5px] text-muted">{k}</dt><dd className={cn('mt-0.5', tone === 'amber' ? 'text-warn' : v ? 'text-fg' : 'text-muted')}>{v || '—'}</dd></div>;
 }

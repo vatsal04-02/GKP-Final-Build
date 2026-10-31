@@ -2853,7 +2853,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js, send-guard.js (inQuietHours) and wa-send.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nconst WA_TEMPLATES = {\n  hello_world: { language: 'en_US', params: [] },          // Meta's sample template on the test number\n  booking_confirmation: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_24h: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_2h: { params: ['name', 'service', 'clinic_name', 'time'] },\n  noshow_rebook: { params: ['name', 'service', 'clinic_name', 'date', 'booking_link'] },\n  followup_day2: { params: ['name', 'clinic_name', 'booking_link'] },\n  new_lead_staff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'enquiry', fallback: '(no message)' }] },\n  lead_escalation: { params: ['clinic_name', 'lead_name', 'lead_phone', 'waiting_minutes'] },\n  human_handoff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'reason', fallback: '(see the Grist inbox)' }] },\n  outcome_check: { params: ['name', 'clinic_name', { key: 'service', fallback: 'visit' }] },                    // W7\n  review_request: { params: ['name', 'clinic_name', 'review_link'] },                                          // W8\n  weekly_owner_report: { params: ['clinic_name', 'week', 'summary', { key: 'action', fallback: 'see the full report in Grist' }] },   // W9\n};\n\n// Free-text replies (message_type 'text', from W13) are only allowed inside WhatsApp's 24-hour customer-service\n// window, i.e. within 24 h of the patient's last message (last_inbound_at). A 5-minute margin keeps clock drift safe.\nconst WA_TEXT_WINDOW_MS = 24 * 3600 * 1000 - 5 * 60 * 1000;\n\n// Short hints for the Meta error codes we are most likely to meet (shown in send_error).\nconst WA_HINTS = {\n  190: 'access token invalid or expired - put a permanent System User token in the \"WhatsApp Cloud API\" credential',\n  10: 'token lacks permission - give the System User whatsapp_business_messaging',\n  200: 'token lacks permission - give the System User whatsapp_business_messaging',\n  100: 'invalid parameter - check wa_phone_number_id and the template',\n  131030: \"recipient is not in the test number's allowed list - add it in Meta > WhatsApp > API Setup\",\n  131026: 'message undeliverable (number not on WhatsApp?)',\n  131047: 'outside the 24h window - only templates can be sent',\n  131056: 'too many messages to this number - try later',\n  130429: 'rate limit hit - try later',\n  132000: 'number of template variables does not match the approved template',\n  132001: 'template not found in this language - check the name and language code',\n  132005: 'template text too long after filling the variables',\n  132007: 'template content policy violation',\n  132012: 'template variable format does not match',\n  133010: 'phone number not registered with the Cloud API',\n  131031: 'WhatsApp account locked',\n  368: 'temporarily blocked for policy violations',\n};\n\n// Meta: a variable may not contain new-lines, tabs or runs of spaces.\nfunction waCleanParam(v) {\n  return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, 250);\n}\n\n// Decide whether to call Meta, and build the request. Never throws.\n// input: the caller's item (decision, template, template_params, wa_phone_number_id, ...); cfg: W12 Config.\nfunction waPrepare(input, cfg, nowMs, h) {\n  const stop = (send_status, send_error) => ({ call_meta: false, send_status, send_error });\n  const d = input && input.decision;\n  if (!d || d.send !== true) return stop('not_requested', d && d.reason ? `guard said no: ${d.reason}` : 'no send decision from the caller');\n\n  const mode = String(cfg.send_mode || '').trim().toLowerCase();\n  if (mode !== 'allowlist' && mode !== 'live') return stop('blocked', `W12 send_mode is \"${cfg.send_mode}\" - only \"allowlist\" or \"live\" send`);\n\n  // 1. Is the message itself sendable? (reported even while testing in allowlist mode or at night)\n  const to = h.normalizeIndianPhone(d.to).phone;\n  if (!to) return stop('invalid', 'decision.to is not a valid phone number (E.164, e.g. +919876543210)');\n  const version = String(cfg.graph_api_version || '').trim();\n  if (!/^v\\d+\\.\\d+$/.test(version)) return stop('invalid', 'graph_api_version is not set in the W12 Config node (e.g. v23.0 - copy it from Meta API Setup)');\n  const phoneId = String(input.wa_phone_number_id || '').trim();\n  if (!/^\\d{5,25}$/.test(phoneId)) return stop('invalid', 'wa_phone_number_id is missing or not a number (Agency Registry > Clinics > WA_Phone_Number_ID)');\n  const isText = input.message_type === 'text';\n  let tpl = null;\n  let textBody = '';\n  const params = [];\n  if (isText) {\n    textBody = String(input.text_body === null || input.text_body === undefined ? '' : input.text_body).replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/g, '').trim().slice(0, 4096);\n    if (!textBody) return stop('invalid', 'text message: text_body is empty');\n    const last = Number(input.last_inbound_at);\n    if (!Number.isFinite(last) || last <= 0) return stop('invalid', 'text message: last_inbound_at (the patient\\'s last message, epoch seconds) is missing');\n    if (nowMs - last * 1000 > WA_TEXT_WINDOW_MS) return stop('blocked', 'outside the 24-hour WhatsApp window: only an approved template may be sent');\n  } else {\n    tpl = WA_TEMPLATES[input.template];\n    if (!tpl) return stop('invalid', `unknown template \"${input.template}\" - add it to WA_TEMPLATES in W12`);\n    if (input.template === 'hello_world' && cfg.allow_hello_world !== true) return stop('invalid', 'template hello_world is Meta\\'s sample (\"Hello World\"): it is not sent to people in production (FLOWHQ_WA_ALLOW_HELLO_WORLD=true allows it for a smoke test)');\n    const values = input.template_params || {};\n    for (const spec of tpl.params) {\n      const key = typeof spec === 'string' ? spec : spec.key;\n      let v = waCleanParam(values[key]);\n      if (!v && typeof spec === 'object') v = spec.fallback;\n      if (!v) return stop('invalid', `template ${input.template}: variable \"${key}\" is empty`);\n      params.push(v);\n    }\n  }\n\n  // 2. May it go out now, to this number?\n  if (mode === 'allowlist') {\n    const allowed = String(cfg.allowlist || '').split(/[,;]+/).map((x) => h.normalizeIndianPhone(x).phone).filter(Boolean);\n    if (!allowed.includes(to)) return stop('blocked', `${to} is not in the W12 allowlist (send_mode = allowlist)`);\n  }\n  if (h.inQuietHours(nowMs)) return stop('blocked', 'quiet hours (21:00-08:00 IST)');\n\n  if (isText) {\n    return {\n      call_meta: true,\n      send_status: 'pending',\n      send_error: '',\n      to,\n      meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n      meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'text', text: { preview_url: /https?:\\/\\//i.test(textBody), body: textBody } },\n    };\n  }\n  const template = { name: input.template, language: { code: String(input.template_language || tpl.language || cfg.default_language || 'en') } };\n  if (params.length) template.components = [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }];\n  return {\n    call_meta: true,\n    send_status: 'pending',\n    send_error: '',\n    to,\n    meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n    meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'template', template },\n  };\n}\n\n// Turn the HTTP node output (fullResponse + neverError, or a \"continue on error\" item) into a result.\n//   accepted  Meta returned a message id                  -> sent: true\n//   rejected  Meta refused, or the request never left     -> sent: false (safe to try again later)\n//   uncertain the request left but no clear answer came   -> sent: false, uncertain: true (PRODUCTION: it may have been delivered, so it is\n//             never re-sent automatically and never reported as sent; the delivery-status webhook or a person settles it)\nfunction waClassify(resp, cfg) {\n  const result = (send_status, extra) => Object.assign({\n    send_status,\n    sent: send_status === 'accepted',   // PRODUCTION: only a message id from Meta counts as sent\n    uncertain: send_status === 'uncertain',   // the call left but no clear answer came: never sent again automatically, never reported as sent\n    wa_message_id: '',\n    send_error: '',\n    send_error_code: null,\n    send_http_status: null,\n  }, extra);\n\n  if (resp && typeof resp.statusCode === 'number') {\n    let body = resp.body;\n    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\n    body = body || {};\n    const id = body.messages && body.messages[0] && body.messages[0].id;\n    if (resp.statusCode >= 200 && resp.statusCode < 300) {\n      return id\n        ? result('accepted', { wa_message_id: String(id), send_http_status: resp.statusCode })\n        : result('uncertain', { send_error: 'Meta answered without a message id', send_http_status: resp.statusCode });\n    }\n    const e = body.error || {};\n    const code = e.code !== undefined && e.code !== null ? Number(e.code) : null;\n    const detail = (e.error_data && e.error_data.details) || e.message || `HTTP ${resp.statusCode}`;\n    const hint = code !== null && WA_HINTS[code] ? ` (${WA_HINTS[code]})` : '';\n    return result('rejected', { send_error_code: code, send_http_status: resp.statusCode, send_error: `${code !== null ? code + ': ' : ''}${detail}${hint}`.slice(0, 500) });\n  }\n\n  // n8n's \"continue on error\" item: { error: '...' } or { error: { message, description, code, ... } }. n8n also\n  // rewrites network errors into friendly text, so match both the raw codes and n8n's wording.\n  const err = resp && resp.error;\n  const msg = String((err && (err.message || err.description)) || (typeof err === 'string' ? err : '') || 'no reply from Meta');\n  const haystack = typeof err === 'string' ? err : JSON.stringify(err || {});\n  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|certificate|self[- ]signed|refused the connection|DNS server returned an error/i.test(haystack)) {\n    return result('rejected', { send_error: `not sent - could not reach Meta: ${msg}`.slice(0, 500) });\n  }\n  return result('uncertain', { send_error: `no clear answer from Meta (it may or may not have been sent): ${msg}`.slice(0, 500) });\n}\n\n// Should this send be written to the Grist Inbox (Conversations + Messages)? Only patient messages that\n// actually reached the point of calling Meta. The conversation is the PATIENT's (lead_phone), even when\n// TEST_MODE sent the message to TEST_PHONE. A message that already has its own Messages row (W10 staff reply:\n// inbox_row_id) is not written again; its caller updates that row.\nfunction waInboxPlan(input, cfg, res, h) {\n  const patient_phone = h.normalizeIndianPhone(input.lead_phone || input.patient_phone).phone;\n  const attempted = ['accepted', 'uncertain', 'rejected'].includes(res.send_status);\n  const own = Number(input.inbox_row_id) > 0;\n  const log = cfg.log_to_inbox !== false && input.audience === 'patient' && attempted && !own && !!patient_phone && !!input.grist_base_url && !!input.doc_id;\n  return { log, patient_phone };\n}\n\n// The Messages row. Send stays false: W10 sends rows whose Send is ticked, and this one is already out.\nfunction waInboxRow(input, res, nowSec) {\n  const d = input.decision || {};\n  const via = d.test_mode ? ` (TEST_MODE: sent to ${d.to})` : '';\n  return {\n    Direction: 'Out',\n    Body: String(input.message_text || input.text_body || `[template ${input.template}]`).slice(0, 2000),\n    Template: input.message_type === 'text' ? '' : String(input.template || ''),\n    Sent_By: `${input.source_workflow || 'W12'}${via}`.slice(0, 200),\n    WA_Message_ID: res.wa_message_id || '',\n    Status: res.send_status === 'rejected' ? 'failed' : 'queued',\n    Send: false,\n    Created_At: nowSec,\n  };\n}\n\n// ---- TEMPORARY TEST SWITCH: quiet hours (pasted from n8n/snippets/quiet-hours-switch.js - keep identical) ----\nconst DISABLE_QUIET_HOURS_FOR_TEST = false;   // true = skip ONLY the 21:00-08:00 IST quiet-hours check; false = the original rule\nconst originalInQuietHours = inQuietHours;   // the original rule from send-guard.js, unchanged\ninQuietHours = (nowMs) => (DISABLE_QUIET_HOURS_FOR_TEST ? false : originalInQuietHours(nowMs));   // eslint-disable-line no-func-assign\n// ---- end of the test switch ----\n\n  // PRODUCTION: idempotency key of one logical message. Callers should send idem_key; the fallbacks cover the ones that identify the message by their own id.\n  function waIdemKey(input) {\n    const clean = (v) => String(v === null || v === undefined ? '' : v).replace(/[^A-Za-z0-9:_.\\-]/g, '').slice(0, 100);\n    const explicit = clean(input.idem_key);\n    if (explicit) return explicit;\n    const src = clean(input.source_workflow) || 'W12';\n    const tpl = input.message_type === 'text' ? 'text' : clean(input.template);\n    const w13 = input.message_row_id ? `${clean(input.w13_kind)}${clean(input.message_row_id)}` : '';\n    const id = [clean(input.booking_uid), clean(input.inbox_row_id), w13, clean(input.week)].filter(Boolean)[0];\n    return id ? `${src}:${tpl}:${id}`.slice(0, 200) : '';\n  }\n  const cfg = {\n    send_mode: $json.w12_send_mode,\n    allowlist: $json.w12_allowlist,\n    graph_api_version: $json.w12_graph_api_version,\n    default_language: $json.w12_default_language,\n    uncertain_counts_as_sent: $json.w12_uncertain_counts_as_sent,\n    log_to_inbox: $json.w12_log_to_inbox,\n    allow_hello_world: $json.w12_allow_hello_world === true,\n    graph_base_url: String($json.w12_graph_base_url || 'https://graph.facebook.com').replace(/\\/+$/, ''),\n  };\n  const input = {};\n  for (const [k, v] of Object.entries($json)) if (!k.startsWith('w12_')) input[k] = v;   // the caller's item, untouched\n  const prep = waPrepare(\n  input,\n  cfg,\n  Date.now(),\n  { normalizeIndianPhone, inQuietHours }\n  );\n  // PRODUCTION: every send needs an idempotency key (the send ledger refuses a second send of the same key) and a place for the ledger.\n  const idem_key = waIdemKey(input);\n  if (prep.call_meta) {\n    if (!idem_key) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no idempotency key: the caller must send idem_key (or booking_uid / inbox_row_id / message_row_id / week)'; }\n    else if (!/^https?:\\/\\/[^\\s/]+/i.test(String(input.grist_base_url || '')) || !String(input.doc_id || '').trim()) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no send-ledger location: grist_base_url and doc_id are required'; }\n    else prep.meta_request.biz_opaque_callback_data = `fhq:${idem_key}`.slice(0, 500);   // Meta echoes it in the delivery-status webhook\n  }\n  // PRODUCTION consent gate: business-initiated templates to a patient need Consent_WhatsApp on the lead (a TEST_MODE send goes to the clinic's own phone: no check)\n  const needs_consent = prep.call_meta === true && input.audience === 'patient' && input.message_type !== 'text' && !((input.decision || {}).test_mode === true);\n  const consent_phone = normalizeIndianPhone(input.lead_phone || input.patient_phone).phone || '';\n  // PAUSE re-check: only a W13 patient reply asks W12 to re-read Conversations.Automation_Paused right before sending\n  const needs_pause_check = prep.call_meta === true && input.w13_kind === 'patient_reply';\n  return { json: { input, cfg, prep: { ...prep, idem_key, needs_consent, consent_phone, needs_pause_check } } };\n"
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js, send-guard.js (inQuietHours) and wa-send.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nconst WA_TEMPLATES = {\n  hello_world: { language: 'en_US', params: [] },          // Meta's sample template on the test number\n  booking_confirmation: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_24h: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_2h: { params: ['name', 'service', 'clinic_name', 'time'] },\n  noshow_rebook: { params: ['name', 'service', 'clinic_name', 'date', 'booking_link'] },\n  followup_day2: { params: ['name', 'clinic_name', 'booking_link'] },\n  new_lead_staff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'enquiry', fallback: '(no message)' }] },\n  lead_escalation: { params: ['clinic_name', 'lead_name', 'lead_phone', 'waiting_minutes'] },\n  human_handoff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'reason', fallback: '(see the Grist inbox)' }] },\n  outcome_check: { params: ['name', 'clinic_name', { key: 'service', fallback: 'visit' }] },                    // W7\n  review_request: { params: ['name', 'clinic_name', 'review_link'] },                                          // W8\n  weekly_owner_report: { params: ['clinic_name', 'week', 'summary', { key: 'action', fallback: 'see the full report in Grist' }] },   // W9\n  followup_reminder: { params: ['name', 'clinic_name', 'date', 'booking_link'] },                              // W15\n};\n\n// Free-text replies (message_type 'text', from W13) are only allowed inside WhatsApp's 24-hour customer-service\n// window, i.e. within 24 h of the patient's last message (last_inbound_at). A 5-minute margin keeps clock drift safe.\nconst WA_TEXT_WINDOW_MS = 24 * 3600 * 1000 - 5 * 60 * 1000;\n\n// Short hints for the Meta error codes we are most likely to meet (shown in send_error).\nconst WA_HINTS = {\n  190: 'access token invalid or expired - put a permanent System User token in the \"WhatsApp Cloud API\" credential',\n  10: 'token lacks permission - give the System User whatsapp_business_messaging',\n  200: 'token lacks permission - give the System User whatsapp_business_messaging',\n  100: 'invalid parameter - check wa_phone_number_id and the template',\n  131030: \"recipient is not in the test number's allowed list - add it in Meta > WhatsApp > API Setup\",\n  131026: 'message undeliverable (number not on WhatsApp?)',\n  131047: 'outside the 24h window - only templates can be sent',\n  131056: 'too many messages to this number - try later',\n  130429: 'rate limit hit - try later',\n  132000: 'number of template variables does not match the approved template',\n  132001: 'template not found in this language - check the name and language code',\n  132005: 'template text too long after filling the variables',\n  132007: 'template content policy violation',\n  132012: 'template variable format does not match',\n  133010: 'phone number not registered with the Cloud API',\n  131031: 'WhatsApp account locked',\n  368: 'temporarily blocked for policy violations',\n};\n\n// Meta: a variable may not contain new-lines, tabs or runs of spaces.\nfunction waCleanParam(v) {\n  return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, 250);\n}\n\n// Decide whether to call Meta, and build the request. Never throws.\n// input: the caller's item (decision, template, template_params, wa_phone_number_id, ...); cfg: W12 Config.\nfunction waPrepare(input, cfg, nowMs, h) {\n  const stop = (send_status, send_error) => ({ call_meta: false, send_status, send_error });\n  const d = input && input.decision;\n  if (!d || d.send !== true) return stop('not_requested', d && d.reason ? `guard said no: ${d.reason}` : 'no send decision from the caller');\n\n  const mode = String(cfg.send_mode || '').trim().toLowerCase();\n  if (mode !== 'allowlist' && mode !== 'live') return stop('blocked', `W12 send_mode is \"${cfg.send_mode}\" - only \"allowlist\" or \"live\" send`);\n\n  // 1. Is the message itself sendable? (reported even while testing in allowlist mode or at night)\n  const to = h.normalizeIndianPhone(d.to).phone;\n  if (!to) return stop('invalid', 'decision.to is not a valid phone number (E.164, e.g. +919876543210)');\n  const version = String(cfg.graph_api_version || '').trim();\n  if (!/^v\\d+\\.\\d+$/.test(version)) return stop('invalid', 'graph_api_version is not set in the W12 Config node (e.g. v23.0 - copy it from Meta API Setup)');\n  const phoneId = String(input.wa_phone_number_id || '').trim();\n  if (!/^\\d{5,25}$/.test(phoneId)) return stop('invalid', 'wa_phone_number_id is missing or not a number (Agency Registry > Clinics > WA_Phone_Number_ID)');\n  const isText = input.message_type === 'text';\n  let tpl = null;\n  let textBody = '';\n  const params = [];\n  if (isText) {\n    textBody = String(input.text_body === null || input.text_body === undefined ? '' : input.text_body).replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/g, '').trim().slice(0, 4096);\n    if (!textBody) return stop('invalid', 'text message: text_body is empty');\n    const last = Number(input.last_inbound_at);\n    if (!Number.isFinite(last) || last <= 0) return stop('invalid', 'text message: last_inbound_at (the patient\\'s last message, epoch seconds) is missing');\n    if (nowMs - last * 1000 > WA_TEXT_WINDOW_MS) return stop('blocked', 'outside the 24-hour WhatsApp window: only an approved template may be sent');\n  } else {\n    tpl = WA_TEMPLATES[input.template];\n    if (!tpl) return stop('invalid', `unknown template \"${input.template}\" - add it to WA_TEMPLATES in W12`);\n    if (input.template === 'hello_world' && cfg.allow_hello_world !== true) return stop('invalid', 'template hello_world is Meta\\'s sample (\"Hello World\"): it is not sent to people in production (FLOWHQ_WA_ALLOW_HELLO_WORLD=true allows it for a smoke test)');\n    const values = input.template_params || {};\n    for (const spec of tpl.params) {\n      const key = typeof spec === 'string' ? spec : spec.key;\n      let v = waCleanParam(values[key]);\n      if (!v && typeof spec === 'object') v = spec.fallback;\n      if (!v) return stop('invalid', `template ${input.template}: variable \"${key}\" is empty`);\n      params.push(v);\n    }\n  }\n\n  // 2. May it go out now, to this number?\n  if (mode === 'allowlist') {\n    const allowed = String(cfg.allowlist || '').split(/[,;]+/).map((x) => h.normalizeIndianPhone(x).phone).filter(Boolean);\n    if (!allowed.includes(to)) return stop('blocked', `${to} is not in the W12 allowlist (send_mode = allowlist)`);\n  }\n  if (h.inQuietHours(nowMs)) return stop('blocked', 'quiet hours (21:00-08:00 IST)');\n\n  if (isText) {\n    return {\n      call_meta: true,\n      send_status: 'pending',\n      send_error: '',\n      to,\n      meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n      meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'text', text: { preview_url: /https?:\\/\\//i.test(textBody), body: textBody } },\n    };\n  }\n  const template = { name: input.template, language: { code: String(input.template_language || tpl.language || cfg.default_language || 'en') } };\n  if (params.length) template.components = [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }];\n  return {\n    call_meta: true,\n    send_status: 'pending',\n    send_error: '',\n    to,\n    meta_url: `${cfg.graph_base_url}/${version}/${phoneId}/messages`,\n    meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'template', template },\n  };\n}\n\n// Turn the HTTP node output (fullResponse + neverError, or a \"continue on error\" item) into a result.\n//   accepted  Meta returned a message id                  -> sent: true\n//   rejected  Meta refused, or the request never left     -> sent: false (safe to try again later)\n//   uncertain the request left but no clear answer came   -> sent: false, uncertain: true (PRODUCTION: it may have been delivered, so it is\n//             never re-sent automatically and never reported as sent; the delivery-status webhook or a person settles it)\nfunction waClassify(resp, cfg) {\n  const result = (send_status, extra) => Object.assign({\n    send_status,\n    sent: send_status === 'accepted',   // PRODUCTION: only a message id from Meta counts as sent\n    uncertain: send_status === 'uncertain',   // the call left but no clear answer came: never sent again automatically, never reported as sent\n    wa_message_id: '',\n    send_error: '',\n    send_error_code: null,\n    send_http_status: null,\n  }, extra);\n\n  if (resp && typeof resp.statusCode === 'number') {\n    let body = resp.body;\n    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\n    body = body || {};\n    const id = body.messages && body.messages[0] && body.messages[0].id;\n    if (resp.statusCode >= 200 && resp.statusCode < 300) {\n      return id\n        ? result('accepted', { wa_message_id: String(id), send_http_status: resp.statusCode })\n        : result('uncertain', { send_error: 'Meta answered without a message id', send_http_status: resp.statusCode });\n    }\n    const e = body.error || {};\n    const code = e.code !== undefined && e.code !== null ? Number(e.code) : null;\n    const detail = (e.error_data && e.error_data.details) || e.message || `HTTP ${resp.statusCode}`;\n    const hint = code !== null && WA_HINTS[code] ? ` (${WA_HINTS[code]})` : '';\n    return result('rejected', { send_error_code: code, send_http_status: resp.statusCode, send_error: `${code !== null ? code + ': ' : ''}${detail}${hint}`.slice(0, 500) });\n  }\n\n  // n8n's \"continue on error\" item: { error: '...' } or { error: { message, description, code, ... } }. n8n also\n  // rewrites network errors into friendly text, so match both the raw codes and n8n's wording.\n  const err = resp && resp.error;\n  const msg = String((err && (err.message || err.description)) || (typeof err === 'string' ? err : '') || 'no reply from Meta');\n  const haystack = typeof err === 'string' ? err : JSON.stringify(err || {});\n  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|certificate|self[- ]signed|refused the connection|DNS server returned an error/i.test(haystack)) {\n    return result('rejected', { send_error: `not sent - could not reach Meta: ${msg}`.slice(0, 500) });\n  }\n  return result('uncertain', { send_error: `no clear answer from Meta (it may or may not have been sent): ${msg}`.slice(0, 500) });\n}\n\n// Should this send be written to the Grist Inbox (Conversations + Messages)? Only patient messages that\n// actually reached the point of calling Meta. The conversation is the PATIENT's (lead_phone), even when\n// TEST_MODE sent the message to TEST_PHONE. A message that already has its own Messages row (W10 staff reply:\n// inbox_row_id) is not written again; its caller updates that row.\nfunction waInboxPlan(input, cfg, res, h) {\n  const patient_phone = h.normalizeIndianPhone(input.lead_phone || input.patient_phone).phone;\n  const attempted = ['accepted', 'uncertain', 'rejected'].includes(res.send_status);\n  const own = Number(input.inbox_row_id) > 0;\n  const log = cfg.log_to_inbox !== false && input.audience === 'patient' && attempted && !own && !!patient_phone && !!input.grist_base_url && !!input.doc_id;\n  return { log, patient_phone };\n}\n\n// The Messages row. Send stays false: W10 sends rows whose Send is ticked, and this one is already out.\nfunction waInboxRow(input, res, nowSec) {\n  const d = input.decision || {};\n  const via = d.test_mode ? ` (TEST_MODE: sent to ${d.to})` : '';\n  return {\n    Direction: 'Out',\n    Body: String(input.message_text || input.text_body || `[template ${input.template}]`).slice(0, 2000),\n    Template: input.message_type === 'text' ? '' : String(input.template || ''),\n    Sent_By: `${input.source_workflow || 'W12'}${via}`.slice(0, 200),\n    WA_Message_ID: res.wa_message_id || '',\n    Status: res.send_status === 'rejected' ? 'failed' : 'queued',\n    Send: false,\n    Created_At: nowSec,\n  };\n}\n\n// ---- TEMPORARY TEST SWITCH: quiet hours (pasted from n8n/snippets/quiet-hours-switch.js - keep identical) ----\nconst DISABLE_QUIET_HOURS_FOR_TEST = false;   // true = skip ONLY the 21:00-08:00 IST quiet-hours check; false = the original rule\nconst originalInQuietHours = inQuietHours;   // the original rule from send-guard.js, unchanged\ninQuietHours = (nowMs) => (DISABLE_QUIET_HOURS_FOR_TEST ? false : originalInQuietHours(nowMs));   // eslint-disable-line no-func-assign\n// ---- end of the test switch ----\n\n  // PRODUCTION: idempotency key of one logical message. Callers should send idem_key; the fallbacks cover the ones that identify the message by their own id.\n  function waIdemKey(input) {\n    const clean = (v) => String(v === null || v === undefined ? '' : v).replace(/[^A-Za-z0-9:_.\\-]/g, '').slice(0, 100);\n    const explicit = clean(input.idem_key);\n    if (explicit) return explicit;\n    const src = clean(input.source_workflow) || 'W12';\n    const tpl = input.message_type === 'text' ? 'text' : clean(input.template);\n    const w13 = input.message_row_id ? `${clean(input.w13_kind)}${clean(input.message_row_id)}` : '';\n    const id = [clean(input.booking_uid), clean(input.inbox_row_id), w13, clean(input.week)].filter(Boolean)[0];\n    return id ? `${src}:${tpl}:${id}`.slice(0, 200) : '';\n  }\n  const cfg = {\n    send_mode: $json.w12_send_mode,\n    allowlist: $json.w12_allowlist,\n    graph_api_version: $json.w12_graph_api_version,\n    default_language: $json.w12_default_language,\n    uncertain_counts_as_sent: $json.w12_uncertain_counts_as_sent,\n    log_to_inbox: $json.w12_log_to_inbox,\n    allow_hello_world: $json.w12_allow_hello_world === true,\n    graph_base_url: String($json.w12_graph_base_url || 'https://graph.facebook.com').replace(/\\/+$/, ''),\n  };\n  const input = {};\n  for (const [k, v] of Object.entries($json)) if (!k.startsWith('w12_')) input[k] = v;   // the caller's item, untouched\n  const prep = waPrepare(\n  input,\n  cfg,\n  Date.now(),\n  { normalizeIndianPhone, inQuietHours }\n  );\n  // PRODUCTION: every send needs an idempotency key (the send ledger refuses a second send of the same key) and a place for the ledger.\n  const idem_key = waIdemKey(input);\n  if (prep.call_meta) {\n    if (!idem_key) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no idempotency key: the caller must send idem_key (or booking_uid / inbox_row_id / message_row_id / week)'; }\n    else if (!/^https?:\\/\\/[^\\s/]+/i.test(String(input.grist_base_url || '')) || !String(input.doc_id || '').trim()) { prep.call_meta = false; prep.send_status = 'invalid'; prep.send_error = 'no send-ledger location: grist_base_url and doc_id are required'; }\n    else prep.meta_request.biz_opaque_callback_data = `fhq:${idem_key}`.slice(0, 500);   // Meta echoes it in the delivery-status webhook\n  }\n  // PRODUCTION consent gate: business-initiated templates to a patient need Consent_WhatsApp on the lead (a TEST_MODE send goes to the clinic's own phone: no check)\n  const needs_consent = prep.call_meta === true && input.audience === 'patient' && input.message_type !== 'text' && !((input.decision || {}).test_mode === true);\n  const consent_phone = normalizeIndianPhone(input.lead_phone || input.patient_phone).phone || '';\n  // PAUSE re-check: only a W13 patient reply asks W12 to re-read Conversations.Automation_Paused right before sending\n  const needs_pause_check = prep.call_meta === true && input.w13_kind === 'patient_reply';\n  return { json: { input, cfg, prep: { ...prep, idem_key, needs_consent, consent_phone, needs_pause_check } } };\n"
       },
       "id": "1844b477-1671-4fc9-a9b6-e6cc925a8696",
       "name": "W12 – Prepare request",
@@ -2937,7 +2937,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js, send-guard.js (inQuietHours) and wa-send.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nconst WA_TEMPLATES = {\n  hello_world: { language: 'en_US', params: [] },          // Meta's sample template on the test number\n  booking_confirmation: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_24h: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_2h: { params: ['name', 'service', 'clinic_name', 'time'] },\n  noshow_rebook: { params: ['name', 'service', 'clinic_name', 'date', 'booking_link'] },\n  followup_day2: { params: ['name', 'clinic_name', 'booking_link'] },\n  new_lead_staff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'enquiry', fallback: '(no message)' }] },\n  lead_escalation: { params: ['clinic_name', 'lead_name', 'lead_phone', 'waiting_minutes'] },\n  human_handoff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'reason', fallback: '(see the Grist inbox)' }] },\n  outcome_check: { params: ['name', 'clinic_name', { key: 'service', fallback: 'visit' }] },                    // W7\n  review_request: { params: ['name', 'clinic_name', 'review_link'] },                                          // W8\n  weekly_owner_report: { params: ['clinic_name', 'week', 'summary', { key: 'action', fallback: 'see the full report in Grist' }] },   // W9\n};\n\n// Free-text replies (message_type 'text', from W13) are only allowed inside WhatsApp's 24-hour customer-service\n// window, i.e. within 24 h of the patient's last message (last_inbound_at). A 5-minute margin keeps clock drift safe.\nconst WA_TEXT_WINDOW_MS = 24 * 3600 * 1000 - 5 * 60 * 1000;\n\n// Short hints for the Meta error codes we are most likely to meet (shown in send_error).\nconst WA_HINTS = {\n  190: 'access token invalid or expired - put a permanent System User token in the \"WhatsApp Cloud API\" credential',\n  10: 'token lacks permission - give the System User whatsapp_business_messaging',\n  200: 'token lacks permission - give the System User whatsapp_business_messaging',\n  100: 'invalid parameter - check wa_phone_number_id and the template',\n  131030: \"recipient is not in the test number's allowed list - add it in Meta > WhatsApp > API Setup\",\n  131026: 'message undeliverable (number not on WhatsApp?)',\n  131047: 'outside the 24h window - only templates can be sent',\n  131056: 'too many messages to this number - try later',\n  130429: 'rate limit hit - try later',\n  132000: 'number of template variables does not match the approved template',\n  132001: 'template not found in this language - check the name and language code',\n  132005: 'template text too long after filling the variables',\n  132007: 'template content policy violation',\n  132012: 'template variable format does not match',\n  133010: 'phone number not registered with the Cloud API',\n  131031: 'WhatsApp account locked',\n  368: 'temporarily blocked for policy violations',\n};\n\n// Meta: a variable may not contain new-lines, tabs or runs of spaces.\nfunction waCleanParam(v) {\n  return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, 250);\n}\n\n// Decide whether to call Meta, and build the request. Never throws.\n// input: the caller's item (decision, template, template_params, wa_phone_number_id, ...); cfg: W12 Config.\nfunction waPrepare(input, cfg, nowMs, h) {\n  const stop = (send_status, send_error) => ({ call_meta: false, send_status, send_error });\n  const d = input && input.decision;\n  if (!d || d.send !== true) return stop('not_requested', d && d.reason ? `guard said no: ${d.reason}` : 'no send decision from the caller');\n\n  const mode = String(cfg.send_mode || '').trim().toLowerCase();\n  if (mode !== 'allowlist' && mode !== 'live') return stop('blocked', `W12 send_mode is \"${cfg.send_mode}\" - only \"allowlist\" or \"live\" send`);\n\n  // 1. Is the message itself sendable? (reported even while testing in allowlist mode or at night)\n  const to = h.normalizeIndianPhone(d.to).phone;\n  if (!to) return stop('invalid', 'decision.to is not a valid phone number (E.164, e.g. +919876543210)');\n  const version = String(cfg.graph_api_version || '').trim();\n  if (!/^v\\d+\\.\\d+$/.test(version)) return stop('invalid', 'graph_api_version is not set in the W12 Config node (e.g. v23.0 - copy it from Meta API Setup)');\n  const phoneId = String(input.wa_phone_number_id || '').trim();\n  if (!/^\\d{5,25}$/.test(phoneId)) return stop('invalid', 'wa_phone_number_id is missing or not a number (Agency Registry > Clinics > WA_Phone_Number_ID)');\n  const isText = input.message_type === 'text';\n  let tpl = null;\n  let textBody = '';\n  const params = [];\n  if (isText) {\n    textBody = String(input.text_body === null || input.text_body === undefined ? '' : input.text_body).replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/g, '').trim().slice(0, 4096);\n    if (!textBody) return stop('invalid', 'text message: text_body is empty');\n    const last = Number(input.last_inbound_at);\n    if (!Number.isFinite(last) || last <= 0) return stop('invalid', 'text message: last_inbound_at (the patient\\'s last message, epoch seconds) is missing');\n    if (nowMs - last * 1000 > WA_TEXT_WINDOW_MS) return stop('blocked', 'outside the 24-hour WhatsApp window: only an approved template may be sent');\n  } else {\n    tpl = WA_TEMPLATES[input.template];\n    if (!tpl) return stop('invalid', `unknown template \"${input.template}\" - add it to WA_TEMPLATES in W12`);\n    const values = input.template_params || {};\n    for (const spec of tpl.params) {\n      const key = typeof spec === 'string' ? spec : spec.key;\n      let v = waCleanParam(values[key]);\n      if (!v && typeof spec === 'object') v = spec.fallback;\n      if (!v) return stop('invalid', `template ${input.template}: variable \"${key}\" is empty`);\n      params.push(v);\n    }\n  }\n\n  // 2. May it go out now, to this number?\n  if (mode === 'allowlist') {\n    const allowed = String(cfg.allowlist || '').split(/[,;]+/).map((x) => h.normalizeIndianPhone(x).phone).filter(Boolean);\n    if (!allowed.includes(to)) return stop('blocked', `${to} is not in the W12 allowlist (send_mode = allowlist)`);\n  }\n  if (h.inQuietHours(nowMs)) return stop('blocked', 'quiet hours (21:00-08:00 IST)');\n\n  if (isText) {\n    return {\n      call_meta: true,\n      send_status: 'pending',\n      send_error: '',\n      to,\n      meta_url: `https://graph.facebook.com/${version}/${phoneId}/messages`,\n      meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'text', text: { preview_url: /https?:\\/\\//i.test(textBody), body: textBody } },\n    };\n  }\n  const template = { name: input.template, language: { code: String(input.template_language || tpl.language || cfg.default_language || 'en') } };\n  if (params.length) template.components = [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }];\n  return {\n    call_meta: true,\n    send_status: 'pending',\n    send_error: '',\n    to,\n    meta_url: `https://graph.facebook.com/${version}/${phoneId}/messages`,\n    meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'template', template },\n  };\n}\n\n// Turn the HTTP node output (fullResponse + neverError, or a \"continue on error\" item) into a result.\n//   accepted  Meta returned a message id                  -> sent: true\n//   rejected  Meta refused, or the request never left     -> sent: false (safe to try again later)\n//   uncertain the request left but no clear answer came   -> sent: false, uncertain: true (PRODUCTION: it may have been delivered, so it is\n//             never re-sent automatically and never reported as sent; the delivery-status webhook or a person settles it)\nfunction waClassify(resp, cfg) {\n  const result = (send_status, extra) => Object.assign({\n    send_status,\n    sent: send_status === 'accepted',   // PRODUCTION: only a message id from Meta counts as sent\n    uncertain: send_status === 'uncertain',   // the call left but no clear answer came: never sent again automatically, never reported as sent\n    wa_message_id: '',\n    send_error: '',\n    send_error_code: null,\n    send_http_status: null,\n  }, extra);\n\n  if (resp && typeof resp.statusCode === 'number') {\n    let body = resp.body;\n    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\n    body = body || {};\n    const id = body.messages && body.messages[0] && body.messages[0].id;\n    if (resp.statusCode >= 200 && resp.statusCode < 300) {\n      return id\n        ? result('accepted', { wa_message_id: String(id), send_http_status: resp.statusCode })\n        : result('uncertain', { send_error: 'Meta answered without a message id', send_http_status: resp.statusCode });\n    }\n    const e = body.error || {};\n    const code = e.code !== undefined && e.code !== null ? Number(e.code) : null;\n    const detail = (e.error_data && e.error_data.details) || e.message || `HTTP ${resp.statusCode}`;\n    const hint = code !== null && WA_HINTS[code] ? ` (${WA_HINTS[code]})` : '';\n    return result('rejected', { send_error_code: code, send_http_status: resp.statusCode, send_error: `${code !== null ? code + ': ' : ''}${detail}${hint}`.slice(0, 500) });\n  }\n\n  // n8n's \"continue on error\" item: { error: '...' } or { error: { message, description, code, ... } }. n8n also\n  // rewrites network errors into friendly text, so match both the raw codes and n8n's wording.\n  const err = resp && resp.error;\n  const msg = String((err && (err.message || err.description)) || (typeof err === 'string' ? err : '') || 'no reply from Meta');\n  const haystack = typeof err === 'string' ? err : JSON.stringify(err || {});\n  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|certificate|self[- ]signed|refused the connection|DNS server returned an error/i.test(haystack)) {\n    return result('rejected', { send_error: `not sent - could not reach Meta: ${msg}`.slice(0, 500) });\n  }\n  return result('uncertain', { send_error: `no clear answer from Meta (it may or may not have been sent): ${msg}`.slice(0, 500) });\n}\n\n// Should this send be written to the Grist Inbox (Conversations + Messages)? Only patient messages that\n// actually reached the point of calling Meta. The conversation is the PATIENT's (lead_phone), even when\n// TEST_MODE sent the message to TEST_PHONE. A message that already has its own Messages row (W10 staff reply:\n// inbox_row_id) is not written again; its caller updates that row.\nfunction waInboxPlan(input, cfg, res, h) {\n  const patient_phone = h.normalizeIndianPhone(input.lead_phone || input.patient_phone).phone;\n  const attempted = ['accepted', 'uncertain', 'rejected'].includes(res.send_status);\n  const own = Number(input.inbox_row_id) > 0;\n  const log = cfg.log_to_inbox !== false && input.audience === 'patient' && attempted && !own && !!patient_phone && !!input.grist_base_url && !!input.doc_id;\n  return { log, patient_phone };\n}\n\n// The Messages row. Send stays false: W10 sends rows whose Send is ticked, and this one is already out.\nfunction waInboxRow(input, res, nowSec) {\n  const d = input.decision || {};\n  const via = d.test_mode ? ` (TEST_MODE: sent to ${d.to})` : '';\n  return {\n    Direction: 'Out',\n    Body: String(input.message_text || input.text_body || `[template ${input.template}]`).slice(0, 2000),\n    Template: input.message_type === 'text' ? '' : String(input.template || ''),\n    Sent_By: `${input.source_workflow || 'W12'}${via}`.slice(0, 200),\n    WA_Message_ID: res.wa_message_id || '',\n    Status: res.send_status === 'rejected' ? 'failed' : 'queued',\n    Send: false,\n    Created_At: nowSec,\n  };\n}\n\n  const p = $('W12 – Prepare request').first().json;\n  const res = waClassify($json, p.cfg);\n  const inbox = waInboxPlan(p.input, p.cfg, res, { normalizeIndianPhone, inQuietHours });\n  const inbox_row = inbox.log ? waInboxRow(p.input, res, Math.floor(Date.now() / 1000)) : null;   // built here: this node has the helpers\n  return { json: { ...p, res, log_inbox: inbox.log, patient_phone: inbox.patient_phone, inbox_row } };\n"
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js, send-guard.js (inQuietHours) and wa-send.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nconst WA_TEMPLATES = {\n  hello_world: { language: 'en_US', params: [] },          // Meta's sample template on the test number\n  booking_confirmation: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_24h: { params: ['name', 'service', 'clinic_name', 'date', 'time'] },\n  reminder_2h: { params: ['name', 'service', 'clinic_name', 'time'] },\n  noshow_rebook: { params: ['name', 'service', 'clinic_name', 'date', 'booking_link'] },\n  followup_day2: { params: ['name', 'clinic_name', 'booking_link'] },\n  new_lead_staff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'enquiry', fallback: '(no message)' }] },\n  lead_escalation: { params: ['clinic_name', 'lead_name', 'lead_phone', 'waiting_minutes'] },\n  human_handoff_alert: { params: ['clinic_name', 'lead_name', 'lead_phone', { key: 'reason', fallback: '(see the Grist inbox)' }] },\n  outcome_check: { params: ['name', 'clinic_name', { key: 'service', fallback: 'visit' }] },                    // W7\n  review_request: { params: ['name', 'clinic_name', 'review_link'] },                                          // W8\n  weekly_owner_report: { params: ['clinic_name', 'week', 'summary', { key: 'action', fallback: 'see the full report in Grist' }] },   // W9\n  followup_reminder: { params: ['name', 'clinic_name', 'date', 'booking_link'] },                              // W15\n};\n\n// Free-text replies (message_type 'text', from W13) are only allowed inside WhatsApp's 24-hour customer-service\n// window, i.e. within 24 h of the patient's last message (last_inbound_at). A 5-minute margin keeps clock drift safe.\nconst WA_TEXT_WINDOW_MS = 24 * 3600 * 1000 - 5 * 60 * 1000;\n\n// Short hints for the Meta error codes we are most likely to meet (shown in send_error).\nconst WA_HINTS = {\n  190: 'access token invalid or expired - put a permanent System User token in the \"WhatsApp Cloud API\" credential',\n  10: 'token lacks permission - give the System User whatsapp_business_messaging',\n  200: 'token lacks permission - give the System User whatsapp_business_messaging',\n  100: 'invalid parameter - check wa_phone_number_id and the template',\n  131030: \"recipient is not in the test number's allowed list - add it in Meta > WhatsApp > API Setup\",\n  131026: 'message undeliverable (number not on WhatsApp?)',\n  131047: 'outside the 24h window - only templates can be sent',\n  131056: 'too many messages to this number - try later',\n  130429: 'rate limit hit - try later',\n  132000: 'number of template variables does not match the approved template',\n  132001: 'template not found in this language - check the name and language code',\n  132005: 'template text too long after filling the variables',\n  132007: 'template content policy violation',\n  132012: 'template variable format does not match',\n  133010: 'phone number not registered with the Cloud API',\n  131031: 'WhatsApp account locked',\n  368: 'temporarily blocked for policy violations',\n};\n\n// Meta: a variable may not contain new-lines, tabs or runs of spaces.\nfunction waCleanParam(v) {\n  return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, 250);\n}\n\n// Decide whether to call Meta, and build the request. Never throws.\n// input: the caller's item (decision, template, template_params, wa_phone_number_id, ...); cfg: W12 Config.\nfunction waPrepare(input, cfg, nowMs, h) {\n  const stop = (send_status, send_error) => ({ call_meta: false, send_status, send_error });\n  const d = input && input.decision;\n  if (!d || d.send !== true) return stop('not_requested', d && d.reason ? `guard said no: ${d.reason}` : 'no send decision from the caller');\n\n  const mode = String(cfg.send_mode || '').trim().toLowerCase();\n  if (mode !== 'allowlist' && mode !== 'live') return stop('blocked', `W12 send_mode is \"${cfg.send_mode}\" - only \"allowlist\" or \"live\" send`);\n\n  // 1. Is the message itself sendable? (reported even while testing in allowlist mode or at night)\n  const to = h.normalizeIndianPhone(d.to).phone;\n  if (!to) return stop('invalid', 'decision.to is not a valid phone number (E.164, e.g. +919876543210)');\n  const version = String(cfg.graph_api_version || '').trim();\n  if (!/^v\\d+\\.\\d+$/.test(version)) return stop('invalid', 'graph_api_version is not set in the W12 Config node (e.g. v23.0 - copy it from Meta API Setup)');\n  const phoneId = String(input.wa_phone_number_id || '').trim();\n  if (!/^\\d{5,25}$/.test(phoneId)) return stop('invalid', 'wa_phone_number_id is missing or not a number (Agency Registry > Clinics > WA_Phone_Number_ID)');\n  const isText = input.message_type === 'text';\n  let tpl = null;\n  let textBody = '';\n  const params = [];\n  if (isText) {\n    textBody = String(input.text_body === null || input.text_body === undefined ? '' : input.text_body).replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/g, '').trim().slice(0, 4096);\n    if (!textBody) return stop('invalid', 'text message: text_body is empty');\n    const last = Number(input.last_inbound_at);\n    if (!Number.isFinite(last) || last <= 0) return stop('invalid', 'text message: last_inbound_at (the patient\\'s last message, epoch seconds) is missing');\n    if (nowMs - last * 1000 > WA_TEXT_WINDOW_MS) return stop('blocked', 'outside the 24-hour WhatsApp window: only an approved template may be sent');\n  } else {\n    tpl = WA_TEMPLATES[input.template];\n    if (!tpl) return stop('invalid', `unknown template \"${input.template}\" - add it to WA_TEMPLATES in W12`);\n    const values = input.template_params || {};\n    for (const spec of tpl.params) {\n      const key = typeof spec === 'string' ? spec : spec.key;\n      let v = waCleanParam(values[key]);\n      if (!v && typeof spec === 'object') v = spec.fallback;\n      if (!v) return stop('invalid', `template ${input.template}: variable \"${key}\" is empty`);\n      params.push(v);\n    }\n  }\n\n  // 2. May it go out now, to this number?\n  if (mode === 'allowlist') {\n    const allowed = String(cfg.allowlist || '').split(/[,;]+/).map((x) => h.normalizeIndianPhone(x).phone).filter(Boolean);\n    if (!allowed.includes(to)) return stop('blocked', `${to} is not in the W12 allowlist (send_mode = allowlist)`);\n  }\n  if (h.inQuietHours(nowMs)) return stop('blocked', 'quiet hours (21:00-08:00 IST)');\n\n  if (isText) {\n    return {\n      call_meta: true,\n      send_status: 'pending',\n      send_error: '',\n      to,\n      meta_url: `https://graph.facebook.com/${version}/${phoneId}/messages`,\n      meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'text', text: { preview_url: /https?:\\/\\//i.test(textBody), body: textBody } },\n    };\n  }\n  const template = { name: input.template, language: { code: String(input.template_language || tpl.language || cfg.default_language || 'en') } };\n  if (params.length) template.components = [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }];\n  return {\n    call_meta: true,\n    send_status: 'pending',\n    send_error: '',\n    to,\n    meta_url: `https://graph.facebook.com/${version}/${phoneId}/messages`,\n    meta_request: { messaging_product: 'whatsapp', recipient_type: 'individual', to: to.slice(1), type: 'template', template },\n  };\n}\n\n// Turn the HTTP node output (fullResponse + neverError, or a \"continue on error\" item) into a result.\n//   accepted  Meta returned a message id                  -> sent: true\n//   rejected  Meta refused, or the request never left     -> sent: false (safe to try again later)\n//   uncertain the request left but no clear answer came   -> sent: false, uncertain: true (PRODUCTION: it may have been delivered, so it is\n//             never re-sent automatically and never reported as sent; the delivery-status webhook or a person settles it)\nfunction waClassify(resp, cfg) {\n  const result = (send_status, extra) => Object.assign({\n    send_status,\n    sent: send_status === 'accepted',   // PRODUCTION: only a message id from Meta counts as sent\n    uncertain: send_status === 'uncertain',   // the call left but no clear answer came: never sent again automatically, never reported as sent\n    wa_message_id: '',\n    send_error: '',\n    send_error_code: null,\n    send_http_status: null,\n  }, extra);\n\n  if (resp && typeof resp.statusCode === 'number') {\n    let body = resp.body;\n    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\n    body = body || {};\n    const id = body.messages && body.messages[0] && body.messages[0].id;\n    if (resp.statusCode >= 200 && resp.statusCode < 300) {\n      return id\n        ? result('accepted', { wa_message_id: String(id), send_http_status: resp.statusCode })\n        : result('uncertain', { send_error: 'Meta answered without a message id', send_http_status: resp.statusCode });\n    }\n    const e = body.error || {};\n    const code = e.code !== undefined && e.code !== null ? Number(e.code) : null;\n    const detail = (e.error_data && e.error_data.details) || e.message || `HTTP ${resp.statusCode}`;\n    const hint = code !== null && WA_HINTS[code] ? ` (${WA_HINTS[code]})` : '';\n    return result('rejected', { send_error_code: code, send_http_status: resp.statusCode, send_error: `${code !== null ? code + ': ' : ''}${detail}${hint}`.slice(0, 500) });\n  }\n\n  // n8n's \"continue on error\" item: { error: '...' } or { error: { message, description, code, ... } }. n8n also\n  // rewrites network errors into friendly text, so match both the raw codes and n8n's wording.\n  const err = resp && resp.error;\n  const msg = String((err && (err.message || err.description)) || (typeof err === 'string' ? err : '') || 'no reply from Meta');\n  const haystack = typeof err === 'string' ? err : JSON.stringify(err || {});\n  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|certificate|self[- ]signed|refused the connection|DNS server returned an error/i.test(haystack)) {\n    return result('rejected', { send_error: `not sent - could not reach Meta: ${msg}`.slice(0, 500) });\n  }\n  return result('uncertain', { send_error: `no clear answer from Meta (it may or may not have been sent): ${msg}`.slice(0, 500) });\n}\n\n// Should this send be written to the Grist Inbox (Conversations + Messages)? Only patient messages that\n// actually reached the point of calling Meta. The conversation is the PATIENT's (lead_phone), even when\n// TEST_MODE sent the message to TEST_PHONE. A message that already has its own Messages row (W10 staff reply:\n// inbox_row_id) is not written again; its caller updates that row.\nfunction waInboxPlan(input, cfg, res, h) {\n  const patient_phone = h.normalizeIndianPhone(input.lead_phone || input.patient_phone).phone;\n  const attempted = ['accepted', 'uncertain', 'rejected'].includes(res.send_status);\n  const own = Number(input.inbox_row_id) > 0;\n  const log = cfg.log_to_inbox !== false && input.audience === 'patient' && attempted && !own && !!patient_phone && !!input.grist_base_url && !!input.doc_id;\n  return { log, patient_phone };\n}\n\n// The Messages row. Send stays false: W10 sends rows whose Send is ticked, and this one is already out.\nfunction waInboxRow(input, res, nowSec) {\n  const d = input.decision || {};\n  const via = d.test_mode ? ` (TEST_MODE: sent to ${d.to})` : '';\n  return {\n    Direction: 'Out',\n    Body: String(input.message_text || input.text_body || `[template ${input.template}]`).slice(0, 2000),\n    Template: input.message_type === 'text' ? '' : String(input.template || ''),\n    Sent_By: `${input.source_workflow || 'W12'}${via}`.slice(0, 200),\n    WA_Message_ID: res.wa_message_id || '',\n    Status: res.send_status === 'rejected' ? 'failed' : 'queued',\n    Send: false,\n    Created_At: nowSec,\n  };\n}\n\n  const p = $('W12 – Prepare request').first().json;\n  const res = waClassify($json, p.cfg);\n  const inbox = waInboxPlan(p.input, p.cfg, res, { normalizeIndianPhone, inQuietHours });\n  const inbox_row = inbox.log ? waInboxRow(p.input, res, Math.floor(Date.now() / 1000)) : null;   // built here: this node has the helpers\n  return { json: { ...p, res, log_inbox: inbox.log, patient_phone: inbox.patient_phone, inbox_row } };\n"
       },
       "id": "77488702-70d6-4f0a-852a-49629e3bb1a5",
       "name": "W12 – Read reply",
@@ -10128,6 +10128,452 @@
         21520
       ],
       "id": "c8296498-86be-47e7-a29b-f9c15c512f9d"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "25 * * * *"
+            }
+          ]
+        }
+      },
+      "name": "W15 – Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        27184
+      ],
+      "id": "3f17c932-0051-4e67-a1b1-f79bc139b1eb"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a3de22d1-4a60-4ebe-a067-81272f8c1bd5",
+              "name": "grist_base_url",
+              "value": "={{ $env.FLOWHQ_GRIST_URL || 'http://grist:8484' }}",
+              "type": "string"
+            },
+            {
+              "id": "468ce0e1-9144-4d00-ad9c-c64ee36d884e",
+              "name": "registry_doc_id",
+              "value": "={{ $env.FLOWHQ_REGISTRY_DOC_ID || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a62b33dc-3439-4652-a31c-9f5d20b50a72",
+              "name": "send_hour",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "b537118b-67b1-40e8-aec3-c170ecdf1ca5",
+              "name": "days_before",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "08fefb01-b414-4c13-ae0d-778aaab43299",
+              "name": "max_per_run",
+              "value": 30,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "W15 – Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        688,
+        27184
+      ],
+      "id": "c9bcabde-2927-45d3-ad8f-067b6f071156"
+    },
+    {
+      "parameters": {
+        "jsCode": "// W15 CONFIG GUARD (production hardening). Stops the run - before anything reads Grist, calls Meta or an AI provider -\n// when a required setting is missing, still a placeholder, or unsafe. The message names the variable to set (never its value).\nconst cfg = $input.first().json || {};\nconst problems = [];\nconst blank = (v) => v === undefined || v === null || String(v).trim() === '' || /^(PASTE_|PH_|CHANGE_ME|REPLACE_ME)/i.test(String(v).trim());\nconst need = (key, env, min) => { const v = cfg[key]; if (blank(v)) problems.push(`${env} is not set`); else if (min && String(v).trim().length < min) problems.push(`${env} is too short (min ${min} characters)`); };\nneed('grist_base_url', 'FLOWHQ_GRIST_URL');\nif (!blank(cfg.grist_base_url) && !/^https?:\\/\\/[^\\s/]+/i.test(String(cfg.grist_base_url).trim())) problems.push('FLOWHQ_GRIST_URL must start with http:// or https://');\nneed('registry_doc_id', 'FLOWHQ_REGISTRY_DOC_ID');\nif (problems.length) throw new Error(`FlowHQ configuration incomplete in W15: ${problems.join('; ')}. See DEPLOYMENT.md > Environment variables.`);\nreturn $input.all();\n"
+      },
+      "name": "W15 – Config Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        27184
+      ],
+      "id": "57111485-3d9c-40b1-aeb5-a0896adb6dc9"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.registry_doc_id }}/tables/Clinics/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "W15 – Clinics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1136,
+        27184
+      ],
+      "id": "f3f8ef28-dd1a-4d29-acfb-6bd9414d46ac",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Every active clinic of the Agency Registry (never a hard-coded clinic), one item each.\nconst cfg = $('W15 – Config').first().json;\nconst base = String(cfg.grist_base_url || '').replace(/\\/+$/, '');\nconst clinics = ($input.first().json.records || []).filter((r) => r.fields && String(r.fields.Active).toUpperCase() === 'TRUE' && String(r.fields.Grist_Doc_ID || '').trim());\nreturn clinics.map((r) => ({\n  json: {\n    grist_base_url: base,\n    doc_id: String(r.fields.Grist_Doc_ID).trim(),\n    clinic_slug: String(r.fields.Clinic_Slug || ''),\n    registry_clinic_name: String(r.fields.Clinic_Name || ''),\n    wa_phone_number_id: String(r.fields.WA_Phone_Number_ID || '').trim(),\n  },\n  pairedItem: { item: 0 },\n}));\n"
+      },
+      "name": "W15 – Split clinics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        27184
+      ],
+      "id": "79ed31f9-0092-4f25-a7c7-5daece97320e"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Settings/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "W15 – Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1584,
+        27184
+      ],
+      "id": "d3c00fdd-ca3a-4e34-af57-c53cdbafc472",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The clinic's Settings rows (Key -> Value) next to its registry row.\nconst clinics = $('W15 – Split clinics').all();\nreturn $input.all().map((item, i) => {\n  const s = {};\n  for (const r of item.json.records || []) {\n    const f = r.fields || {};\n    if (f.Key) s[String(f.Key).trim()] = f.Value;\n  }\n  return { json: { ...clinics[i].json, clinic_name: String(s.clinic_name || clinics[i].json.registry_clinic_name || ''), settings: s }, pairedItem: { item: i } };\n});\n"
+      },
+      "name": "W15 – Add settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        27184
+      ],
+      "id": "97947456-a026-4eac-ad4a-c776c7ea2bf5"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Patients/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ JSON.stringify({ Status: [\"Active\"] }) }}"
+            }
+          ]
+        }
+      },
+      "name": "W15 – Patients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2032,
+        27184
+      ],
+      "id": "7fb75d79-2e3d-42d1-adb6-f473a110f402",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $('W15 – Add settings').item.json.grist_base_url }}/api/docs/{{ $('W15 – Add settings').item.json.doc_id }}/tables/LEADS/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "W15 – Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2256,
+        27184
+      ],
+      "id": "9222c586-63ea-4762-a67e-000ae9b77fd2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $('W15 – Add settings').item.json.grist_base_url }}/api/docs/{{ $('W15 – Add settings').item.json.doc_id }}/tables/Conversations/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "W15 – Conversations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2480,
+        27184
+      ],
+      "id": "44dd73d3-3573-4d1b-a0ff-8e663907e50c",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n// Pasted from n8n/snippets/followup-reminder.js - keep identical.\nconst FR_IST_MS = 5.5 * 3600 * 1000;\nconst FR_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst FR_TEXT_WINDOW_SEC = 24 * 3600 - 5 * 60;   // WhatsApp free-text window (as W12), minus a margin\nconst FR_QUIET_FROM = 21;                        // quiet hours 21:00-08:00 IST (send-guard.js decides; this only stops planning)\n\nfunction frText(v, max) { return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, max); }\nfunction frSec(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null; }\nfunction frHttps(v) { const s = frText(v, 500); return /^https:\\/\\/[^\\s<>\"']+$/i.test(s) ? s : ''; }\nfunction frFirstName(v) { return frText(v, 60).split(' ')[0] || 'there'; }\n// A per-clinic switch in Settings: on / true / yes / 1. Missing = OFF (switch it on once the template is approved).\nfunction frOn(v) { return ['on', 'true', 'yes', '1'].includes(frText(v, 10).toLowerCase()); }\n\n// A Grist Date cell (epoch seconds at UTC midnight) or a 'YYYY-MM-DD' string -> 'YYYY-MM-DD'; anything else -> ''.\nfunction frIso(v) {\n  if (typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v.trim())) return v.trim();\n  const s = frSec(v);\n  return s === null ? '' : new Date(s * 1000).toISOString().slice(0, 10);\n}\nfunction frIstToday(nowMs) { return new Date(nowMs + FR_IST_MS).toISOString().slice(0, 10); }\nfunction frIstHour(nowMs) { return new Date(nowMs + FR_IST_MS).getUTCHours(); }\nfunction frAddDays(iso, n) { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); }\nfunction frDateSec(iso) { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) / 1000; }   // the value Grist stores for a Date\nfunction frLabel(iso) { const [y, m, d] = iso.split('-').map(Number); return `${String(d).padStart(2, '0')} ${FR_MONTHS[m - 1]} ${y}`; }\n\n// cfg: { send_hour, days_before }. settings: the clinic's Settings (Key -> Value). h: { normalizeIndianPhone }.\n// -> { active, target, items }   items carry hold_reason ('' = may be sent; send-guard.js still decides).\nfunction frPlan(patients, leadRows, convRecords, nowMs, cfg, settings, h) {\n  const hour = frIstHour(nowMs);\n  const sendHour = Number(cfg.send_hour);\n  const before = Number(cfg.days_before);\n  if (!Number.isInteger(sendHour) || !Number.isInteger(before) || before < 0) return { active: false, target: '', items: [], error: 'W15 Config: send_hour and days_before must be whole numbers' };\n  const target = frAddDays(frIstToday(nowMs), before);\n  if (hour < sendHour || hour >= FR_QUIET_FROM) return { active: false, target, items: [] };\n  const link = frHttps(settings && settings.booking_link);\n\n  // the lead of a phone number, exactly as W12's consent check finds it: same +91 number, the first such row\n  const leadByPhone = {};\n  for (const r of Array.isArray(leadRows) ? leadRows : []) {\n    const p = h.normalizeIndianPhone(r && r.fields && r.fields.Phone).phone;\n    if (p && !leadByPhone[p]) leadByPhone[p] = r;\n  }\n  // the lead's conversation: Automation_Paused (rule 5) and the patient's last message (24 h window -> free text instead of a template)\n  const convByLead = {};\n  for (const r of Array.isArray(convRecords) ? convRecords : []) {\n    const f = (r && r.fields) || {};\n    const id = String(f.Lead === null || f.Lead === undefined ? '' : f.Lead);\n    if (!/^[1-9]\\d*$/.test(id)) continue;\n    const c = convByLead[id] || (convByLead[id] = { paused: false, last_inbound_at: null });\n    if (f.Automation_Paused === true) c.paused = true;\n    const at = frSec(f.Last_Inbound_At);\n    if (at !== null && (c.last_inbound_at === null || at > c.last_inbound_at)) c.last_inbound_at = at;\n  }\n\n  const items = [];\n  for (const r of Array.isArray(patients) ? patients : []) {\n    const f = (r && r.fields) || {};\n    if (f.Status !== 'Active' || frIso(f.Follow_Up_On) !== target) continue;\n    if (frIso(f.Followup_Reminded_For) === target) continue;               // already reminded for this date: never again\n    const phone = h.normalizeIndianPhone(f.Phone).phone;\n    const lead = phone ? leadByPhone[phone] : null;\n    const lf = (lead && lead.fields) || {};\n    const conv = lead ? convByLead[String(lead.id)] : null;\n    let hold = '';\n    if (!link) hold = 'Settings > booking_link is not set (an https link)';\n    else if (!phone) hold = 'no valid phone number';\n    else if (!lead) hold = 'no WhatsApp consent on file (no lead with this phone)';\n    else if (lf.Opted_Out === true) hold = 'opted out';\n    else if (lf.Consent_WhatsApp !== true) hold = 'no WhatsApp consent on file (LEADS.Consent_WhatsApp)';\n    items.push({\n      kind: 'followup',\n      patient_row_id: r.id,\n      patient_id: frText(f.Patient_ID, 40) || `row ${r.id}`,\n      patient_name: frText(f.Name, 60),\n      lead_phone: phone || '',\n      lead_row_id: lead ? lead.id : 0,\n      opted_out: lf.Opted_Out === true,\n      automation_paused: !!(conv && conv.paused),\n      flag_value: null,\n      follow_up_on: target,\n      booking_link: link,\n      last_inbound_at: conv ? conv.last_inbound_at : null,\n      hold_reason: hold,\n    });\n  }\n  return { active: true, target, items };\n}\n\n// The message for W12. Free text when the patient wrote in the last 24 h (no template needed), else the approved template.\n// The text is the template's wording, so the Grist inbox (and W13 reading the history) shows what the patient got.\nfunction frMessage(item, clinicName, nowSec) {\n  const name = frFirstName(item.patient_name);\n  const clinic = frText(clinicName, 80) || 'the clinic';\n  const date = frLabel(item.follow_up_on);\n  const text = `Hi ${name}, a reminder from ${clinic}: your follow-up visit is due on ${date}. Please book or confirm your time here: ${item.booking_link} or simply reply to this message.`;\n  const inWindow = frSec(item.last_inbound_at) !== null && nowSec - item.last_inbound_at < FR_TEXT_WINDOW_SEC;\n  return inWindow\n    ? { message_type: 'text', text_body: text, message_text: text, template: '', template_params: {} }\n    : { message_type: 'template', text_body: '', message_text: text, template: 'followup_reminder', template_params: { name, clinic_name: clinic, date, booking_link: item.booking_link } };\n}\n\n// One logical message = one key: W12's send ledger refuses a second send of the same key.\nfunction frIdemKey(item) { return `W15:followup_reminder:${frText(item.patient_id, 40).replace(/[^A-Za-z0-9_.\\-]/g, '')}:${item.follow_up_on}`; }\n\n// The patients not sent this run, as ONE Run_Log line per clinic: \"3 not sent: no WhatsApp consent 2, opted out 1\".\nfunction frHeldSummary(reasons) {\n  const by = {};\n  for (const r of reasons) { const k = frText(r, 120) || 'not sent'; by[k] = (by[k] || 0) + 1; }\n  const total = reasons.length;\n  const parts = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`);\n  return { total, text: total ? `${total} follow-up reminder(s) not sent: ${parts.join('; ')}`.slice(0, 500) : '' };\n}\n\n// ---- this node ----\n// Who gets a follow-up reminder now (frPlan): Active patients whose Follow_Up_On is days_before days away and who were not reminded\n// for that date yet, from send_hour IST until quiet hours. Only clinics with Settings > followup_reminders = on (missing = off: switch it\n// on once the followup_reminder template is approved). Held patients (hold_reason) travel on to \"Held summary\" and are never claimed.\nconst cfg = $('W15 – Config').first().json;\nconst clinics = $('W15 – Add settings').all();\nconst patients = $('W15 – Patients').all();\nconst leads = $('W15 – Leads').all();\nconst now = Date.now();\nconst out = [];\n$input.all().forEach((conv, i) => {\n  const c = clinics[i].json;\n  if (!frOn(c.settings.followup_reminders)) return;\n  const plan = frPlan(patients[i].json.records || [], leads[i].json.records || [], conv.json.records || [], now, cfg, c.settings, { normalizeIndianPhone });\n  if (plan.error) throw new Error(plan.error);\n  const ready = plan.items.filter((it) => !it.hold_reason).slice(0, Number(cfg.max_per_run) || 30);\n  const held = plan.items.filter((it) => it.hold_reason);\n  for (const it of [...ready, ...held]) {\n    out.push({\n      json: { grist_base_url: c.grist_base_url, doc_id: c.doc_id, clinic_name: c.clinic_name, wa_phone_number_id: c.wa_phone_number_id, test_mode: c.settings.TEST_MODE, test_phone: c.settings.TEST_PHONE, ...it },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;\n"
+      },
+      "name": "W15 – Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2704,
+        27184
+      ],
+      "id": "9e0b0a1d-5732-4aa6-a2da-ae90167d729d"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Pasted from n8n/snippets/normalize-phone.js and n8n/snippets/send-guard.js - keep identical.\n// E.164 phone normaliser pasted into every Code node that handles a phone number (replaces the +91-only function; the function name is kept so that\n// every call site stays as it was). Accepts: +<country><number>, 00<country><number>, and numbers written locally for the DEFAULT country\n// (FLOWHQ_DEFAULT_COUNTRY_CODE, default 91 = India: 10-digit mobile starting 6-9, optional leading 0 or 91). Result: +<digits> (8-15 digits) or null.\n// It checks the SHAPE only. Whether a number can receive WhatsApp is up to Meta (error 131026 etc.), whether we may write to it up to W12.\nfunction normalizeIndianPhone(raw) {\n  if (raw === null || raw === undefined) return { phone: null, valid: false };\n  const s = String(raw).trim();\n  const cc = (typeof $env !== 'undefined' && $env && /^[1-9]\\d{0,2}$/.test(String($env.FLOWHQ_DEFAULT_COUNTRY_CODE || ''))) ? String($env.FLOWHQ_DEFAULT_COUNTRY_CODE) : '91';\n  let digits = s.replace(/\\D/g, '');\n  if (s.startsWith('00')) digits = digits.slice(2);\n  else if (!s.startsWith('+')) {                                  // written locally\n    if (cc === '91') { if (!(digits.length === 12 && digits.startsWith('91'))) { if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1); digits = `91${digits}`; } }\n    else digits = `${cc}${digits.replace(/^0+/, '')}`;\n  }\n  let valid = /^[1-9]\\d{7,14}$/.test(digits);\n  if (valid && digits.startsWith('91')) valid = /^91[6-9]\\d{9}$/.test(digits);   // +91 numbers are Indian mobiles\n  return { phone: valid ? `+${digits}` : null, valid };\n}\n\nfunction isTestMode(value) {\n  const v = String(value === null || value === undefined ? '' : value).trim().toLowerCase();\n  return !['false', '0', 'no', 'off'].includes(v);   // anything else, including a missing row, means ON (fail safe)\n}\n\nfunction inQuietHours(nowMs) {\n  if (!Number.isFinite(nowMs)) return true;           // no clock, no send\n  const hourIST = new Date(nowMs + 5.5 * 3600 * 1000).getUTCHours();\n  return hourIST >= 21 || hourIST < 8;\n}\n\nfunction decideSend(i) {\n  const testMode = isTestMode(i.test_mode);\n  const skip = (reason) => ({ send: false, to: null, reason, test_mode: testMode });\n\n  if (i.flag_value) return skip('already sent');\n  if (i.opted_out) return skip('opted out');\n  if (i.kind !== 'transactional' && i.automation_paused) return skip('automation paused');\n  if (inQuietHours(i.now_ms)) return skip('quiet hours');\n\n  const to = testMode ? i.test_phone : i.patient_phone;\n  if (!to) return skip(testMode ? 'test mode on but TEST_PHONE is missing or invalid' : 'no valid patient phone');\n  return { send: true, to, reason: testMode ? 'test mode: sent to TEST_PHONE' : 'ok', test_mode: testMode };\n}\n\n// ---- TEMPORARY TEST SWITCH: quiet hours (pasted from n8n/snippets/quiet-hours-switch.js - keep identical) ----\nconst DISABLE_QUIET_HOURS_FOR_TEST = false;   // true = skip ONLY the 21:00-08:00 IST quiet-hours check; false = the original rule\nconst originalInQuietHours = inQuietHours;   // the original rule from send-guard.js, unchanged\ninQuietHours = (nowMs) => (DISABLE_QUIET_HOURS_FOR_TEST ? false : originalInQuietHours(nowMs));   // eslint-disable-line no-func-assign\n// ---- end of the test switch ----\n// ---- this node ----\n// CLAUDE.md rules 4 and 5: sent flag, Opted_Out, Automation_Paused (a reminder is not a confirmation: paused blocks it), quiet hours,\n// TEST_MODE. A held patient (hold_reason from W15 – Plan) is not sent and goes to the summary. No valid phone = never messaged.\nconst { phone: patient_phone } = normalizeIndianPhone($json.lead_phone);\nconst { phone: test_phone } = normalizeIndianPhone($json.test_phone);\nconst decision = $json.hold_reason\n  ? { send: false, to: null, reason: $json.hold_reason, test_mode: isTestMode($json.test_mode) }\n  : patient_phone\n    ? decideSend({\n      kind: 'marketing',\n      flag_value: $json.flag_value,\n      opted_out: $json.opted_out,\n      automation_paused: $json.automation_paused,\n      patient_phone,\n      test_mode: $json.test_mode,\n      test_phone,\n      now_ms: Date.now(),\n    })\n    : { send: false, to: null, reason: 'no valid patient phone', test_mode: isTestMode($json.test_mode) };\nreturn { json: { ...$json, patient_phone, decision, send: decision.send } };\n"
+      },
+      "name": "W15 – Decide send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        27184
+      ],
+      "id": "8d2a4d77-869a-4405-abe5-817c186976c3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "daa985ac-da30-424e-a119-94ed743146e8",
+              "leftValue": "={{ $json.send }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "W15 – Send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3152,
+        27184
+      ],
+      "id": "d30ed257-8a8c-4dc4-a22f-88929e3e0aac"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Pasted from n8n/snippets/followup-reminder.js - keep identical.\nconst FR_IST_MS = 5.5 * 3600 * 1000;\nconst FR_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst FR_TEXT_WINDOW_SEC = 24 * 3600 - 5 * 60;   // WhatsApp free-text window (as W12), minus a margin\nconst FR_QUIET_FROM = 21;                        // quiet hours 21:00-08:00 IST (send-guard.js decides; this only stops planning)\n\nfunction frText(v, max) { return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, max); }\nfunction frSec(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null; }\nfunction frHttps(v) { const s = frText(v, 500); return /^https:\\/\\/[^\\s<>\"']+$/i.test(s) ? s : ''; }\nfunction frFirstName(v) { return frText(v, 60).split(' ')[0] || 'there'; }\n// A per-clinic switch in Settings: on / true / yes / 1. Missing = OFF (switch it on once the template is approved).\nfunction frOn(v) { return ['on', 'true', 'yes', '1'].includes(frText(v, 10).toLowerCase()); }\n\n// A Grist Date cell (epoch seconds at UTC midnight) or a 'YYYY-MM-DD' string -> 'YYYY-MM-DD'; anything else -> ''.\nfunction frIso(v) {\n  if (typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v.trim())) return v.trim();\n  const s = frSec(v);\n  return s === null ? '' : new Date(s * 1000).toISOString().slice(0, 10);\n}\nfunction frIstToday(nowMs) { return new Date(nowMs + FR_IST_MS).toISOString().slice(0, 10); }\nfunction frIstHour(nowMs) { return new Date(nowMs + FR_IST_MS).getUTCHours(); }\nfunction frAddDays(iso, n) { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); }\nfunction frDateSec(iso) { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) / 1000; }   // the value Grist stores for a Date\nfunction frLabel(iso) { const [y, m, d] = iso.split('-').map(Number); return `${String(d).padStart(2, '0')} ${FR_MONTHS[m - 1]} ${y}`; }\n\n// cfg: { send_hour, days_before }. settings: the clinic's Settings (Key -> Value). h: { normalizeIndianPhone }.\n// -> { active, target, items }   items carry hold_reason ('' = may be sent; send-guard.js still decides).\nfunction frPlan(patients, leadRows, convRecords, nowMs, cfg, settings, h) {\n  const hour = frIstHour(nowMs);\n  const sendHour = Number(cfg.send_hour);\n  const before = Number(cfg.days_before);\n  if (!Number.isInteger(sendHour) || !Number.isInteger(before) || before < 0) return { active: false, target: '', items: [], error: 'W15 Config: send_hour and days_before must be whole numbers' };\n  const target = frAddDays(frIstToday(nowMs), before);\n  if (hour < sendHour || hour >= FR_QUIET_FROM) return { active: false, target, items: [] };\n  const link = frHttps(settings && settings.booking_link);\n\n  // the lead of a phone number, exactly as W12's consent check finds it: same +91 number, the first such row\n  const leadByPhone = {};\n  for (const r of Array.isArray(leadRows) ? leadRows : []) {\n    const p = h.normalizeIndianPhone(r && r.fields && r.fields.Phone).phone;\n    if (p && !leadByPhone[p]) leadByPhone[p] = r;\n  }\n  // the lead's conversation: Automation_Paused (rule 5) and the patient's last message (24 h window -> free text instead of a template)\n  const convByLead = {};\n  for (const r of Array.isArray(convRecords) ? convRecords : []) {\n    const f = (r && r.fields) || {};\n    const id = String(f.Lead === null || f.Lead === undefined ? '' : f.Lead);\n    if (!/^[1-9]\\d*$/.test(id)) continue;\n    const c = convByLead[id] || (convByLead[id] = { paused: false, last_inbound_at: null });\n    if (f.Automation_Paused === true) c.paused = true;\n    const at = frSec(f.Last_Inbound_At);\n    if (at !== null && (c.last_inbound_at === null || at > c.last_inbound_at)) c.last_inbound_at = at;\n  }\n\n  const items = [];\n  for (const r of Array.isArray(patients) ? patients : []) {\n    const f = (r && r.fields) || {};\n    if (f.Status !== 'Active' || frIso(f.Follow_Up_On) !== target) continue;\n    if (frIso(f.Followup_Reminded_For) === target) continue;               // already reminded for this date: never again\n    const phone = h.normalizeIndianPhone(f.Phone).phone;\n    const lead = phone ? leadByPhone[phone] : null;\n    const lf = (lead && lead.fields) || {};\n    const conv = lead ? convByLead[String(lead.id)] : null;\n    let hold = '';\n    if (!link) hold = 'Settings > booking_link is not set (an https link)';\n    else if (!phone) hold = 'no valid phone number';\n    else if (!lead) hold = 'no WhatsApp consent on file (no lead with this phone)';\n    else if (lf.Opted_Out === true) hold = 'opted out';\n    else if (lf.Consent_WhatsApp !== true) hold = 'no WhatsApp consent on file (LEADS.Consent_WhatsApp)';\n    items.push({\n      kind: 'followup',\n      patient_row_id: r.id,\n      patient_id: frText(f.Patient_ID, 40) || `row ${r.id}`,\n      patient_name: frText(f.Name, 60),\n      lead_phone: phone || '',\n      lead_row_id: lead ? lead.id : 0,\n      opted_out: lf.Opted_Out === true,\n      automation_paused: !!(conv && conv.paused),\n      flag_value: null,\n      follow_up_on: target,\n      booking_link: link,\n      last_inbound_at: conv ? conv.last_inbound_at : null,\n      hold_reason: hold,\n    });\n  }\n  return { active: true, target, items };\n}\n\n// The message for W12. Free text when the patient wrote in the last 24 h (no template needed), else the approved template.\n// The text is the template's wording, so the Grist inbox (and W13 reading the history) shows what the patient got.\nfunction frMessage(item, clinicName, nowSec) {\n  const name = frFirstName(item.patient_name);\n  const clinic = frText(clinicName, 80) || 'the clinic';\n  const date = frLabel(item.follow_up_on);\n  const text = `Hi ${name}, a reminder from ${clinic}: your follow-up visit is due on ${date}. Please book or confirm your time here: ${item.booking_link} or simply reply to this message.`;\n  const inWindow = frSec(item.last_inbound_at) !== null && nowSec - item.last_inbound_at < FR_TEXT_WINDOW_SEC;\n  return inWindow\n    ? { message_type: 'text', text_body: text, message_text: text, template: '', template_params: {} }\n    : { message_type: 'template', text_body: '', message_text: text, template: 'followup_reminder', template_params: { name, clinic_name: clinic, date, booking_link: item.booking_link } };\n}\n\n// One logical message = one key: W12's send ledger refuses a second send of the same key.\nfunction frIdemKey(item) { return `W15:followup_reminder:${frText(item.patient_id, 40).replace(/[^A-Za-z0-9_.\\-]/g, '')}:${item.follow_up_on}`; }\n\n// The patients not sent this run, as ONE Run_Log line per clinic: \"3 not sent: no WhatsApp consent 2, opted out 1\".\nfunction frHeldSummary(reasons) {\n  const by = {};\n  for (const r of reasons) { const k = frText(r, 120) || 'not sent'; by[k] = (by[k] || 0) + 1; }\n  const total = reasons.length;\n  const parts = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`);\n  return { total, text: total ? `${total} follow-up reminder(s) not sent: ${parts.join('; ')}`.slice(0, 500) : '' };\n}\n\n// ---- this node ----\n// The item for W12 (free text inside the 24 h window, else the approved template) + the claim: Followup_Reminded_For is written BEFORE\n// the send (next node). If that write fails, nothing is sent and W11 alerts; a reminder is never sent twice for the same date.\nconst now = Math.floor(Date.now() / 1000);\nconst message = frMessage($json, $json.clinic_name, now);\nreturn {\n  json: {\n    ...$json,\n    ...message,\n    audience: 'patient',\n    source_workflow: 'W15-followup-reminder',\n    lead_phone: $json.patient_phone,\n    idem_key: frIdemKey($json),\n    claim: { records: [{ id: $json.patient_row_id, fields: { Followup_Reminded_For: frDateSec($json.follow_up_on) } }] },\n  },\n};\n"
+      },
+      "name": "W15 – Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        27184
+      ],
+      "id": "71fbd612-6148-4e3f-a3c0-e491ae9c4109"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Patients/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.claim) }}",
+        "options": {}
+      },
+      "name": "W15 – Claim reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        27184
+      ],
+      "id": "492edf60-0a1a-44e1-afa0-f1947954d84e",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The claim write answered; carry on with the message item.\nreturn { json: $('W15 – Build Message').item.json };\n"
+      },
+      "name": "W15 – Restore",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3824,
+        27184
+      ],
+      "id": "b6e05180-7959-4b0d-ac99-f0853a5b0ae0"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $workflow.id }}",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "name": "W15 – Call 'W12 - WhatsApp send'",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        4048,
+        27184
+      ],
+      "id": "84d4b861-77ca-4f4b-af47-89d48e8fe7e5"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// One Run_Log row per attempt. Not sent = failed, with W12's reason; the flag stays set (one attempt per follow-up date: a broken\n// template or number can never make this section message the patient again and again).\nconst ok = $json.sent === true;\nconst d = $json.decision || {};\nreturn {\n  json: {\n    ...$json,\n    log: {\n      Workflow: 'W15-followup-reminder',\n      Record: `${$json.patient_id} follow-up ${$json.follow_up_on}${d.test_mode ? ' (TEST_MODE)' : ''}`.slice(0, 200),\n      Outcome: ok ? 'ok' : 'failed',\n      Error: ok ? '' : String($json.send_error || $json.send_status || 'not sent').slice(0, 500),\n      At: Math.floor(Date.now() / 1000),\n    },\n  },\n};\n"
+      },
+      "name": "W15 – Prepare log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4272,
+        27184
+      ],
+      "id": "2aba8993-1d40-41e1-aa33-85a3a2c66413"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Run_Log/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $json.log }] }) }}",
+        "options": {}
+      },
+      "name": "W15 – Write Run_Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4496,
+        27184
+      ],
+      "id": "0b6885c6-a4a0-4b00-ac26-33f3e8e2356e",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pasted from n8n/snippets/followup-reminder.js - keep identical.\nconst FR_IST_MS = 5.5 * 3600 * 1000;\nconst FR_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst FR_TEXT_WINDOW_SEC = 24 * 3600 - 5 * 60;   // WhatsApp free-text window (as W12), minus a margin\nconst FR_QUIET_FROM = 21;                        // quiet hours 21:00-08:00 IST (send-guard.js decides; this only stops planning)\n\nfunction frText(v, max) { return String(v === null || v === undefined ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, max); }\nfunction frSec(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null; }\nfunction frHttps(v) { const s = frText(v, 500); return /^https:\\/\\/[^\\s<>\"']+$/i.test(s) ? s : ''; }\nfunction frFirstName(v) { return frText(v, 60).split(' ')[0] || 'there'; }\n// A per-clinic switch in Settings: on / true / yes / 1. Missing = OFF (switch it on once the template is approved).\nfunction frOn(v) { return ['on', 'true', 'yes', '1'].includes(frText(v, 10).toLowerCase()); }\n\n// A Grist Date cell (epoch seconds at UTC midnight) or a 'YYYY-MM-DD' string -> 'YYYY-MM-DD'; anything else -> ''.\nfunction frIso(v) {\n  if (typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v.trim())) return v.trim();\n  const s = frSec(v);\n  return s === null ? '' : new Date(s * 1000).toISOString().slice(0, 10);\n}\nfunction frIstToday(nowMs) { return new Date(nowMs + FR_IST_MS).toISOString().slice(0, 10); }\nfunction frIstHour(nowMs) { return new Date(nowMs + FR_IST_MS).getUTCHours(); }\nfunction frAddDays(iso, n) { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); }\nfunction frDateSec(iso) { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) / 1000; }   // the value Grist stores for a Date\nfunction frLabel(iso) { const [y, m, d] = iso.split('-').map(Number); return `${String(d).padStart(2, '0')} ${FR_MONTHS[m - 1]} ${y}`; }\n\n// cfg: { send_hour, days_before }. settings: the clinic's Settings (Key -> Value). h: { normalizeIndianPhone }.\n// -> { active, target, items }   items carry hold_reason ('' = may be sent; send-guard.js still decides).\nfunction frPlan(patients, leadRows, convRecords, nowMs, cfg, settings, h) {\n  const hour = frIstHour(nowMs);\n  const sendHour = Number(cfg.send_hour);\n  const before = Number(cfg.days_before);\n  if (!Number.isInteger(sendHour) || !Number.isInteger(before) || before < 0) return { active: false, target: '', items: [], error: 'W15 Config: send_hour and days_before must be whole numbers' };\n  const target = frAddDays(frIstToday(nowMs), before);\n  if (hour < sendHour || hour >= FR_QUIET_FROM) return { active: false, target, items: [] };\n  const link = frHttps(settings && settings.booking_link);\n\n  // the lead of a phone number, exactly as W12's consent check finds it: same +91 number, the first such row\n  const leadByPhone = {};\n  for (const r of Array.isArray(leadRows) ? leadRows : []) {\n    const p = h.normalizeIndianPhone(r && r.fields && r.fields.Phone).phone;\n    if (p && !leadByPhone[p]) leadByPhone[p] = r;\n  }\n  // the lead's conversation: Automation_Paused (rule 5) and the patient's last message (24 h window -> free text instead of a template)\n  const convByLead = {};\n  for (const r of Array.isArray(convRecords) ? convRecords : []) {\n    const f = (r && r.fields) || {};\n    const id = String(f.Lead === null || f.Lead === undefined ? '' : f.Lead);\n    if (!/^[1-9]\\d*$/.test(id)) continue;\n    const c = convByLead[id] || (convByLead[id] = { paused: false, last_inbound_at: null });\n    if (f.Automation_Paused === true) c.paused = true;\n    const at = frSec(f.Last_Inbound_At);\n    if (at !== null && (c.last_inbound_at === null || at > c.last_inbound_at)) c.last_inbound_at = at;\n  }\n\n  const items = [];\n  for (const r of Array.isArray(patients) ? patients : []) {\n    const f = (r && r.fields) || {};\n    if (f.Status !== 'Active' || frIso(f.Follow_Up_On) !== target) continue;\n    if (frIso(f.Followup_Reminded_For) === target) continue;               // already reminded for this date: never again\n    const phone = h.normalizeIndianPhone(f.Phone).phone;\n    const lead = phone ? leadByPhone[phone] : null;\n    const lf = (lead && lead.fields) || {};\n    const conv = lead ? convByLead[String(lead.id)] : null;\n    let hold = '';\n    if (!link) hold = 'Settings > booking_link is not set (an https link)';\n    else if (!phone) hold = 'no valid phone number';\n    else if (!lead) hold = 'no WhatsApp consent on file (no lead with this phone)';\n    else if (lf.Opted_Out === true) hold = 'opted out';\n    else if (lf.Consent_WhatsApp !== true) hold = 'no WhatsApp consent on file (LEADS.Consent_WhatsApp)';\n    items.push({\n      kind: 'followup',\n      patient_row_id: r.id,\n      patient_id: frText(f.Patient_ID, 40) || `row ${r.id}`,\n      patient_name: frText(f.Name, 60),\n      lead_phone: phone || '',\n      lead_row_id: lead ? lead.id : 0,\n      opted_out: lf.Opted_Out === true,\n      automation_paused: !!(conv && conv.paused),\n      flag_value: null,\n      follow_up_on: target,\n      booking_link: link,\n      last_inbound_at: conv ? conv.last_inbound_at : null,\n      hold_reason: hold,\n    });\n  }\n  return { active: true, target, items };\n}\n\n// The message for W12. Free text when the patient wrote in the last 24 h (no template needed), else the approved template.\n// The text is the template's wording, so the Grist inbox (and W13 reading the history) shows what the patient got.\nfunction frMessage(item, clinicName, nowSec) {\n  const name = frFirstName(item.patient_name);\n  const clinic = frText(clinicName, 80) || 'the clinic';\n  const date = frLabel(item.follow_up_on);\n  const text = `Hi ${name}, a reminder from ${clinic}: your follow-up visit is due on ${date}. Please book or confirm your time here: ${item.booking_link} or simply reply to this message.`;\n  const inWindow = frSec(item.last_inbound_at) !== null && nowSec - item.last_inbound_at < FR_TEXT_WINDOW_SEC;\n  return inWindow\n    ? { message_type: 'text', text_body: text, message_text: text, template: '', template_params: {} }\n    : { message_type: 'template', text_body: '', message_text: text, template: 'followup_reminder', template_params: { name, clinic_name: clinic, date, booking_link: item.booking_link } };\n}\n\n// One logical message = one key: W12's send ledger refuses a second send of the same key.\nfunction frIdemKey(item) { return `W15:followup_reminder:${frText(item.patient_id, 40).replace(/[^A-Za-z0-9_.\\-]/g, '')}:${item.follow_up_on}`; }\n\n// The patients not sent this run, as ONE Run_Log line per clinic: \"3 not sent: no WhatsApp consent 2, opted out 1\".\nfunction frHeldSummary(reasons) {\n  const by = {};\n  for (const r of reasons) { const k = frText(r, 120) || 'not sent'; by[k] = (by[k] || 0) + 1; }\n  const total = reasons.length;\n  const parts = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`);\n  return { total, text: total ? `${total} follow-up reminder(s) not sent: ${parts.join('; ')}`.slice(0, 500) : '' };\n}\n\n// ---- this node ----\n// The patients NOT sent this run (held by W15 – Plan, or refused by send-guard.js) -> ONE Run_Log line per clinic, written only in the\n// send_hour run so the log gets one line a day, not one an hour. Nothing is claimed for them: a reminder still goes if the reason is fixed in time.\nconst cfg = $('W15 – Config').first().json;\nif (frIstHour(Date.now()) !== Number(cfg.send_hour)) return [];\nconst byDoc = {};\nfor (const it of $input.all()) {\n  const j = it.json;\n  (byDoc[j.doc_id] = byDoc[j.doc_id] || { j, reasons: [] }).reasons.push((j.decision && j.decision.reason) || j.hold_reason || 'not sent');\n}\nreturn Object.values(byDoc).map(({ j, reasons }) => ({\n  json: { grist_base_url: j.grist_base_url, doc_id: j.doc_id, log: { Workflow: 'W15-followup-reminder', Record: frHeldSummary(reasons).text, Outcome: 'skipped', Error: '', At: Math.floor(Date.now() / 1000) } },\n}));\n"
+      },
+      "name": "W15 – Held summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        27376
+      ],
+      "id": "919fd589-c7d7-43b9-a75d-91f6666ee5ba"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.grist_base_url }}/api/docs/{{ $json.doc_id }}/tables/Run_Log/records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $json.log }] }) }}",
+        "options": {}
+      },
+      "name": "W15 – Write held log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        27376
+      ],
+      "id": "716dd778-3a2c-407a-a1ba-db833861d6af",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9J6XxrIQoFDcQZ0Y",
+          "name": "Header Auth account 2"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -14654,6 +15100,222 @@
         [
           {
             "node": "W12 – Ledger lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Every hour": {
+      "main": [
+        [
+          {
+            "node": "W15 – Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Config": {
+      "main": [
+        [
+          {
+            "node": "W15 – Config Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Config Guard": {
+      "main": [
+        [
+          {
+            "node": "W15 – Clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Clinics": {
+      "main": [
+        [
+          {
+            "node": "W15 – Split clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Split clinics": {
+      "main": [
+        [
+          {
+            "node": "W15 – Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Settings": {
+      "main": [
+        [
+          {
+            "node": "W15 – Add settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Add settings": {
+      "main": [
+        [
+          {
+            "node": "W15 – Patients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Patients": {
+      "main": [
+        [
+          {
+            "node": "W15 – Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Leads": {
+      "main": [
+        [
+          {
+            "node": "W15 – Conversations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Conversations": {
+      "main": [
+        [
+          {
+            "node": "W15 – Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Plan": {
+      "main": [
+        [
+          {
+            "node": "W15 – Decide send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Decide send": {
+      "main": [
+        [
+          {
+            "node": "W15 – Send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Send?": {
+      "main": [
+        [
+          {
+            "node": "W15 – Build Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "W15 – Held summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Build Message": {
+      "main": [
+        [
+          {
+            "node": "W15 – Claim reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Claim reminder": {
+      "main": [
+        [
+          {
+            "node": "W15 – Restore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Restore": {
+      "main": [
+        [
+          {
+            "node": "W15 – Call 'W12 - WhatsApp send'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Call 'W12 - WhatsApp send'": {
+      "main": [
+        [
+          {
+            "node": "W15 – Prepare log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Prepare log": {
+      "main": [
+        [
+          {
+            "node": "W15 – Write Run_Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "W15 – Held summary": {
+      "main": [
+        [
+          {
+            "node": "W15 – Write held log",
             "type": "main",
             "index": 0
           }

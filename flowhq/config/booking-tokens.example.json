@@ -1,0 +1,10 @@
+[
+  {
+    "id": "n8n-whatsapp",
+    "workspace": "your-clinic-slug",
+    "scopes": ["config:read", "availability:read", "appointments:read", "appointments:create", "appointments:update", "appointments:cancel"],
+    "source": "WhatsApp AI",
+    "hash": "REPLACE with the hash printed by: npm run booking-token -- n8n-whatsapp your-clinic-slug",
+    "expiresAt": "2027-01-31T00:00:00.000Z"
+  }
+]

@@ -32,15 +32,22 @@
   --ok: 22 133 74;
   --warn: 180 105 6;
   --bad: 200 38 38;
-  --shadow-card: 0 1px 1px rgb(13 64 56 / 0.04), 0 2px 4px rgb(13 64 56 / 0.04), 0 10px 24px -14px rgb(13 64 56 / 0.16);
-  --shadow-lift: 0 1px 1px rgb(13 64 56 / 0.05), 0 6px 12px -4px rgb(13 64 56 / 0.10), 0 18px 32px -18px rgb(13 64 56 / 0.22);
-  --shadow-pop: 0 18px 48px -14px rgb(13 64 56 / 0.28), 0 0 0 1px rgb(var(--line));
+  /* Shadows are deliberately quiet: a hairline border does the separating, the shadow only lifts overlays. */
+  --shadow-card: 0 1px 2px rgb(38 52 49 / 0.05);
+  --shadow-lift: 0 1px 2px rgb(38 52 49 / 0.06);
+  --shadow-pop: 0 12px 32px -12px rgb(38 52 49 / 0.25), 0 0 0 1px rgb(var(--line));
   color-scheme: light;
 }
 @layer base {
   html, body, #root { height: 100%; }
-  body { @apply bg-bg text-fg antialiased; font-feature-settings: 'cv11', 'ss01', 'ss03'; }
-  h1, .font-display { font-family: 'Playfair Display', Georgia, 'Times New Roman', serif; }
+  body {
+    @apply bg-bg text-fg antialiased; text-rendering: optimizeLegibility; line-height: 1.55; -webkit-text-size-adjust: 100%; font-size: 14px;
+  }
+  /* Headings and figures in Figtree; running text in Noto Sans. */
+  h1, h2, h3, h4, .font-display { font-family: Figtree, 'Noto Sans', ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; text-wrap: balance; }
+  h2, h3 { font-weight: 600; text-wrap: balance; letter-spacing: -0.01em; line-height: 1.25; }
+  p { text-wrap: pretty; }
   ::selection { background: rgb(var(--blue) / 0.35); }
   *:focus-visible { outline: 2px solid rgb(var(--blue-bright)); outline-offset: 2px; border-radius: 6px; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -49,25 +56,52 @@
 }
 
 @layer components {
-  .card { @apply rounded-xl border border-line bg-surface shadow-card transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out; }
-  .card-hover { @apply hover:-translate-y-px hover:border-line-2 hover:bg-surface-2; }
-  .card-hover:hover { box-shadow: var(--shadow-lift); }
-  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-  .label { @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted; }
-  .glow-blue { box-shadow: 0 0 0 1px rgb(var(--blue) / 0.28), 0 6px 20px -8px rgb(var(--blue) / 0.35); }
-  .ai-tint { background: linear-gradient(180deg, rgb(var(--blue) / 0.10), rgb(var(--blue) / 0.04)); border-color: rgb(var(--blue) / 0.28); }
+  /* A surface is a flat white sheet with a hairline border. No gradient, no inner highlight; interactive ones only change their border. */
+  .card { @apply relative rounded-xl border border-line bg-surface transition-colors duration-150 ease-out; box-shadow: var(--shadow-card); }
+  .card-hover { @apply cursor-pointer hover:border-line-2 active:bg-surface-2; }
+  .num { font-variant-numeric: tabular-nums; }
+  .num-display { font-family: Figtree, 'Noto Sans', ui-sans-serif, sans-serif; font-weight: 600; font-variant-numeric: lining-nums tabular-nums; letter-spacing: -0.02em; }
+  /* A small heading above a group of fields or figures: sentence case, not shouted. */
+  .label { @apply text-[12.5px] font-medium text-fg-2; }
+  .glow-blue { box-shadow: 0 0 0 1px rgb(var(--blue) / 0.35); }
+  .ai-tint { background-color: rgb(var(--sage) / 0.45); border-color: rgb(var(--blue) / 0.25); }
   .skeleton { background: linear-gradient(90deg, rgb(var(--surface-2)) 0%, rgb(var(--elevated)) 45%, rgb(var(--surface-2)) 90%); background-size: 800px 100%; animation: shimmer 1.7s ease-in-out infinite; @apply rounded-md; }
+  /* Section heading inside a panel: a rule and a title, no icon tile. */
+  .section-title { @apply text-[13px] font-semibold text-fg; font-family: Figtree, 'Noto Sans', sans-serif; letter-spacing: 0; }
   .btn-primary { background-color: rgb(var(--accent-strong)); }
   .bg-grid { background-image: radial-gradient(rgb(var(--line)) 1px, transparent 1px); background-size: 22px 22px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 /* Form fields: a soft halo on focus (the outline above stays for keyboard users). */
-input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 4px rgb(var(--blue) / 0.12); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 3px rgb(var(--blue) / 0.14); }
+/* Touch screens: buttons and fields reach the 44px target without changing the desktop density. */
+@media (pointer: coarse) {
+  button, [role='tab'], select, input:not([type='checkbox']):not([type='radio']) { min-height: 44px; }
+}
 
 /* ---- Printing: A4 documents (prescription, invoice) and the register ---- */
 .paper { background: #fff; color: #111; }
 @media screen { .paper { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 14mm 15mm; box-shadow: var(--shadow-card); border: 1px solid rgb(var(--line)); } }
 @page { size: A4; margin: 10mm; }
+/* The patient register prints on A4 landscape (named page), one patient per line, headings repeated on every page, rows never split. */
+@page register { size: A4 landscape; margin: 8mm; }
+.register-print { page: register; color: #111; font-size: 7pt; line-height: 1.25; }
+.rp-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3mm; padding-bottom: 2mm; border-bottom: 0.6pt solid #111; }
+.rp-name { font-family: Georgia, 'Times New Roman', serif; font-size: 13pt; font-weight: 700; letter-spacing: 0.02em; }
+.rp-title { font-size: 8.5pt; margin-top: 0.5mm; }
+.rp-date { font-size: 7.5pt; }
+.rp-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.rp-table th, .rp-table td { border: 0.4pt solid #777; padding: 0.9mm 1mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.rp-table th { background: #e6eee9 !important; font-size: 6pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
+.rp-table thead { display: table-header-group; }
+.rp-table tfoot { display: table-row-group; }
+.rp-table tr { break-inside: avoid; page-break-inside: avoid; }
+.rp-table tbody tr:nth-child(even) td { background: #f6f8f7 !important; }
+.rp-table tfoot td { background: #e6eee9 !important; }
+.rp-table .r { text-align: right; white-space: nowrap; }
+.rp-table .c { text-align: center; }
+.rp-table .n { white-space: nowrap; }
+.rp-table .b { font-weight: 700; }
 @media print {
   html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -110,17 +144,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .fhq-glow { animation: fhq-glow 18s ease-in-out infinite; }
 .fhq-breathe { animation: fhq-breathe 2.4s ease-in-out infinite; }
 
-/* Rows and list items glide in one after another (first 12; the rest arrive together). Existing rows keep their DOM node, so a refresh
-   does not replay it. */
-main tbody tr, main ul.divide-y > li { animation: fhq-rise 0.32s var(--ease-out) both; }
-main tbody tr:nth-child(2), main ul.divide-y > li:nth-child(2) { animation-delay: 30ms; }
-main tbody tr:nth-child(3), main ul.divide-y > li:nth-child(3) { animation-delay: 60ms; }
-main tbody tr:nth-child(4), main ul.divide-y > li:nth-child(4) { animation-delay: 90ms; }
-main tbody tr:nth-child(5), main ul.divide-y > li:nth-child(5) { animation-delay: 120ms; }
-main tbody tr:nth-child(6), main ul.divide-y > li:nth-child(6) { animation-delay: 150ms; }
-main tbody tr:nth-child(7), main ul.divide-y > li:nth-child(7) { animation-delay: 180ms; }
-main tbody tr:nth-child(8), main ul.divide-y > li:nth-child(8) { animation-delay: 210ms; }
-main tbody tr:nth-child(9), main ul.divide-y > li:nth-child(9) { animation-delay: 240ms; }
-main tbody tr:nth-child(10), main ul.divide-y > li:nth-child(10) { animation-delay: 270ms; }
-main tbody tr:nth-child(11), main ul.divide-y > li:nth-child(11) { animation-delay: 300ms; }
-main tbody tr:nth-child(n+12), main ul.divide-y > li:nth-child(n+12) { animation-delay: 330ms; }
+/* List rows: a plain tint on hover, no bleed past the card and no entrance animation (a table that is re-read all day should not perform). */
+main ul.divide-y > li { transition: background-color 0.15s ease-out; }
+main ul.divide-y > li:hover { background-color: rgb(var(--surface-2)); }

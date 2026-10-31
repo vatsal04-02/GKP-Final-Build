@@ -134,7 +134,7 @@ function StoredReports({ q }: { q: { data?: Report[]; error: unknown; isLoading:
             const advice = /recommend/i.test(s.title);
             return (
               <section key={s.key} className={cn(advice && 'ai-tint rounded-xl border border-blue/20 p-4')}>
-                <h3 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-fg">{advice ? <Lightbulb className="h-4 w-4 text-blue-bright" /> : <span className="num flex h-5 w-5 items-center justify-center rounded-md bg-surface-2 text-[11px] text-fg-2">{i + 1}</span>}{s.title}</h3>
+                <h3 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-fg">{advice ? <Lightbulb className="h-4 w-4 text-blue-bright" /> : <span className="num flex h-5 w-5 items-center justify-center rounded-md bg-surface-2 text-[12px] text-fg-2">{i + 1}</span>}{s.title}</h3>
                 <ul className="space-y-1.5">
                   {s.lines.map((l, k) => <li key={k} className={cn('text-[13px] leading-relaxed text-fg-2', s.lines.length > 1 && 'relative pl-4 before:absolute before:left-0 before:top-[9px] before:h-1 before:w-1 before:rounded-full before:bg-blue-soft/70')}>{l}</li>)}
                 </ul>

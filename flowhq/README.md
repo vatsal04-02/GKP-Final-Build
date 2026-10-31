@@ -217,7 +217,7 @@ FLOWHQ_DEMO=true npm start          # http://localhost:8787  admin@flowhq.demo /
    npm run hash-password -- "a long password"
    ```
    Paste the result into `flowhq/config/users.json`, using `config/users.example.json` as the shape. `role` is `admin` or `staff`. `workspaces` holds clinic slugs, or `["*"]` for all.
-4. Add a DNS record for the FLOW HQ domain. Put `FLOWHQ_DOMAIN=…` in the stack's `.env`. Add this block to `Caddyfile`:
+4. Add a DNS record for the FLOW HQ domain. Put `FLOWHQ_DOMAIN=…` in the stack's `.env`. The overlay in step 5 already mounts `flowhq/deploy/Caddyfile` (n8n, Grist and FLOW HQ), so no edit is needed. The block it adds, for reference:
    ```
    {$FLOWHQ_DOMAIN} {
    	encode gzip

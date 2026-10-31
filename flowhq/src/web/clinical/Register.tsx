@@ -1,16 +1,18 @@
 // The patient register: a clean spreadsheet-style version of the clinic's paper register, plus the patient's record.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download, Plus, Printer, Search, UserRound } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Download, Plus, Printer, Search, UserRound, X } from 'lucide-react';
 import { PATIENT_STATUSES, SEXES, type Patient, type PatientList, type PatientProfile, type PatientRow, type VisitStatus } from '@core/clinical';
 import { api, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { cn } from '../lib/cn';
 import { Page } from '../components/layout/Shell';
-import { Badge, Button, Card, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
+import { Avatar, Badge, Button, Card, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
 import { Drawer, EmptyState, ErrorState, Modal, SkeletonRows, useToast } from '../components/ui/feedback';
+import { initials } from '../lib/format';
 import { Field, PaymentBadge, errText, fdate, rs, useDebounced, useToday } from './common';
+import { RegisterPrint } from './RegisterPrint';
 
 type SortKey = 'serial' | 'name' | 'registered' | 'billed' | 'outstanding' | 'latestVisit' | 'followUp';
 const MARK: Record<VisitStatus, { glyph: string; cls: string; label: string }> = { Attended: { glyph: '✓', cls: 'text-ok', label: 'Attended' }, Missed: { glyph: '✗', cls: 'text-bad', label: 'Missed' }, Cancelled: { glyph: '–', cls: 'text-muted', label: 'Cancelled' } };
@@ -27,13 +29,20 @@ export default function Register() {
   const toast = useToast();
   const [q, setQ] = useState(''); const dq = useDebounced(q);
   const [status, setStatus] = useState(''); const [followUp, setFollowUp] = useState(false); const [owing, setOwing] = useState(false);
+  const [from, setFrom] = useState(''); const [to, setTo] = useState('');   // registration date range (the month picker and the chips just set these two)
   const [sort, setSort] = useState<SortKey>('serial'); const [dir, setDir] = useState<'asc' | 'desc'>('asc'); const [page, setPage] = useState(1);
   const [weekOn, setWeekOn] = useState(false); const [week, setWeek] = useState(() => mondayOf(today));
   const [sp] = useSearchParams(); const [creating, setCreating] = useState(sp.get('new') === '1');   // the dashboard's "Register patient" opens the form straight away
   const [exporting, setExporting] = useState(false);
-  const qs = (extra = '') => `/patients?q=${encodeURIComponent(dq)}${status ? `&status=${status}` : ''}${followUp ? '&followUp=1' : ''}${owing ? '&owing=1' : ''}&sort=${sort}&dir=${dir}${weekOn ? `&week=${week}` : ''}${extra}`;
-  const list = useQuery({ queryKey: ['register', ws.id, dq, status, followUp, owing, sort, dir, page, weekOn ? week : ''], queryFn: () => api<PatientList>(wsPath(ws.id, qs(`&page=${page}&pageSize=50`))), placeholderData: keepPreviousData });
+  const qs = (extra = '') => `/patients?q=${encodeURIComponent(dq)}${status ? `&status=${status}` : ''}${followUp ? '&followUp=1' : ''}${owing ? '&owing=1' : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}&sort=${sort}&dir=${dir}${weekOn ? `&week=${week}` : ''}${extra}`;
+  const list = useQuery({ queryKey: ['register', ws.id, dq, status, followUp, owing, from, to, sort, dir, page, weekOn ? week : ''], queryFn: () => api<PatientList>(wsPath(ws.id, qs(`&page=${page}&pageSize=50`))), placeholderData: keepPreviousData });
   const reset = () => setPage(1);
+  const monthRange = (y: number, m: number) => ({ from: `${y}-${String(m).padStart(2, '0')}-01`, to: `${y}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}` });
+  const setMonth = (v: string) => { if (!v) { setFrom(''); setTo(''); } else { const r = monthRange(Number(v.slice(0, 4)), Number(v.slice(5, 7))); setFrom(r.from); setTo(r.to); } reset(); };
+  const thisMonth = (back: number) => { const y = Number(today.slice(0, 4)); const m = Number(today.slice(5, 7)) - back; const d = new Date(Date.UTC(y, m - 1, 1)); return monthRange(d.getUTCFullYear(), d.getUTCMonth() + 1); };
+  const pickRange = (r: { from: string; to: string }) => { setFrom(r.from); setTo(r.to); reset(); };
+  const monthValue = from && to && from.slice(0, 7) === to.slice(0, 7) && from.endsWith('-01') && to === monthRange(Number(from.slice(0, 4)), Number(from.slice(5, 7))).to ? from.slice(0, 7) : '';
+  const dated = !!(from || to);
   const sortBy = (k: SortKey) => { if (sort === k) setDir((d) => (d === 'asc' ? 'desc' : 'asc')); else { setSort(k); setDir('asc'); } reset(); };
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(week, i)), [week]);
 
@@ -49,51 +58,91 @@ export default function Register() {
     } catch (e) { toast('bad', `Export failed: ${errText(e)}`); } finally { setExporting(false); }
   };
 
+  // Printing: fetch EVERY patient in the current view (all pages, same filters and sort), then print them one per line.
+  const [printData, setPrintData] = useState<{ rows: PatientRow[]; totals: PatientList['totals'] } | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const printAll = async () => {
+    setPrinting(true);
+    try {
+      const rows: PatientRow[] = []; let p = 1; let totals: PatientList['totals'] = { billedPaise: 0, paidPaise: 0, outstandingPaise: 0 };
+      for (;;) { const r = await api<PatientList>(wsPath(ws.id, qs(`&page=${p}&pageSize=200`))); rows.push(...r.rows); totals = r.totals; if (rows.length >= r.total || !r.rows.length) break; p++; }
+      setPrintData({ rows, totals });
+    } catch (e) { toast('bad', `Could not prepare the print: ${errText(e)}`); } finally { setPrinting(false); }
+  };
+  useEffect(() => {
+    if (!printData) return;
+    const done = () => setPrintData(null);
+    window.addEventListener('afterprint', done);
+    const t = setTimeout(() => window.print(), 200);   // let the print sheet render first
+    return () => { clearTimeout(t); window.removeEventListener('afterprint', done); };
+  }, [printData]);
+  const filterSummary = [dq && `search “${dq}”`, status, followUp && 'follow-up due', owing && 'balance due', dated && `registered ${from ? fdate(from) : 'start'} – ${to ? fdate(to) : 'today'}`].filter(Boolean).join(' · ');
+
   const th = (label: string, k?: SortKey, cls = '') => (
-    <th className={cn('whitespace-nowrap border-b border-r border-line/70 bg-sage/40 px-2.5 py-2 text-left text-[11.5px] font-semibold uppercase tracking-wide text-fg-2 last:border-r-0', cls)} aria-sort={k && sort === k ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}>
-      {k ? <button type="button" onClick={() => sortBy(k)} className="inline-flex items-center gap-1 hover:text-fg">{label}{sort === k && (dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</button> : label}
+    <th className={cn('sticky top-0 z-[2] whitespace-nowrap border-b border-line-2 bg-[rgb(235_242_238)] px-3 py-2.5 text-left text-[12.5px] font-semibold text-fg-2', cls)} aria-sort={k && sort === k ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+      {k ? <button type="button" onClick={() => sortBy(k)} className={cn('inline-flex items-center gap-1 rounded transition-colors hover:text-fg', sort === k && 'text-fg')}>{label}{sort === k && (dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</button> : label}
     </th>
   );
-  const td = 'border-b border-r border-line/60 px-2.5 py-2 align-top last:border-r-0';
+  const td = 'border-b border-line/60 px-3 py-2.5 align-middle';
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / list.data.pageSize)) : 1;
+  const stats = list.data ? ([['Patients', String(list.data.total), ''], ['Billed', rs(list.data.totals.billedPaise), ''], ['Collected', rs(list.data.totals.paidPaise), 'text-ok'], ['Balance due', rs(list.data.totals.outstandingPaise), list.data.totals.outstandingPaise > 0 ? 'text-bad' : '']] as const) : null;
 
-  return (
-    <Page title="Patient register" subtitle={list.data ? `${list.data.total} patient${list.data.total === 1 ? '' : 's'}` : ' '} wide
-      actions={<><Button variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} loading={exporting} className="print:hidden">Export CSV</Button><Button variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()} className="print:hidden">Print page</Button><Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)} className="print:hidden">Add patient</Button></>}>
+  return (<>
+    <Page className="print:hidden" title="Patient register" subtitle="Every patient the clinic has registered, with billing and attendance at a glance." wide
+      actions={<><Button variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} loading={exporting}>Export CSV</Button><Button variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={printAll} loading={printing} title="Prints every patient in this view, one per line, on A4 landscape">Print register</Button><Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Add patient</Button></>}>
+      <section aria-label="Register totals" className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats ? stats.map(([k, v, c]) => <Card key={k} className="px-4 py-3"><div className="label">{k}</div><div className={cn('num-display mt-1 text-[24px] font-semibold leading-tight', c)}>{v}</div></Card>)
+          : Array.from({ length: 4 }, (_, i) => <Card key={i} className="px-4 py-3"><div className="skeleton h-3 w-16" /><div className="skeleton mt-2 h-6 w-24" /></Card>)}
+      </section>
       <div className="mb-3 flex flex-wrap items-center gap-2.5 print:hidden">
-        <div className="w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name, phone, patient ID or complaint" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} aria-label="Search patients" /></div>
+        <div className="w-full max-w-sm"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name, phone, patient ID or complaint" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} aria-label="Search patients" /></div>
         <Segmented value={status || 'all'} onChange={(v) => { setStatus(v === 'all' ? '' : v); reset(); }} options={[{ value: 'all', label: 'All' }, ...PATIENT_STATUSES.map((s) => ({ value: s as string, label: s }))]} />
         <Button variant={followUp ? 'subtle' : 'secondary'} aria-pressed={followUp} onClick={() => { setFollowUp((v) => !v); reset(); }}>Follow-up due</Button>
         <Button variant={owing ? 'subtle' : 'secondary'} aria-pressed={owing} onClick={() => { setOwing((v) => !v); reset(); }}>Balance due</Button>
         <Button variant={weekOn ? 'subtle' : 'secondary'} aria-pressed={weekOn} onClick={() => setWeekOn((v) => !v)}>Weekly attendance</Button>
         {weekOn && <div className="flex items-center gap-1"><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[132px] text-center text-[13px] text-fg-2">{fdate(week)} – {fdate(addDays(week, 6))}</span><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button></div>}
       </div>
+      <div className="mb-3 flex flex-wrap items-end gap-x-4 gap-y-2.5 rounded-xl border border-line bg-surface/70 px-3.5 py-3 print:hidden" role="group" aria-label="Filter by registration date">
+        <span className="flex items-center gap-2 self-center text-[13px] font-medium text-fg-2"><CalendarDays className="h-4 w-4 text-blue-bright" />Registered</span>
+        <label className="block"><span className="mb-1 block text-[12px] text-muted">Month</span><Input type="month" value={monthValue} max={today.slice(0, 7)} onChange={(e) => setMonth(e.target.value)} className="w-[10.5rem]" aria-label="Filter by month" /></label>
+        <label className="block"><span className="mb-1 block text-[12px] text-muted">From date</span><Input type="date" value={from} max={to || undefined} onChange={(e) => { setFrom(e.target.value); reset(); }} className="w-[10.5rem]" /></label>
+        <label className="block"><span className="mb-1 block text-[12px] text-muted">To date</span><Input type="date" value={to} min={from || undefined} onChange={(e) => { setTo(e.target.value); reset(); }} className="w-[10.5rem]" /></label>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button size="sm" variant={monthValue === thisMonth(0).from.slice(0, 7) ? 'subtle' : 'secondary'} onClick={() => pickRange(thisMonth(0))}>This month</Button>
+          <Button size="sm" variant={monthValue === thisMonth(1).from.slice(0, 7) ? 'subtle' : 'secondary'} onClick={() => pickRange(thisMonth(1))}>Last month</Button>
+          <Button size="sm" variant="secondary" onClick={() => pickRange({ from: addDays(today, -29), to: today })}>Last 30 days</Button>
+          {dated && <Button size="sm" variant="ghost" icon={<X className="h-3.5 w-3.5" />} onClick={() => pickRange({ from: '', to: '' })}>Clear dates</Button>}
+        </div>
+      </div>
 
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={10} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.rows.length ? (
-          <EmptyState icon={<UserRound className="h-5 w-5" />} title="No patients found" body={q || status || followUp || owing ? 'Try clearing the search or filters.' : 'Register the first patient to start the register.'} action={!q && !status ? <Button variant="primary" onClick={() => setCreating(true)} icon={<Plus className="h-4 w-4" />}>Add patient</Button> : undefined} />
+          <EmptyState icon={<UserRound className="h-5 w-5" />} title="No patients found" body={q || status || followUp || owing || dated ? 'Try clearing the search or filters.' : 'Register the first patient to start the register.'} action={!q && !status && !dated ? <Button variant="primary" onClick={() => setCreating(true)} icon={<Plus className="h-4 w-4" />}>Add patient</Button> : undefined} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className={cn('w-full border-collapse text-[13px]', weekOn ? 'min-w-[1500px]' : 'min-w-[1280px]')}>
+          <div className="max-h-[calc(100vh-20rem)] min-h-[320px] overflow-auto">
+            <table className={cn('w-full border-separate border-spacing-0 text-[13px]', weekOn ? 'min-w-[1500px]' : 'min-w-[1280px]')}>
               <thead><tr>
                 {th('S.No', 'serial', 'w-14')}{th('Patient ID', undefined, 'w-[104px]')}{th('Name', 'name', 'min-w-[170px]')}{th('Address & contact', undefined, 'min-w-[210px]')}{th('Referred by')}{th('Occupation')}{th('Disorder / complaint')}{th('Registered', 'registered')}
                 {th('Billed', 'billed', 'text-right')}{th('Paid', undefined, 'text-right')}{th('Balance', 'outstanding', 'text-right')}{th('Last visit', 'latestVisit')}{th('Follow-up', 'followUp')}{th('Status')}
-                {weekOn && days.map((d, i) => <th key={d} title={fdate(d)} className="w-9 border-b border-r border-line/70 bg-sage/40 px-1 py-2 text-center text-[11.5px] font-semibold text-fg-2">{DAY[i]}<div className="text-[9.5px] font-normal text-muted">{d.slice(8)}</div></th>)}
+                {weekOn && days.map((d, i) => <th key={d} title={fdate(d)} className="sticky top-0 z-[2] w-9 border-b border-line-2 bg-[rgb(235_242_238)] px-1 py-2 text-center text-[11.5px] font-semibold text-fg-2">{DAY[i]}<div className="text-[11px] font-normal text-muted">{d.slice(8)}</div></th>)}
               </tr></thead>
               <tbody>
                 {list.data.rows.map((p) => (
-                  <tr key={p.patientId} onClick={() => nav(`/w/${ws.id}/patients/${p.patientId}`)} className={cn('cursor-pointer transition-colors hover:bg-sage/30', p.patientId === patientId && 'bg-sage/50')}>
+                  <tr key={p.patientId} onClick={() => nav(`/w/${ws.id}/patients/${p.patientId}`)} className={cn('group cursor-pointer transition-colors even:bg-surface-2/60 hover:bg-sage/40', p.patientId === patientId && '!bg-sage/60')}>
                     <td className={cn(td, 'num text-muted')}>{p.serialNo}</td>
-                    <td className={cn(td, 'whitespace-nowrap font-mono text-[12px]')}>{p.patientId}</td>
-                    <td className={cn(td, 'font-medium')}><Link to={`/w/${ws.id}/patients/${p.patientId}`} onClick={(e) => e.stopPropagation()} className="text-fg hover:underline">{p.name}</Link>{(p.age || p.sex) && <div className="text-[12px] font-normal text-muted">{[p.age, p.sex].filter(Boolean).join(' · ')}</div>}</td>
-                    <td className={cn(td, 'max-w-[220px]')}><div className="truncate">{p.address || '—'}</div><div className="text-[12px] text-muted">{p.phone || '—'}</div></td>
+                    <td className={cn(td, 'whitespace-nowrap font-mono text-[12px] text-fg-2')}>{p.patientId}</td>
+                    <td className={cn(td, 'font-medium')}>
+                      <div className="flex items-center gap-2.5"><Avatar text={initials(p.name)} size={30} tone={p.status === 'Active' ? 'blue' : 'neutral'} />
+                        <div className="min-w-0"><Link to={`/w/${ws.id}/patients/${p.patientId}`} onClick={(e) => e.stopPropagation()} className="block truncate text-fg group-hover:text-blue-bright hover:underline">{p.name}</Link>{(p.age || p.sex) && <div className="text-[12px] font-normal text-muted">{[p.age, p.sex].filter(Boolean).join(' · ')}</div>}</div></div>
+                    </td>
+                    <td className={cn(td, 'max-w-[220px]')}><div className="truncate">{p.address || '—'}</div><div className="num text-[12px] text-muted">{p.phone || '—'}</div></td>
                     <td className={cn(td, 'max-w-[140px] truncate')}>{p.referredBy || '—'}</td>
                     <td className={cn(td, 'max-w-[130px] truncate')}>{p.occupation || '—'}</td>
                     <td className={cn(td, 'max-w-[220px]')}><div className="line-clamp-2">{p.mainComplaint || '—'}</div></td>
                     <td className={cn(td, 'whitespace-nowrap')}>{fdate(p.registeredOn)}</td>
                     <td className={cn(td, 'num whitespace-nowrap text-right')}>{rs(p.billedPaise)}</td>
                     <td className={cn(td, 'num whitespace-nowrap text-right')}>{rs(p.paidPaise)}</td>
-                    <td className={cn(td, 'num whitespace-nowrap text-right font-medium', p.outstandingPaise > 0 && 'text-bad')}>{rs(p.outstandingPaise)}</td>
+                    <td className={cn(td, 'num whitespace-nowrap text-right font-medium', p.outstandingPaise > 0 ? 'text-bad' : 'text-muted')}>{rs(p.outstandingPaise)}</td>
                     <td className={cn(td, 'whitespace-nowrap')}>{fdate(p.latestVisit)}</td>
                     <td className={cn(td, 'whitespace-nowrap', p.followUpOn && p.followUpOn <= today && p.status === 'Active' && 'font-medium text-warn')}>{fdate(p.followUpOn)}</td>
                     <td className={td}><Badge tone={p.status === 'Active' ? 'green' : 'neutral'}>{p.status}</Badge></td>
@@ -101,9 +150,9 @@ export default function Register() {
                   </tr>
                 ))}
               </tbody>
-              <tfoot><tr className="bg-sage/30 font-semibold">
-                <td className="px-2.5 py-2" colSpan={8}>Totals for {list.data.total} patient{list.data.total === 1 ? '' : 's'} in this view</td>
-                <td className="num px-2.5 py-2 text-right">{rs(list.data.totals.billedPaise)}</td><td className="num px-2.5 py-2 text-right">{rs(list.data.totals.paidPaise)}</td><td className="num px-2.5 py-2 text-right">{rs(list.data.totals.outstandingPaise)}</td><td colSpan={weekOn ? 10 : 3} />
+              <tfoot><tr className="font-semibold [&>td]:sticky [&>td]:bottom-0 [&>td]:z-[2] [&>td]:border-t [&>td]:border-line-2 [&>td]:bg-[rgb(235_242_238)]">
+                <td className="px-3 py-2.5" colSpan={8}>Totals for {list.data.total} patient{list.data.total === 1 ? '' : 's'} in this view</td>
+                <td className="num px-3 py-2.5 text-right">{rs(list.data.totals.billedPaise)}</td><td className="num px-3 py-2.5 text-right">{rs(list.data.totals.paidPaise)}</td><td className="num px-3 py-2.5 text-right">{rs(list.data.totals.outstandingPaise)}</td><td colSpan={weekOn ? 10 : 3} />
               </tr></tfoot>
             </table>
           </div>
@@ -119,7 +168,8 @@ export default function Register() {
       <PatientForm open={creating} onClose={() => setCreating(false)} onSaved={(p) => { setCreating(false); nav(`/w/${ws.id}/patients/${p.patientId}`); }} />
       <Drawer open={!!patientId} onClose={() => nav(`/w/${ws.id}/patients`)} title="Patient record" width={720}>{patientId && <Profile id={patientId} />}</Drawer>
     </Page>
-  );
+    {printData && <RegisterPrint rows={printData.rows} totals={printData.totals} days={weekOn ? days : null} summary={filterSummary} />}
+  </>);
 }
 
 // ---------------------------------------------------------------- add / edit
@@ -191,7 +241,7 @@ function Profile({ id }: { id: string }) {
   if (q.isLoading) return <div className="p-5"><SkeletonRows rows={6} /></div>;
   if (q.error || !q.data) return <ErrorState error={q.error || new Error('Not found')} retry={() => q.refetch()} />;
   const { patient: p, prescriptions, invoices, payments, visits } = q.data;
-  const row = (k: string, v: string) => <div><dt className="text-[11.5px] uppercase tracking-wide text-muted">{k}</dt><dd className="mt-0.5 text-[13.5px]">{v || '—'}</dd></div>;
+  const row = (k: string, v: string) => <div><dt className="text-[12.5px] text-muted">{k}</dt><dd className="mt-0.5 text-[13.5px]">{v || '—'}</dd></div>;
   return (
     <div className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -199,7 +249,7 @@ function Profile({ id }: { id: string }) {
         <div className="flex gap-2"><Button size="sm" onClick={() => setEditing(true)}>Edit details</Button><Link to={`/w/${ws.id}/prescriptions/new?patient=${p.patientId}`}><Button size="sm" variant="primary">New prescription</Button></Link><Link to={`/w/${ws.id}/invoices/new?patient=${p.patientId}`}><Button size="sm" variant="primary">New invoice</Button></Link></div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2.5">
-        {([['Billed', p.billedPaise, ''], ['Paid', p.paidPaise, ''], ['Balance due', p.outstandingPaise, p.outstandingPaise > 0 ? 'text-bad' : '']] as const).map(([k, v, c]) => <Card key={k} className="px-3.5 py-3"><div className="text-[11.5px] uppercase tracking-wide text-muted">{k}</div><div className={cn('num mt-1 text-lg font-semibold', c)}>{rs(v)}</div></Card>)}
+        {([['Billed', p.billedPaise, ''], ['Paid', p.paidPaise, ''], ['Balance due', p.outstandingPaise, p.outstandingPaise > 0 ? 'text-bad' : '']] as const).map(([k, v, c]) => <Card key={k} className="px-3.5 py-3"><div className="text-[12.5px] text-muted">{k}</div><div className={cn('num mt-1 text-lg font-semibold', c)}>{rs(v)}</div></Card>)}
       </div>
       <div className="mt-5"><Segmented value={tab} onChange={setTab} options={[{ value: 'overview', label: 'Details' }, { value: 'rx', label: 'Prescriptions', count: prescriptions.length }, { value: 'billing', label: 'Invoices & payments', count: invoices.length }, { value: 'visits', label: 'Attendance', count: visits.length }]} /></div>
       <div className="mt-4">

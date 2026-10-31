@@ -8,7 +8,7 @@ import type { Prescription, PatientProfile, RxImage } from '@core/clinical';
 import { api, apiUpload, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { Page } from '../components/layout/Shell';
-import { Badge, Button, Card, CardHeader, Input, Textarea } from '../components/ui/primitives';
+import { Badge, Button, Card, CardHeader, Input, Select, Textarea } from '../components/ui/primitives';
 import { EmptyState, ErrorState, SkeletonRows, useToast } from '../components/ui/feedback';
 import { Field, PatientPicker, errText, fdate, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
 import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
@@ -50,7 +50,7 @@ function List() {
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="No prescriptions yet" body={q ? 'Try a different search.' : 'Create the first treatment sheet from here or from a patient’s record.'} /> : (
           <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-[13px]">
-            <thead><tr className="border-b border-line bg-sage/40 text-[11.5px] uppercase tracking-wide text-fg-2"><th className="px-4 py-2.5 font-semibold">Rx</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 font-semibold">Diagnosis</th><th className="px-3 py-2.5 font-semibold">Physiotherapist</th><th className="px-3 py-2.5 font-semibold">Photos</th></tr></thead>
+            <thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 font-semibold">Rx</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 font-semibold">Diagnosis</th><th className="px-3 py-2.5 font-semibold">Physiotherapist</th><th className="px-3 py-2.5 font-semibold">Photos</th></tr></thead>
             <tbody>{list.data.map((r) => (
               <tr key={r.rxId} onClick={() => nav(`/w/${ws.id}/prescriptions/${r.rxId}`)} className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-sage/30">
                 <td className="px-4 py-2.5 font-mono text-[12px]">{r.rxId}</td><td className="px-3 py-2.5 whitespace-nowrap">{fdate(r.rxDate)}</td>
@@ -153,7 +153,7 @@ function Editor({ rxId }: { rxId: string }) {
   return (
     <Page title={isNew ? 'New prescription' : `Prescription ${rxId}`} subtitle={isNew ? 'Treatment sheet' : `Version ${version ?? ''} · last saved ${saved.data?.createdAt ? new Date(saved.data.createdAt).toLocaleString('en-IN', { timeZone: ws.timezone, dateStyle: 'medium', timeStyle: 'short' }) : ''} by ${saved.data?.createdBy || '—'}`}
       actions={<><Link to={`/w/${ws.id}/prescriptions`}><Button variant="ghost">Back to list</Button></Link>
-        <Button icon={<Printer className="h-4 w-4" />} disabled={!canPrint} title={canPrint ? undefined : isNew ? 'Save the prescription first' : 'Save your changes first so the printout matches the saved record'} onClick={() => window.open(`/w/${ws.id}/print/prescription/${rxId}`, '_blank', 'noopener')}>Print Prescription</Button>
+        <Button icon={<Printer className="h-4 w-4" />} disabled={!canPrint} title={canPrint ? undefined : isNew ? 'Save the prescription first' : 'Save your changes first so the printout matches the saved record'} onClick={() => nav(`/w/${ws.id}/print/prescription/${rxId}?auto=1`)}>Print Prescription</Button>
         <Button variant="primary" loading={save.isPending} disabled={!dirty || !f.patient} onClick={() => save.mutate()}>{isNew ? 'Save prescription' : 'Save changes'}</Button></>}>
       {conflict && <div role="alert" className="mb-4 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px]">Someone else saved a newer version of this prescription. <button className="font-medium underline" onClick={() => { loaded.current = ''; qc.invalidateQueries({ queryKey: ['rx', ws.id, rxId] }).then(() => saved.refetch()); }}>Reload it</button> and apply your edit again (what you typed here will be replaced).</div>}
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
@@ -164,7 +164,15 @@ function Editor({ rxId }: { rxId: string }) {
             </Field>
             {info && <div className="sm:col-span-2 -mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-fg-2"><span>Patient ID: <b className="font-medium text-fg">{info.patientId}</b></span>{info.age && <span>Age: {info.age}</span>}{info.sex && <span>Sex: {info.sex}</span>}{info.phone && <span>{info.phone}</span>}</div>}
             <Field label="Date"><Input type="date" value={f.rxDate} onChange={(e) => set('rxDate', e.target.value)} /></Field>
-            <Field label="Treating physiotherapist"><Input list="physios" value={me.user.clinician || f.treatingPhysio} onChange={(e) => set('treatingPhysio', e.target.value)} maxLength={120} readOnly={!!me.user.clinician} title={me.user.clinician ? 'Your name goes on every prescription you write' : undefined} /></Field>
+            <Field label="Treating physiotherapist" required={!me.user.clinician && physios.length > 0}>
+              {me.user.clinician || !physios.length
+                ? <Input list="physios" value={me.user.clinician || f.treatingPhysio} onChange={(e) => set('treatingPhysio', e.target.value)} maxLength={120} readOnly={!!me.user.clinician} title={me.user.clinician ? 'Your name goes on every prescription you write' : undefined} />
+                : <Select value={f.treatingPhysio} onChange={(e) => set('treatingPhysio', e.target.value)}>
+                    <option value="">Choose the doctor</option>
+                    {physios.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    {f.treatingPhysio && !physios.some((c) => c.name === f.treatingPhysio) && <option value={f.treatingPhysio}>{f.treatingPhysio} (not in the clinic list)</option>}
+                  </Select>}
+            </Field>
             <datalist id="physios">{physios.map((c) => <option key={c.name} value={c.name} />)}</datalist>
             <Field label="Blood pressure"><Input value={f.bp} onChange={(e) => set('bp', e.target.value)} placeholder="e.g. 120/80" maxLength={40} /></Field>
             <Field label="Other vitals"><Input value={f.vitals} onChange={(e) => set('vitals', e.target.value)} maxLength={300} /></Field>

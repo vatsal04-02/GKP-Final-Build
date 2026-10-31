@@ -4,7 +4,7 @@ export type ColType = 'Text' | 'Int' | 'Bool' | 'Date' | 'DateTime' | 'Attachmen
 const STAMP: Array<[string, ColType]> = [['Created_At', 'DateTime'], ['Created_By', 'Text']];
 export const RECORD_COLUMNS: Record<(typeof RT)[keyof typeof RT], Array<[string, ColType]>> = {
   Patients: [['Patient_ID', 'Text'], ['Serial_No', 'Int'], ['Name', 'Text'], ['Phone', 'Text'], ['Address', 'Text'], ['Age', 'Text'], ['Sex', ['Male', 'Female', 'Other']], ['Referred_By', 'Text'], ['Occupation', 'Text'],
-    ['Main_Complaint', 'Text'], ['Registered_On', 'Date'], ['Status', ['Active', 'Completed', 'Inactive']], ['Follow_Up_On', 'Date'], ['Source_Lead_ID', 'Text'], ['Notes', 'Text'], ...STAMP],
+    ['Main_Complaint', 'Text'], ['Registered_On', 'Date'], ['Status', ['Active', 'Completed', 'Inactive']], ['Follow_Up_On', 'Date'], ['Followup_Reminded_For', 'Date'], ['Source_Lead_ID', 'Text'], ['Notes', 'Text'], ...STAMP],
   Prescriptions: [['Rx_ID', 'Text'], ['Version', 'Int'], ['Patient_ID', 'Text'], ['Rx_Date', 'Date'], ['Treating_Physio', 'Text'], ['BP', 'Text'], ['Vitals', 'Text'], ['History', 'Text'], ['Examination', 'Text'],
     ['Diagnosis', 'Text'], ['Treatment_Plan', 'Text'], ['Exercises', 'Text'], ['Advice', 'Text'], ['Follow_Up_On', 'Date'], ...STAMP],
   Rx_Images: [['Image_ID', 'Text'], ['Rx_ID', 'Text'], ['Patient_ID', 'Text'], ['File', 'Attachments'], ['Mime', 'Text'], ['Bytes', 'Int'], ['Caption', 'Text'], ['Removed', 'Bool'], ...STAMP],

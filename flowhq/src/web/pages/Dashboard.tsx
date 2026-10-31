@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, Skeleton, SkeletonRows } from '../components/ui
 import { AreaChart } from '../components/data/charts';
 import { ActivityRow, MetricCard, TaskRow } from '../components/data/widgets';
 import { DoctorOverview, useHasDoctorOverview } from '../clinical/DoctorOverview';
+import { useDoctorFilter } from '../clinical/DoctorFilter';
 import { EnquiryOverview } from '../components/data/EnquiryOverview';
 
 const RANGES = [{ value: '1', label: 'Today' }, { value: '7', label: '7 days' }, { value: '30', label: '30 days' }] as const;
@@ -27,6 +28,7 @@ function firstName(name: string, role: string) {
 export default function Dashboard() {
   const { ws, me, tt, t, f, has } = useWs();
   const [days, setDays] = useState<'1' | '7' | '30'>('7');
+  const doc = useDoctorFilter();   // lives here so the greeting follows the doctor picked in the filter
   const q = useQuery({ queryKey: ['dashboard', ws.id, days], queryFn: () => api<DashboardData>(wsPath(ws.id, `/dashboard?days=${days}`)), refetchInterval: 30000 });
   const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: ws.timezone }).format(new Date()));
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -50,14 +52,14 @@ export default function Dashboard() {
   );
   return (
     <Page
-      title={`${greet}, ${firstName(me.user.name, me.user.role)}`}
+      title={`${greet}, ${firstName(doc.key || me.user.name, me.user.role)}`}
       subtitle={<span>Here is what is happening at <span className="text-fg">{ws.name}</span>.</span>}
       actions={<Segmented value={days} onChange={setDays} options={RANGES.map((r) => ({ value: r.value, label: r.label }))} />}
     >
       {q.error ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card> : (
         <div className="space-y-6">
-          {clinical && <DoctorOverview days={days} />}
-          {clinical && <h2 className="border-t border-line pt-6 text-[12px] font-semibold uppercase tracking-wide text-muted">Enquiries &amp; messages</h2>}
+          {clinical && <DoctorOverview days={days} doc={doc} />}
+          {clinical && <h2 className="border-t border-line pt-6 text-[12.5px] font-semibold text-muted">Enquiries &amp; messages</h2>}
           {clinical ? (
             <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] [&>*]:min-w-0">
               {enquiryCard ? <EnquiryOverview d={d} days={days} /> : <div />}
@@ -93,7 +95,7 @@ export default function Dashboard() {
                     <ul className="divide-y divide-line">
                       {d.upcoming.map((b) => (
                         <li key={b.id} className="flex items-center gap-3 py-2.5">
-                          <div className="w-14 shrink-0 text-center"><div className="num text-[13px] font-semibold text-fg">{time(f, b.start)}</div><div className="text-[11px] text-muted">{b.start ? weekday(f, b.start).split(',')[0].slice(0, 3) : ''}</div></div>
+                          <div className="w-14 shrink-0 text-center"><div className="num text-[13px] font-semibold text-fg">{time(f, b.start)}</div><div className="text-[12px] text-muted">{b.start ? weekday(f, b.start).split(',')[0].slice(0, 3) : ''}</div></div>
                           <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-medium">{b.contactName || t('contact.singular')}</p><p className="truncate text-[12px] text-fg-2">{b.title || t('booking.singular')}{b.owner ? ` · ${b.owner}` : ''}</p></div>
                           {b.status === 'rescheduled' && <Badge>{t('bookingStatus.rescheduled')}</Badge>}
                         </li>

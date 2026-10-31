@@ -8,6 +8,8 @@ variables `{{1}}, {{2}}, ...` **by position**, in the order below (`WA_TEMPLATES
 The template you create in WhatsApp Manager must use the **same name, the same number of variables, in the same order**,
 or Meta rejects the send (error 132000 / 132001, shown in W12's `send_error`).
 
+**Message purposes (Slice 4C, `docs/n8n-4c-changes.md`).** W12 decides what consent a send needs from its purpose: `booking_confirmation` = booking transaction (a Meta opt-in on file, an opt-out always blocks, reminder consent is NOT required); `reminder_24h`, `reminder_2h`, `followup_reminder` = reminders (a recorded `Reminder_Consent = Yes`, no opt-out); `noshow_rebook`, `followup_day2`, `outcome_check`, `review_request` = engagement (the lead's `Consent_WhatsApp`, as before); the staff-alert templates and `weekly_owner_report` go to the clinic's own phone. Free-text replies inside the 24 h window need no consent. In the table below a `booking_link` example must be a clinic-owned link (or a `https://wa.me/91...` link), never Cal.com: the 4C workflows treat a Cal.com link as "no link".
+
 Create them in **WhatsApp Manager > Message templates > Create template**:
 - Language: **English** (code `en`, W12's default). If you pick *English (US)* instead, set `w12_default_language` to `en_US`.
 - Meta decides the category on review. Utility costs less than Marketing (see the pricing notes in the build guide).
@@ -28,6 +30,7 @@ Create them in **WhatsApp Manager > Message templates > Create template**:
 | `outcome_check` | W7 (patient, after a Completed visit) | Utility (likely) | 1 name (Asha), 2 clinic_name (Demo Physio), 3 service (Knee pain physiotherapy; empty becomes "visit") |
 | `review_request` | W8 (patient, after a Completed visit) | Marketing (likely) | 1 name (Asha), 2 clinic_name (Demo Physio), 3 review_link (https://g.page/r/.../review, from Settings > review_link) |
 | `weekly_owner_report` | W9 (owner, optional) | Utility | 1 clinic_name (Demo Physio), 2 week (05 Oct 2026 to 11 Oct 2026), 3 summary (5 new leads (2 booked), 3 visits completed, 1 no-show, 2 cancelled, 2 AI hand-offs, 2 waiting for a person), 4 action (Call the 1 lead that is still New today.; empty becomes "see the full report in Grist") |
+| `followup_reminder` | W15 (patient, the day before a follow-up date) | Utility (likely) | 1 name (Asha), 2 clinic_name (Geeta Krishna Physiotherapy Centre), 3 date (15 Oct 2026), 4 booking_link (https://cal.com/..., from Settings > booking_link) |
 
 ## Suggested body texts
 
@@ -44,6 +47,9 @@ Create them in **WhatsApp Manager > Message templates > Create template**:
 - **outcome_check**: Hi {{1}}, thank you for visiting {{2}} for your {{3}}. How are you feeling now? Just reply here: better, the same or worse. If you would like another appointment, tell us and we will help.
 - **review_request**: Hi {{1}}, thank you for choosing {{2}}. If you have a minute, we would be grateful for your honest review here: {{3}} Thank you!
 - **weekly_owner_report**: Weekly report for {{1}} ({{2}}): {{3}}. Suggested next step: {{4}}. The full report is in Grist (Run_Log, W9-weekly-report).
+- **followup_reminder**: Hi {{1}}, a reminder from {{2}}: your follow-up visit is due on {{3}}. Please book or confirm your time here: {{4}} or simply reply to this message.
+  Keep it word for word: inside the 24-hour window W15 sends exactly this text as a free message (`n8n/snippets/followup-reminder.js`).
+  W12 knows this template in the deployed workflow only (`n8n/final/tools/patch-w15-followup.js` adds it there); `wa-send.js` is unchanged.
 
 Keep `outcome_check` and `review_request` word for word: when the patient wrote in the last 24 hours W7 / W8 send exactly this
 text as a free message, and W13 reads it back from the inbox ("How are you feeling now?" tells it the next message answers the

@@ -30,7 +30,7 @@ export interface Invoice {
   invoiceNo: string; patientId: string; patientName: string; date: string | null; status: 'issued' | 'void'; subtotalPaise: number; discountPaise: number; taxLabel: string; taxRateBp: number; taxPaise: number;
   totalPaise: number; paidPaise: number; balancePaise: number; paymentStatus: PaymentStatus; notes: string; voidReason: string; createdAt: string | null; createdBy: string; lines: InvoiceLine[]; payments: Payment[];
 }
-export interface InvoiceInput { patientId: string; date: string; lines: Array<{ description: string; qty: number; unitPaise: number }>; discountPaise: number; applyTax: boolean; notes: string; idemKey: string;
+export interface InvoiceInput { patientId: string; doctor?: string; date: string; lines: Array<{ description: string; qty: number; unitPaise: number }>; discountPaise: number; applyTax: boolean; notes: string; idemKey: string;
   payment?: { amountPaise: number; method: PaymentMethod; reference: string; paidOn: string } }
 
 export interface Visit { patientId: string; date: string; status: VisitStatus; notes: string }

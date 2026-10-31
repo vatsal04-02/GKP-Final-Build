@@ -15,9 +15,9 @@ export const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in cr
 
 // today's date (YYYY-MM-DD) in the workspace's time zone
 export function useToday() { const { ws } = useWs(); return new Date().toLocaleDateString('en-CA', { timeZone: ws.timezone }); }
-export function useClinic() {
-  const { ws } = useWs();
-  return useQuery({ queryKey: ['clinic', ws.id], queryFn: () => api<ClinicProfile>(wsPath(ws.id, '/clinic')), staleTime: 300000 });
+export function useClinic() {   // only for workspaces that keep clinic records
+  const { ws, has } = useWs();
+  return useQuery({ queryKey: ['clinic', ws.id], queryFn: () => api<ClinicProfile>(wsPath(ws.id, '/clinic')), staleTime: 300000, enabled: has('patients') });
 }
 export function useDebounced<T>(v: T, ms = 250): T { const [x, setX] = useState(v); useEffect(() => { const t = setTimeout(() => setX(v), ms); return () => clearTimeout(t); }, [v, ms]); return x; }
 

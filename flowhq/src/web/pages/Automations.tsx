@@ -140,7 +140,7 @@ function AutomationCard({ a }: { a: Automation }) {
           <span className="line-clamp-3 break-words"><span className="font-medium text-fg">Last error: </span>{a.lastError}</span>
         </div>
       )}
-      <div className="mt-auto flex items-center justify-between pt-4 text-[11px] text-muted">
+      <div className="mt-auto flex items-center justify-between pt-4 text-[12px] text-muted">
         <span>{a.stats.skipped7d ? `${a.stats.skipped7d} skipped by safety checks, 7d` : ' '}</span>
         <span className="font-mono" title="Implementation reference, for support">{a.backendRef}</span>
       </div>
@@ -151,7 +151,7 @@ function AutomationCard({ a }: { a: Automation }) {
 function Stat({ k, v, bad, hint }: { k: string; v: string; bad?: boolean; hint?: string }) {
   return (
     <div className="flex flex-col-reverse bg-surface px-2 py-2.5" title={hint}>
-      <dt className="mt-0.5 text-[11px] text-muted">{k}</dt>
+      <dt className="mt-0.5 text-[12px] text-muted">{k}</dt>
       <dd className={cn('num text-[16px] font-semibold', bad ? 'text-bad' : 'text-fg')}>{v}</dd>
     </div>
   );

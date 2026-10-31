@@ -15,6 +15,7 @@ const BY_ROLE = {
   'ai-provider': { httpHeaderAuth: { id: 'FhqCredAiProv001', name: 'FlowHQ AI Provider' } },
   'webhook-auth (website enquiries / Cal.com)': { httpHeaderAuth: { id: 'FhqCredW1Hook001', name: 'FlowHQ W1 Webhook Auth' } },
   'whatsapp-meta': { httpHeaderAuth: { id: 'FhqCredWhatsApp1', name: 'FlowHQ WhatsApp Cloud API' } },
+  'booking-api': { httpHeaderAuth: { id: 'FhqCredBooking01', name: 'FlowHQ Booking API' } },   // Slice 4C
   smtp: { smtp: { id: 'FhqCredSmtp00001', name: 'FlowHQ SMTP' } },
   telegram: { telegramApi: { id: 'FhqCredTelegram1', name: 'FlowHQ Telegram Alerts' } },
 };

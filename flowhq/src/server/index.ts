@@ -13,6 +13,7 @@ import { memoryGrist } from './grist';
 import { demoDocs } from './demo/fixtures';
 import { startStaffReplySimulator } from './demo/simulator';
 import { loadClinicConfig } from './clinic';
+import { TokenStore, loadTokens } from './booking/tokens';
 import { RECORD_TABLE_NAMES } from './records/schema';
 
 export function buildServer(env: NodeJS.ProcessEnv = process.env) {
@@ -35,12 +36,14 @@ export function buildServer(env: NodeJS.ProcessEnv = process.env) {
     ];
     startStaffReplySimulator(docs);
   } else {
-    adapter = createAutopilotAdapter({ gristBaseUrl: cfg.grist.baseUrl, gristApiKey: cfg.grist.apiKey, registryDocId: cfg.grist.registryDocId, leadsTable: cfg.grist.leadsTable, timezone: cfg.timezone, locale: cfg.locale, currency: cfg.currency, clinic });
+    adapter = createAutopilotAdapter({ gristBaseUrl: cfg.grist.baseUrl, gristApiKey: cfg.grist.apiKey, registryDocId: cfg.grist.registryDocId, auditOutbox: { dir: cfg.auditOutboxDir, requireVolume: cfg.auditRequireVolume, breakGlass: cfg.auditBreakGlass }, leadsTable: cfg.grist.leadsTable, timezone: cfg.timezone, locale: cfg.locale, currency: cfg.currency, clinic, allowCreate: true });
     profiles = new ProfileStore(cfg.workspacesFile, cfg.defaultIndustry);
     users = loadUsers(cfg.usersFile, cfg.usersJson);
     if (!users.length) throw new Error('No FLOW HQ users: create config/users.json (see README) or set FLOWHQ_USERS');
   }
-  const api = createApp({ adapter, profiles, users, sessionSecret: cfg.sessionSecret, secureCookies: cfg.secureCookies, demo: cfg.demo });
+  // Service tokens for the n8n booking API. Demo mode has none (the booking API stays closed there).
+  const bookingTokens = new TokenStore(cfg.demo ? [] : loadTokens(cfg.bookingTokensFile, cfg.bookingTokensJson));
+  const api = createApp({ adapter, profiles, users, sessionSecret: cfg.sessionSecret, secureCookies: cfg.secureCookies, demo: cfg.demo, bookingTokens, trustProxy: cfg.trustProxy });
   const root = new Hono();
   root.use('*', async (c, next) => {
     await next();
@@ -61,10 +64,19 @@ export function buildServer(env: NodeJS.ProcessEnv = process.env) {
     const index = readFileSync(path.join(cfg.staticDir, 'index.html'), 'utf8');
     root.get('*', (c) => c.html(index));
   }
-  return { app: root, cfg };
+  return { app: root, cfg, adapter };
 }
 
 if (process.argv[1] && /index\.(ts|js)$/.test(process.argv[1])) {
-  const { app, cfg } = buildServer();
+  const { app, cfg, adapter } = buildServer();
   serve({ fetch: app.fetch, port: cfg.port }, (i) => console.log(`FLOW HQ on http://localhost:${i.port}${cfg.demo ? ' (DEMO data)' : ''}`));
+
+  // Audit outbox: open each workspace's outbox now (not on the first booking), recover anything a crash left half-finished, and keep flushing.
+  // On a stop signal, finish and release the outbox lock so the next container starts cleanly. Demo mode has a volatile outbox and nothing to recover.
+  const started: Array<{ stop(): Promise<void> }> = [];
+  if (!cfg.demo) void (async () => {
+    try { for (const w of await adapter.listWorkspaces()) { const svc = (await adapter.workspace(w.id))?.booking?.(); if (svc) { started.push(svc); await svc.start(); } } }
+    catch (e) { console.error(`FLOW HQ: could not start the audit outbox for every workspace (${(e as Error).message})`); }
+  })();
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => { void Promise.allSettled(started.map((s) => s.stop())).finally(() => process.exit(0)); });
 }

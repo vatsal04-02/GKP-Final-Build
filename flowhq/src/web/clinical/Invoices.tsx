@@ -35,7 +35,7 @@ function List() {
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<Receipt className="h-5 w-5" />} title="No invoices found" body={q || status !== 'all' ? 'Try clearing the filters.' : 'Create the first invoice for a registered patient.'} /> : (
           <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-[13px]">
-            <thead><tr className="border-b border-line bg-sage/40 text-[11.5px] uppercase tracking-wide text-fg-2"><th className="px-4 py-2.5 font-semibold">Invoice</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 text-right font-semibold">Total</th><th className="px-3 py-2.5 text-right font-semibold">Paid</th><th className="px-3 py-2.5 text-right font-semibold">Balance</th><th className="px-3 py-2.5 font-semibold">Status</th></tr></thead>
+            <thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 font-semibold">Invoice</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 text-right font-semibold">Total</th><th className="px-3 py-2.5 text-right font-semibold">Paid</th><th className="px-3 py-2.5 text-right font-semibold">Balance</th><th className="px-3 py-2.5 font-semibold">Status</th></tr></thead>
             <tbody>{list.data.map((i) => (
               <tr key={i.invoiceNo} onClick={() => nav(`/w/${ws.id}/invoices/${i.invoiceNo}`)} className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-sage/30">
                 <td className="px-4 py-2.5 font-mono text-[12px]">{i.invoiceNo}</td><td className="whitespace-nowrap px-3 py-2.5">{fdate(i.date)}</td>
@@ -54,8 +54,11 @@ type Line = { id: number; description: string; qty: string; price: string };
 const emptyLine = (id: number): Line => ({ id, description: '', qty: '1', price: '' });
 
 function Editor() {
-  const { ws } = useWs(); const nav = useNavigate(); const qc = useQueryClient(); const toast = useToast(); const today = useToday(); const [sp] = useSearchParams();
+  const { ws, me } = useWs(); const nav = useNavigate(); const qc = useQueryClient(); const toast = useToast(); const today = useToday(); const [sp] = useSearchParams();
   const clinic = useClinic(); const tax = clinic.data?.tax || null;
+  const doctors = (clinic.data?.clinicians || []).map((c) => c.name).filter(Boolean);
+  const pickDoctor = !me.user.clinician && doctors.length > 0;   // a doctor's login bills under their own name; anyone else says whose bill it is
+  const [doctor, setDoctor] = useState('');
   const preset = sp.get('patient');
   const presetQ = useQuery({ queryKey: ['patient', ws.id, preset], queryFn: () => api<PatientProfile>(wsPath(ws.id, `/patients/${preset}`)), enabled: !!preset });
   const [patient, setPatient] = useState<{ id: string; name: string } | null>(null);
@@ -94,7 +97,7 @@ function Editor() {
 
   const save = useMutation({
     mutationFn: () => {
-      const body: InvoiceInput = { patientId: patient!.id, date, lines: calc.t.lines.map((l) => ({ description: l.description, qty: l.qty, unitPaise: l.unitPaise })), discountPaise: calc.d, applyTax: applyTax && !!tax, notes, idemKey: key.current,
+      const body: InvoiceInput = { patientId: patient!.id, date, lines: calc.t.lines.map((l) => ({ description: l.description, qty: l.qty, unitPaise: l.unitPaise })), discountPaise: calc.d, applyTax: applyTax && !!tax, notes, ...(pickDoctor ? { doctor } : {}), idemKey: key.current,
         ...(calc.pay > 0 ? { payment: { amountPaise: calc.pay, method, reference: ref, paidOn: today } } : {}) };
       return api<{ invoice: Invoice; duplicate: boolean; paymentError?: string }>(wsPath(ws.id, '/invoices'), { method: 'POST', body });
     },
@@ -108,6 +111,7 @@ function Editor() {
   const submit = () => {
     setFormErr('');
     if (!patient) { setFormErr('Choose the patient first'); return; }
+    if (pickDoctor && !doctor) { setFormErr('Choose the doctor this bill belongs to'); return; }
     if (Object.keys(calc.e).length) { setErrs(calc.e); setFormErr('Please fix the highlighted fields'); return; }
     setErrs({}); save.mutate();
   };
@@ -122,9 +126,12 @@ function Editor() {
             <Field label="Patient" required><PatientPicker value={patient} onChange={setPatient} /></Field>
             <Field label="Invoice date"><Input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></Field>
           </div>
+          {pickDoctor && (
+            <div className="mt-3.5"><Field label="Doctor" required hint="Each doctor sees only their own invoices and dues"><Select value={doctor} onChange={(e) => setDoctor(e.target.value)}><option value="">Choose the doctor</option>{doctors.map((n) => <option key={n} value={n}>{n}</option>)}</Select></Field></div>
+          )}
           <div className="mt-5">
             <div className="label mb-1.5">Services</div>
-            <div className="hidden grid-cols-[1fr_72px_120px_110px_32px] gap-2 px-0.5 pb-1 text-[11.5px] font-medium uppercase tracking-wide text-muted sm:grid"><span>Description</span><span>Qty</span><span>Unit price (₹)</span><span className="text-right">Amount</span><span /></div>
+            <div className="hidden grid-cols-[1fr_72px_120px_110px_32px] gap-2 px-0.5 pb-1 text-[12.5px] font-medium text-muted sm:grid"><span>Description</span><span>Qty</span><span>Unit price (₹)</span><span className="text-right">Amount</span><span /></div>
             <div className="space-y-2">
               {lines.map((l) => {
                 const qty = Number(l.qty); const price = parseRupees(l.price); const amt = qty >= 1 && price !== null ? qty * price : null;
@@ -177,7 +184,7 @@ function Editor() {
 
 // ---------------------------------------------------------------- one invoice: view, record payment, print, void
 function Detail({ no }: { no: string }) {
-  const { ws, isAdmin } = useWs(); const qc = useQueryClient(); const toast = useToast(); const today = useToday();
+  const { ws, isAdmin } = useWs(); const nav = useNavigate(); const qc = useQueryClient(); const toast = useToast(); const today = useToday();
   const q = useQuery({ queryKey: ['invoice', ws.id, no], queryFn: () => api<Invoice>(wsPath(ws.id, `/invoices/${no}`)) });
   const [pay, setPay] = useState(false); const [void_, setVoid] = useState<{ kind: 'invoice' | 'payment'; id: string } | null>(null);
   const refresh = () => { qc.invalidateQueries({ queryKey: ['invoice', ws.id, no] }); qc.invalidateQueries({ queryKey: ['invoices', ws.id] }); qc.invalidateQueries({ queryKey: ['patient', ws.id] }); qc.invalidateQueries({ queryKey: ['register', ws.id] }); };
@@ -187,11 +194,11 @@ function Detail({ no }: { no: string }) {
   return (
     <Page title={`Invoice ${i.invoiceNo}`} subtitle={<span className="flex flex-wrap items-center gap-2"><PaymentBadge status={i.paymentStatus} /><span>{fdate(i.date)} ·{' '}<Link className="underline" to={`/w/${ws.id}/patients/${i.patientId}`}>{i.patientName || i.patientId}</Link></span></span>}
       actions={<><Link to={`/w/${ws.id}/invoices`}><Button variant="ghost">All invoices</Button></Link>
-        <Button icon={<Printer className="h-4 w-4" />} onClick={() => window.open(`/w/${ws.id}/print/invoice/${i.invoiceNo}`, '_blank', 'noopener')}>Print invoice</Button>
+        <Button icon={<Printer className="h-4 w-4" />} onClick={() => nav(`/w/${ws.id}/print/invoice/${i.invoiceNo}?auto=1`)}>Print invoice</Button>
         {i.status === 'issued' && i.balancePaise > 0 && <Button variant="primary" onClick={() => setPay(true)}>Record payment</Button>}</>}>
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
-          <table className="w-full text-[13px]"><thead><tr className="border-b border-line bg-sage/40 text-[11.5px] uppercase tracking-wide text-fg-2"><th className="px-4 py-2.5 text-left font-semibold">Service</th><th className="px-3 py-2.5 text-right font-semibold">Qty</th><th className="px-3 py-2.5 text-right font-semibold">Unit price</th><th className="px-4 py-2.5 text-right font-semibold">Amount</th></tr></thead>
+          <table className="w-full text-[13px]"><thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 text-left font-semibold">Service</th><th className="px-3 py-2.5 text-right font-semibold">Qty</th><th className="px-3 py-2.5 text-right font-semibold">Unit price</th><th className="px-4 py-2.5 text-right font-semibold">Amount</th></tr></thead>
             <tbody>{i.lines.map((l) => <tr key={l.lineNo} className="border-b border-line/60"><td className="px-4 py-2.5">{l.description}</td><td className="num px-3 py-2.5 text-right">{l.qty}</td><td className="num px-3 py-2.5 text-right">{rs(l.unitPaise)}</td><td className="num px-4 py-2.5 text-right">{rs(l.totalPaise)}</td></tr>)}</tbody></table>
           {i.notes && <p className="border-t border-line px-4 py-3 text-[13px] text-fg-2"><b className="font-medium text-fg">Notes:</b> {i.notes}</p>}
         </Card>

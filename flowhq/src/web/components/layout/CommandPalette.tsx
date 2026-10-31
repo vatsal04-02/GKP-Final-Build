@@ -69,7 +69,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           );
         })}
       </div>
-      <div className="flex items-center gap-3 border-t border-line px-4 py-2 text-[11px] text-muted"><span><Kbd>↑</Kbd> <Kbd>↓</Kbd> move</span><span><Kbd>↵</Kbd> open</span><span className="ml-auto">Tip: press <Kbd>g</Kbd> then a letter to jump</span></div>
+      <div className="flex items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-muted"><span><Kbd>↑</Kbd> <Kbd>↓</Kbd> move</span><span><Kbd>↵</Kbd> open</span><span className="ml-auto">Tip: press <Kbd>g</Kbd> then a letter to jump</span></div>
     </Modal>
   );
 }

@@ -3,6 +3,7 @@
 //   1. apply-openrouter-config.js   OpenRouter as the one AI provider, one AI switch, credentials by role  (16 nodes)
 //   2. patch-w1-race-guard.js       W1 duplicate-lead race guard                                           (6 nodes added, 0 changed)
 //   3. patch-w12-pause-check.js     W12 pre-send Automation_Paused check for W13 patient replies           (5 nodes added, 2 changed: one flag, one result read)
+//   4. patch-w15-followup.js        W15 follow-up reminder, the day before Patients.Follow_Up_On            (21 nodes added, 2 changed: W12's template lists)
 //   node n8n/final/tools/build-selected.js <as-supplied.json> <out.json>
 'use strict';
 const fs = require('fs');
@@ -10,6 +11,7 @@ const path = require('path');
 const { apply } = require('./apply-openrouter-config');
 const race = require(path.join(__dirname, '..', '..', 'production', 'tools', 'patch-w1-race-guard.js'));
 const pause = require('./patch-w12-pause-check');
+const w15 = require('./patch-w15-followup');
 
 function build(supplied) {
   const a = apply(supplied);
@@ -19,7 +21,9 @@ function build(supplied) {
   if (moved.length || wf.nodes.length !== a.wf.nodes.length + 6) throw new Error(`race guard changed existing nodes or added the wrong number: ${moved.join(', ')}`);
   const withPause = pause.patch(wf);   // proves it adds exactly its 5 nodes and changes only the two named ones
   if (withPause.nodes.length !== wf.nodes.length + pause.ADDED.length) throw new Error('the W12 pause check added the wrong number of nodes');
-  return { wf: withPause, log: [...a.log, 'W12 pause check: 5 nodes added, 2 changed'], changed: a.changed };
+  const withW15 = w15.patch(withPause);   // proves it adds exactly its 21 nodes and changes only W12's two template lists
+  if (withW15.nodes.length !== withPause.nodes.length + w15.ADDED.length) throw new Error('W15 added the wrong number of nodes');
+  return { wf: withW15, log: [...a.log, 'W12 pause check: 5 nodes added, 2 changed', 'W15 follow-up reminder: 21 nodes added, 2 changed (template lists)'], changed: a.changed };
 }
 module.exports = { build };
 

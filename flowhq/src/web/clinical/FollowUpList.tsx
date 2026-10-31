@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, CalendarClock, CalendarCheck, CheckCircle2, Phone, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CalendarClock, CalendarCheck, CheckCircle2, X } from 'lucide-react';
 import type { DoctorSummary } from '@core/clinical';
 import { api, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
@@ -12,6 +12,8 @@ import { Badge, Button, Card, CardHeader, Input } from '../components/ui/primiti
 import { EmptyState, Skeleton, useToast } from '../components/ui/feedback';
 import { fdate } from './common';
 import { checkRescheduleDate, dueLabel, rescheduleChoices, sortFollowUps } from './dashboardLogic';
+import { WhatsAppButton } from './WhatsAppButton';
+import { followUpMessage } from './whatsapp';
 
 type Row = DoctorSummary['followUps'][number];
 
@@ -57,7 +59,7 @@ export function FollowUpList({ d, base, hasPatients, className }: { d: DoctorSum
   const overdue = rows.filter((r) => r.overdueDays > 0).length;
   return (
     <Card className={cn('fhq-rise', className)}>
-      <CardHeader title="Follow-ups to call" subtitle={d ? (rows.length ? `${overdue ? `${overdue} overdue · ` : ''}${rows.length} in the next 3 days` : 'Nothing due in the next 3 days') : ' '} icon={<CalendarCheck className="h-4 w-4" />}
+      <CardHeader title="Follow-ups to message" subtitle={d ? (rows.length ? `${overdue ? `${overdue} overdue · ` : ''}${rows.length} in the next 3 days` : 'Nothing due in the next 3 days') : ' '} icon={<CalendarCheck className="h-4 w-4" />}
         action={hasPatients ? <Link to={`${base}/patients`} className="inline-flex shrink-0 items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">Register <ArrowRight className="h-3 w-3" /></Link> : undefined} />
       <div className="px-4 pb-3 pt-1 sm:px-5">
         {!d ? <Skeleton className="h-32" /> : rows.length ? (
@@ -76,7 +78,7 @@ export function FollowUpList({ d, base, hasPatients, className }: { d: DoctorSum
                       <span className="num text-[11.5px] text-muted" title="Follow-up date">{fdate(f.followUpOn)}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {f.phone ? <a href={`tel:${f.phone}`} aria-label={`Call ${f.name}`}><Button size="sm" variant="primary" icon={<Phone className="h-3.5 w-3.5" />} tabIndex={-1}>Call</Button></a> : <span className="text-[12px] text-muted">No phone</span>}
+                      <WhatsAppButton size="sm" phone={f.phone} name={f.name} message={(clinic) => followUpMessage({ name: f.name, clinic, followUpOn: f.followUpOn, today: d.today })} />
                       <Button size="sm" variant="secondary" icon={<CalendarClock className="h-3.5 w-3.5" />} aria-expanded={open === f.patientId} onClick={() => setOpen(open === f.patientId ? null : f.patientId)}>Reschedule</Button>
                     </div>
                   </div>

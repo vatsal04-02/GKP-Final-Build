@@ -13,7 +13,9 @@ ENV NODE_ENV=production \
     FLOWHQ_STATIC_DIR=/app/flowhq/dist/web \
     FLOWHQ_SNIPPETS_DIR=/app/n8n/snippets \
     FLOWHQ_USERS_FILE=/app/flowhq/config/users.json \
-    FLOWHQ_WORKSPACES_FILE=/app/flowhq/config/workspaces.json
+    FLOWHQ_WORKSPACES_FILE=/app/flowhq/config/workspaces.json \
+    FLOWHQ_AUDIT_OUTBOX_DIR=/app/flowhq/config/audit-outbox \
+    FLOWHQ_AUDIT_REQUIRE_VOLUME=true
 WORKDIR /app/flowhq
 COPY flowhq/package.json flowhq/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force && mkdir -p config && chown node:node config

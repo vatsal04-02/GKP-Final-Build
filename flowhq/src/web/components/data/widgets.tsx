@@ -28,7 +28,7 @@ export function MetricCard({ m, spark, emphasis }: { m: MetricValue; spark?: num
         <span className={cn('flex h-7 w-7 items-center justify-center rounded-lg border transition-colors', emphasis || m.key === 'ai_handled' ? 'border-blue/30 bg-blue/10 text-blue-bright' : 'border-line bg-surface-2 text-muted group-hover:text-blue-soft')}><Icon className="h-3.5 w-3.5" /></span>
       </div>
       <div className="mt-2.5 flex items-end justify-between gap-2">
-        <div className="num text-[28px] font-semibold leading-none text-fg">{m.value === null ? '—' : <AnimatedNumber value={m.value} format={show} />}</div>
+        <div className="num-display text-[32px] font-semibold leading-none text-fg">{m.value === null ? '—' : <AnimatedNumber value={m.value} format={show} />}</div>
         {spark && <Sparkline values={spark} className="mb-0.5 opacity-80" />}
       </div>
       <div className="mt-2 flex h-4 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11.5px] text-muted">

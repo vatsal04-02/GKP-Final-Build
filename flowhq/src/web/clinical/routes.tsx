@@ -6,6 +6,7 @@ const Register = lazy(() => import('./Register'));
 const Prescriptions = lazy(() => import('./Prescriptions'));
 const Invoices = lazy(() => import('./Invoices'));
 const Attendance = lazy(() => import('./Attendance'));
+const Schedule = lazy(() => import('./Schedule'));
 const PrintPrescription = lazy(() => import('./PrintPages').then((m) => ({ default: m.PrintPrescription })));
 const PrintInvoice = lazy(() => import('./PrintPages').then((m) => ({ default: m.PrintInvoice })));
 
@@ -14,6 +15,7 @@ export const CLINICAL_PAGES: Array<{ module: ModuleKey; path: string; el: ReactE
   { module: 'prescriptions', path: 'prescriptions/:rxId?', el: <Prescriptions /> },
   { module: 'invoices', path: 'invoices/:invoiceNo?', el: <Invoices /> },
   { module: 'visits', path: 'attendance', el: <Attendance /> },
+  { module: 'schedule', path: 'schedule', el: <Schedule /> },
 ];
 // full-page views without the dashboard around them (opened in a new tab to print)
 export const PRINT_PAGES: Array<{ module: ModuleKey; path: string; el: ReactElement }> = [

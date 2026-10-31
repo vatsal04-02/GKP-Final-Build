@@ -10,6 +10,9 @@
 | `tools/remap-credentials-for-scratch.js` | TEST ONLY: re-points credentials by role to the ids `create-credentials.js` makes, so the real-n8n tests can run the workflow in a scratch n8n |
 | `tools/build-selected.js` | rebuilds the authoritative file from the as-supplied copy (OpenRouter step, then race guard, then the W12 pause check) and proves only the intended nodes differ |
 | `tools/propose-fixes.js` | legacy helper (`restoreAiEnvGate` is used by a test); on the selected file it changes nothing |
+| `workflows/FlowHQ_Clinic_Automation_production_candidate4c.json` | **Slice 4C candidate (not imported, not active).** `candidatefinal` + reminder consent / message purposes (W5, W12, W15), central booking for W13 (no direct Grist writes, no Cal.com), Cal.com links refused in W6/W15. 463 nodes. Built by `tools/build-4c.js`; details in `docs/n8n-4c-changes.md`. `candidatefinal` stays as the rollback file |
+| `tools/build-4c.js`, `tools/patch-4c-consent.js`, `tools/patch-4c-w13-booking.js`, `tools/4c/` | build the 4C candidate from `candidatefinal` (anchored, prove only the intended nodes changed, refuse to run twice, never overwrite the input; also regenerates `n8n/snippets/ai-receptionist-central.js`) |
+| `tools/diff-workflows.js` | READ-ONLY node-by-node comparison of a sanitized deployed export with a repo candidate (`docs/n8n-deployed-export-procedure.md`); refuses an active or secret-bearing file |
 | `run-tests.js` | runs the 15 simulator suites (+ mutation on the reference) against the reference and authoritative files; failures are classified as known findings or UNEXPECTED |
 | `tests/final.test.js` | checks on the selected files themselves |
 

@@ -12,5 +12,14 @@
     "role": "staff",
     "workspaces": ["your-clinic-slug"],
     "passwordHash": "REPLACE with the output of: npm run hash-password -- \"another long password\""
+  },
+  {
+    "email": "doctor@example.com",
+    "name": "Dr. Example",
+    "role": "staff",
+    "workspaces": ["your-clinic-slug"],
+    "clinician": "Dr. Example (the name on prescriptions, config/clinic.json)",
+    "doctorId": "DR-001 (the stable Doctor_ID from the Doctors table: this is what gives booking rights for that doctor only)",
+    "passwordHash": "REPLACE with the output of: npm run hash-password -- \"a third long password\""
   }
 ]

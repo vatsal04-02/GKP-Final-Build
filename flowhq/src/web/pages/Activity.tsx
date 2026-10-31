@@ -60,7 +60,7 @@ export default function ActivityPage() {
           <ol className="px-5 pb-2">
             {days.map((d) => (
               <li key={d.key}>
-                <h2 className="sticky top-0 z-[1] -mx-5 border-b border-line bg-surface/95 px-5 py-2 text-[12px] font-semibold uppercase tracking-wide text-muted backdrop-blur">{d.label}</h2>
+                <h2 className="sticky top-0 z-[1] -mx-5 border-b border-line bg-surface/95 px-5 py-2 text-[12.5px] font-semibold text-muted backdrop-blur">{d.label}</h2>
                 <div className="divide-y divide-line/50">{d.items.map((a) => <ActivityRow key={a.id} a={a} />)}</div>
               </li>
             ))}

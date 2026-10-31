@@ -30,7 +30,7 @@ function Row({ b, base, next }: { b: Booking; base: string; next: boolean }) {
     <li className="relative py-3 pl-5">
       <span aria-hidden="true" className={cn("absolute left-0 top-[18px] h-2.5 w-2.5 rounded-full border-2 bg-surface", next ? "border-accent bg-accent" : b.needsOutcome ? "border-warn" : "border-blue/50")} />
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-        <div className="num w-16 shrink-0 pt-px text-[14px] font-semibold">{time(f, b.start)}{next && <span className="mt-0.5 block text-[10.5px] font-semibold uppercase tracking-wide text-accent-strong">Next</span>}</div>
+        <div className="num w-16 shrink-0 pt-px text-[14px] font-semibold">{time(f, b.start)}{next && <span className="mt-0.5 block text-[12.5px] font-semibold text-accent-strong">Next</span>}</div>
         <div className="min-w-[9rem] flex-1">
           {b.contactId ? <Link to={`${base}/contacts/${b.contactId}`} className="block break-words text-[13.5px] font-medium leading-snug hover:text-blue-bright">{b.contactName || t('contact.singular')}</Link>
             : <span className="block break-words text-[13.5px] font-medium leading-snug">{b.contactName || t('contact.singular')}</span>}

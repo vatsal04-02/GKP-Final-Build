@@ -3,7 +3,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, CalendarCheck, CheckCircle2, ClipboardList, FileText, IndianRupee, Phone, UserCheck, UserPlus, Users, Wallet } from 'lucide-react';
+import { ArrowRight, CalendarCheck, CheckCircle2, ClipboardList, FileText, IndianRupee, UserCheck, UserPlus, Users, Wallet } from 'lucide-react';
 import type { DoctorSummary, DoctorTile, TileKey } from '@core/clinical';
 import { api, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
@@ -16,9 +16,11 @@ import type { Invoice } from '@core/clinical';
 import { FollowUpList } from './FollowUpList';
 import { TodaysAppointments } from './TodaysAppointments';
 import { QuickActions } from './QuickActions';
+import { WhatsAppButton } from './WhatsAppButton';
+import { followUpMessage } from './whatsapp';
 import { PatientsToReview } from './PatientsToReview';
 import { moneyNote, moneyState, type MoneyState } from './dashboardLogic';
-import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
+import { DoctorFilter, type DoctorFilterState } from './DoctorFilter';
 
 // true when this workspace keeps clinic records (the dashboard then leads with the doctor's view)
 export function useHasDoctorOverview() { return useWs().has('patients'); }
@@ -69,7 +71,15 @@ const PRIMARY: TileKey[] = ['seen', 'followUps', 'active', 'outstanding'];
 const money = (spec: TileSpec, tile: DoctorTile, state: MoneyState) => (spec.money ? moneyNote(tile.value, state) : null);
 
 // The four numbers that matter most. A zero in a money tile is only shown as a zero when invoices exist: otherwise it says what is missing.
-function Tile({ spec, tile, d, vs, range, i, state }: { spec: TileSpec; tile: DoctorTile; d: DoctorSummary; vs: string; range: string; i: number; state: MoneyState }) {
+// A tile that goes somewhere is a link: "#..." jumps within the dashboard, anything else opens that page.
+function Go({ to, className, children }: { to?: string; className?: string; children: ReactNode }) {
+  if (!to) return <>{children}</>;
+  const cls = cn('group block rounded-xl outline-offset-2', className);
+  return to.startsWith('#') ? <a href={to} className={cls}>{children}</a> : <Link to={to} className={cls}>{children}</Link>;
+}
+const BAR: Record<'ok' | 'warn' | 'bad', string> = { ok: 'bg-ok/70', warn: 'bg-warn/70', bad: 'bg-bad/70' };
+
+function Tile({ spec, tile, d, vs, range, i, state, to }: { spec: TileSpec; tile: DoctorTile; d: DoctorSummary; vs: string; range: string; i: number; state: MoneyState; to?: string }) {
   const note = money(spec, tile, state);
   const status = note ? undefined : spec.status(tile, d);
   const fmt = (n: number) => (spec.money ? rs(n) : String(n));
@@ -77,16 +87,18 @@ function Tile({ spec, tile, d, vs, range, i, state }: { spec: TileSpec; tile: Do
   const good = diff === null || diff === 0 || !spec.goodWhen ? null : (diff > 0) === (spec.goodWhen === 'up');
   const empty = tile.value === 0;
   return (
-    <Card className="fhq-rise p-3.5" style={delay(i)}>
+    <Go to={to}>
+    <Card hover={!!to} className="fhq-rise h-full overflow-hidden p-4" style={delay(i)}>
+      {status && <span aria-hidden="true" className={cn('absolute inset-x-0 top-0 h-[3px]', BAR[status])} />}
       <div className="flex items-start justify-between gap-2">
         <span className="text-[12.5px] font-medium text-fg-2">{spec.label}</span>
-        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-fg-2', status && CHIP[status])}>{spec.icon}</span>
+        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-fg-2 shadow-[0_1px_2px_rgb(13_64_56/0.08)] transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6', status && CHIP[status])}>{spec.icon}</span>
       </div>
       <div className="mt-2 flex min-h-[34px] flex-wrap items-end justify-between gap-x-2 gap-y-1">
         {note ? <span className="text-[14px] font-medium leading-tight text-muted">{note}</span> : empty ? (
           <span className={cn('flex items-center gap-1.5 text-[14px] font-medium leading-tight', spec.emptyTone === 'ok' ? TEXT.ok : 'text-muted')}>{spec.emptyTone === 'ok' && <CheckCircle2 className="h-4 w-4" />}{spec.empty}</span>
         ) : (
-          <span className={cn('num text-[24px] font-semibold leading-none', status ? TEXT[status] : 'text-fg')}><Count value={tile.value} format={fmt} /></span>
+          <span className={cn('num-display text-[30px] font-semibold leading-none', status ? TEXT[status] : 'text-fg')}><Count value={tile.value} format={fmt} /></span>
         )}
         {!note && <Spark values={tile.series} tone={status} />}
       </div>
@@ -94,28 +106,32 @@ function Tile({ spec, tile, d, vs, range, i, state }: { spec: TileSpec; tile: Do
         {note || diff === null ? <span>{spec.sub(range)}</span> : diff === 0 ? <><span>same as {vs}</span><span className="hidden sm:inline">· {spec.sub(range)}</span></> : (
           <><span className={cn('font-medium', good === null ? 'text-fg-2' : good ? 'text-ok' : 'text-bad')}>{diff > 0 ? '+' : '-'}{fmt(Math.abs(diff))} vs {vs}</span><span className="hidden sm:inline">· {spec.sub(range)}</span></>
         )}
+        {to && <ArrowRight aria-hidden="true" className="ml-auto h-3.5 w-3.5 -translate-x-1 text-blue-bright opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" />}
       </div>
     </Card>
+    </Go>
   );
 }
 
 // The other four, as one compact strip.
-function MiniStat({ spec, tile, vs, range, state }: { spec: TileSpec; tile: DoctorTile; vs: string; range: string; state: MoneyState }) {
+function MiniStat({ spec, tile, vs, range, state, to }: { spec: TileSpec; tile: DoctorTile; vs: string; range: string; state: MoneyState; to?: string }) {
   const note = money(spec, tile, state);
   const fmt = (n: number) => (spec.money ? rs(n) : String(n));
   const diff = tile.previous === null ? null : tile.value - tile.previous;
   const good = diff === null || diff === 0 || !spec.goodWhen ? null : (diff > 0) === (spec.goodWhen === 'up');
   return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-fg-2">{spec.icon}</span>
+    <Go to={to}>
+    <Card hover={!!to} className="flex h-full min-w-0 items-center gap-2.5 !rounded-lg px-3 py-2.5">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-fg-2 transition-transform duration-200 group-hover:scale-110">{spec.icon}</span>
       <div className="min-w-0">
         <div className="text-[11.5px] leading-tight text-fg-2">{spec.label} <span className="text-muted">· {range}</span></div>
         <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
           {note ? <span className="text-[12.5px] font-medium text-muted">{note}</span> : <span className="num text-[16px] font-semibold leading-tight">{fmt(tile.value)}</span>}
-          {!note && diff !== null && diff !== 0 && <span className={cn('text-[11px] font-medium', good === null ? 'text-fg-2' : good ? 'text-ok' : 'text-bad')} title={`compared with ${vs}`}>{diff > 0 ? '+' : '-'}{fmt(Math.abs(diff))}</span>}
+          {!note && diff !== null && diff !== 0 && <span className={cn('text-[12px] font-medium', good === null ? 'text-fg-2' : good ? 'text-ok' : 'text-bad')} title={`compared with ${vs}`}>{diff > 0 ? '+' : '-'}{fmt(Math.abs(diff))}</span>}
         </div>
       </div>
-    </div>
+    </Card>
+    </Go>
   );
 }
 
@@ -155,9 +171,10 @@ function Hero({ d, base, has }: { d: DoctorSummary; base: string; has: (m: strin
   return (
     <Card className="fhq-rise relative overflow-hidden" style={delay(0)}>
       <span className={cn('absolute inset-y-0 left-0 w-1', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/60 fhq-breathe' : 'bg-warn/60') : 'bg-ok/60')} aria-hidden="true" />
+      <span className={cn('pointer-events-none absolute -left-16 -top-16 h-48 w-72 rounded-full blur-3xl', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/[0.07]' : 'bg-warn/[0.08]') : 'bg-ok/[0.08]')} aria-hidden="true" />
       <div className="flex flex-wrap items-center justify-between gap-3 py-3 pl-5 pr-4">
         <div className="min-w-0">
-          <div className="text-[12px] font-semibold uppercase tracking-wide text-muted">{showDue ? 'Needs your call today' : 'Today so far'}</div>
+          <div className="text-[12.5px] font-semibold text-muted">{showDue ? 'Needs a message today' : 'Today so far'}</div>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             {(showDue || big > 0) ? <span className={cn('num font-display text-[34px] font-bold leading-none [font-variant-numeric:lining-nums]', showDue ? (next && next.overdueDays > 0 ? TEXT.bad : TEXT.warn) : TEXT.ok)}><Count value={big} format={showDue ? String : rs} /></span>
               : <span className="inline-flex items-center gap-2 font-display text-[24px] font-semibold text-ok"><CheckCircle2 className="h-6 w-6" />All caught up</span>}
@@ -167,7 +184,7 @@ function Hero({ d, base, has }: { d: DoctorSummary; base: string; has: (m: strin
             </span>
           </div>
         </div>
-        {showDue ? (callable ? <div className="flex flex-wrap items-center gap-2"><a href="#follow-ups" className="text-[13px] font-medium text-blue-soft hover:text-blue-bright">See the list</a><a href={`tel:${callable.phone}`} className={cta}><Phone className="h-4 w-4" />Call now</a></div>
+        {showDue ? (callable ? <div className="flex flex-wrap items-center gap-2"><a href="#follow-ups" className="text-[13px] font-medium text-blue-soft hover:text-blue-bright">See the list</a><WhatsAppButton size="lg" phone={callable.phone} name={callable.name} label="Message now" message={(clinic) => followUpMessage({ name: callable.name, clinic, followUpOn: callable.followUpOn, today: d.today })} /></div>
           : has('patients') ? <Link to={`${base}/patients`} className={cta}>View<ArrowRight className="h-4 w-4" /></Link> : null)
           : has('invoices') ? <Link to={`${base}/invoices`} className={cta}>View<ArrowRight className="h-4 w-4" /></Link> : null}
       </div>
@@ -187,7 +204,7 @@ function AttendanceBars({ data, today }: { data: DoctorSummary['attendance']; to
       <div className="flex h-[96px] items-end gap-1.5 sm:gap-2" role="img" aria-label="Patients attended per day">
         {data.map((a, i) => (
           <div key={a.date} className="group relative flex h-full min-w-0 flex-1 flex-col justify-end" title={`${fdate(a.date)}: ${a.attended} attended`}>
-            <span className="num mb-1 text-center text-[11px] text-muted opacity-0 transition-opacity group-hover:opacity-100">{a.attended}</span>
+            <span className="num mb-1 text-center text-[12px] text-muted opacity-0 transition-opacity group-hover:opacity-100">{a.attended}</span>
             <div className={cn('fhq-grow w-full rounded-t-md', a.date === today ? 'bg-blue-bright' : 'bg-blue-soft/45', a.attended === 0 && 'opacity-30')}
               style={{ height: `${Math.max(a.attended === 0 ? 2 : 6, (a.attended / top) * 100)}%`, ...delay(i) }} />
           </div>
@@ -195,7 +212,7 @@ function AttendanceBars({ data, today }: { data: DoctorSummary['attendance']; to
       </div>
       <div className="mt-2 flex gap-1.5 sm:gap-2">
         {data.map((a, i) => (
-          <span key={a.date} className={cn('relative h-4 min-w-0 flex-1 text-[11px]', a.date === today ? 'font-semibold text-fg' : 'text-muted', long && i % 5 !== 0 && a.date !== today && 'invisible')}>
+          <span key={a.date} className={cn('relative h-4 min-w-0 flex-1 text-[12px]', a.date === today ? 'font-semibold text-fg' : 'text-muted', long && i % 5 !== 0 && a.date !== today && 'invisible')}>
             <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap">{label(a.date)}</span>
           </span>
         ))}
@@ -204,9 +221,8 @@ function AttendanceBars({ data, today }: { data: DoctorSummary['attendance']; to
   );
 }
 
-export function DoctorOverview({ days }: { days: string }) {
+export function DoctorOverview({ days, doc }: { days: string; doc: DoctorFilterState }) {
   const { ws, has } = useWs();
-  const doc = useDoctorFilter();
   const q = useQuery({ queryKey: ['clinic-summary', ws.id, days, doc.key], queryFn: () => api<DoctorSummary>(wsPath(ws.id, `/clinic-summary?days=${days}${doc.qs}`)), refetchInterval: 60000 });
   // Does this view have any invoices at all? Decides whether a money zero is a real zero (same endpoint and doctor scope as the Invoices page).
   const inv = useQuery({ queryKey: ['invoices-any', ws.id, doc.key], queryFn: () => api<Invoice[]>(wsPath(ws.id, `/invoices${doc.qs ? `?${doc.qs.slice(1)}` : ''}`)), enabled: has('invoices'), staleTime: 60000 });
@@ -219,6 +235,14 @@ export function DoctorOverview({ days }: { days: string }) {
   const period = days === '1' ? 'today' : `in the last ${days} days`;
   const primary = PRIMARY.map((k) => SPECS.find((s) => s.key === k)!);
   const more = SPECS.filter((s) => !PRIMARY.includes(s.key));
+  // where each tile leads (only for modules this workspace has)
+  const dest: Partial<Record<TileKey, string>> = {
+    followUps: '#follow-ups',
+    seen: has('visits') ? `${base}/attendance` : undefined, visits: has('visits') ? `${base}/attendance` : undefined,
+    active: has('patients') ? `${base}/patients` : undefined, newPatients: has('patients') ? `${base}/patients` : undefined,
+    prescriptions: has('prescriptions') ? `${base}/prescriptions` : undefined,
+    outstanding: has('invoices') ? `${base}/invoices` : undefined, collected: has('invoices') ? `${base}/invoices` : undefined,
+  };
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -234,11 +258,11 @@ export function DoctorOverview({ days }: { days: string }) {
       <div className="space-y-3">
         <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {!d ? Array.from({ length: 4 }, (_, i) => <Card key={i} className="p-3.5"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /></Card>)
-            : primary.map((s, i) => <Tile key={s.key} spec={s} tile={d.tiles[s.key]} d={d} vs={vs} range={range} i={i + 1} state={state} />)}
+            : primary.map((s, i) => <Tile key={s.key} spec={s} tile={d.tiles[s.key]} d={d} vs={vs} range={range} i={i + 1} state={state} to={dest[s.key]} />)}
         </section>
         <section aria-label="More numbers" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {!d ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[52px] rounded-lg" />)
-            : more.map((s) => <MiniStat key={s.key} spec={s} tile={d.tiles[s.key]} vs={vs} range={range} state={state} />)}
+            : more.map((s) => <MiniStat key={s.key} spec={s} tile={d.tiles[s.key]} vs={vs} range={range} state={state} to={dest[s.key]} />)}
         </section>
       </div>
 
@@ -337,7 +361,7 @@ export function DoctorOverview({ days }: { days: string }) {
             </ul>
             <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-[13px]">
-                <thead><tr className="text-left text-[11.5px] uppercase tracking-wide text-muted"><th className="py-2 pr-3 font-medium">Doctor</th><th className="px-3 py-2 text-right font-medium">Dues</th><th className="px-3 py-2 text-right font-medium">Collected</th><th className="py-2 pl-3 text-right font-medium">Prescriptions</th></tr></thead>
+                <thead><tr className="text-left text-[12.5px] text-muted"><th className="py-2 pr-3 font-medium">Doctor</th><th className="px-3 py-2 text-right font-medium">Dues</th><th className="px-3 py-2 text-right font-medium">Collected</th><th className="py-2 pl-3 text-right font-medium">Prescriptions</th></tr></thead>
                 <tbody className="divide-y divide-line">
                   {d.byDoctor.map((r) => (
                     <tr key={r.name}>

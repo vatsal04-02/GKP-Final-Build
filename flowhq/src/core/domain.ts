@@ -16,7 +16,9 @@ export type ModuleKey =
   | 'bookings' | 'ai' | 'lead_qualification' | 'reviews' | 'follow_ups' | 'reminders' | 'reports' | 'tasks'
   | 'payments' | 'campaigns' | 'forms' | 'staff' | 'analytics'
   // clinical records (patient register, prescriptions, invoices, attendance): shown only when the clinic doc has the Clinic Records tables
-  | 'patients' | 'prescriptions' | 'invoices' | 'visits';
+  | 'patients' | 'prescriptions' | 'invoices' | 'visits'
+  // appointment booking control (calendar, appointments, doctors, the AI booking switch): shown only when the booking tables exist
+  | 'schedule';
 
 export type AutomationKey =
   | 'contact_capture' | 'inbound_messaging' | 'speed_to_lead' | 'booking_sync' | 'booking_reminders' | 'follow_ups'

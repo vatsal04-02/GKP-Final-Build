@@ -33,6 +33,9 @@ const freshGrist = (docA = {}) => new FakeGrist({
   [DOC]: {
     Settings: F.settingsRows({ TEST_MODE: 'false', owner_phone: P.OWNER, TEST_PHONE: P.TEST }),
     LEADS: [], Conversations: [], Messages: [], Appointments: [], Run_Log: [], Send_Ledger: [], Knowledge: clone(F.KNOWLEDGE),
+    // FOURC_CONSENT_YES=1 (n8n/final/run-tests.js "fourc"): every made-up phone has a recorded reminder-consent Yes, so the suites written before Slice 4C
+    // (which only give leads Consent_WhatsApp) still exercise the reminder paths of the 4C workflow. Off by default: the older candidates never read this table.
+    Reminder_Consent: process.env.FOURC_CONSENT_YES === '1' ? Object.values(P).map((phone, i) => ({ id: i + 1, fields: { Consent_ID: `RC-${i + 1}`, Phone: phone, Reminder_Consent: 'Yes', Reminder_Consent_Source: 'Told staff in person', Evidence_Ref: 'harness' } })) : [],
     ...docA,
   },
 });
@@ -65,7 +68,7 @@ const run = (wf, start, items, o = {}) => {
   const env = { ...ENV, ...(o.env || {}) };
   for (const k of o.unset || []) delete env[k];
   const grist = o.grist || freshGrist();
-  return { grist, r: simulate(wf, { start, items: items.map((j) => ({ json: j })), grist, now: o.now || DAY, workflowId: wf.id, env, meta: o.meta || fakeMeta(), openrouter: o.openrouter, email: o.email, staticData: o.staticData || {} }) };
+  return { grist, r: simulate(wf, { start, items: items.map((j) => ({ json: j })), grist, now: o.now || DAY, workflowId: wf.id, env, meta: o.meta || fakeMeta(), openrouter: o.openrouter, booking: o.booking, email: o.email, staticData: o.staticData || {} }) };
 };
 
 // a message item as the callers (W3..W13) hand it to W12
@@ -119,5 +122,5 @@ module.exports.runItem = (wf, start, item, o = {}) => {
   const env = { ...ENV, ...(o.env || {}) };
   for (const k of o.unset || []) delete env[k];
   const grist = o.grist || freshGrist();
-  return { grist, r: sim.simulate(wf, { start, items: [item], grist, now: o.now || DAY, workflowId: wf.id, env, meta: o.meta || fakeMeta(), openrouter: o.openrouter, ollama: o.ollama, email: o.email, staticData: o.staticData || {} }) };
+  return { grist, r: sim.simulate(wf, { start, items: [item], grist, now: o.now || DAY, workflowId: wf.id, env, meta: o.meta || fakeMeta(), openrouter: o.openrouter, booking: o.booking, ollama: o.ollama, email: o.email, staticData: o.staticData || {} }) };
 };

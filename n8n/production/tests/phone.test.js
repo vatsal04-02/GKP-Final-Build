@@ -41,7 +41,9 @@ test('every copy in the export is the same function and none is the old +91-only
     assert(flat(c).includes(flat(fnText)), `${node.name} does not carry the shipped normaliser`);
     assert(!c.includes('const valid = /^[6-9]\\d{9}$/.test(digits);'), `${node.name} still has the +91-only check`);
   }
-  assert.strictEqual(n, 19);   // 18 original copies + the staff-alert node of W1
+  const hasW15 = wf.nodes.some((x) => x.name === 'W15 – Plan');   // W15 (n8n/final/tools/patch-w15-followup.js): Plan and Decide send carry it too
+  const has4c = wf.nodes.some((x) => x.name === 'W12 – Reminder consent');   // Slice 4C (n8n/final/tools/patch-4c-consent.js): W12 – Consent decide and W5 – Find due carry it too
+  assert.strictEqual(n, 19 + (hasW15 ? 2 : 0) + (has4c ? 2 : 0));   // 18 original copies + the staff-alert node of W1 (+ W15's two, + 4C's two)
 });
 test('W2: Meta sends the number without "+": international senders are stored, junk is not', () => {
   const g = H.freshGrist();

@@ -22,7 +22,7 @@ test('the authoritative export is valid, inactive, has no instance id and every 
   assert.strictEqual(auth.name, 'FlowHQ Clinic Automation (production candidate)');
   assert.strictEqual(auth.active, false);
   assert(!(auth.meta && auth.meta.instanceId));
-  assert.strictEqual(auth.nodes.length, 429);
+  assert.strictEqual(auth.nodes.length, 450);
   const names = new Set(auth.nodes.map((n) => n.name));
   assert.strictEqual(names.size, auth.nodes.length, 'node names are unique');
   for (const [from, v] of Object.entries(auth.connections)) { assert(names.has(from), from); for (const o of v.main || []) for (const c of o || []) assert(names.has(c.node), `${from} -> ${c.node}`); }
@@ -59,20 +59,20 @@ test('credential audit: every credential serves exactly ONE role (website webhoo
   assert.deepStrictEqual(a.credentials.filter((c) => c.shared), []);
   const by = Object.fromEntries(a.credentials.map((c) => [c.credentialName, Object.fromEntries(Object.entries(c.roles).map(([k, v]) => [k.split(' ')[0], v.length]))]));
   assert.deepStrictEqual(by, {
-    'FlowHQ W1 Webhook Auth': { 'webhook-auth': 1 }, 'Header Auth account 2': { grist: 118 }, 'OpenRouter API': { 'ai-provider': 2 },
+    'FlowHQ W1 Webhook Auth': { 'webhook-auth': 1 }, 'Header Auth account 2': { grist: 126 }, 'OpenRouter API': { 'ai-provider': 2 },
     'WhatsApp Cloud API': { 'whatsapp-meta': 1 }, 'SMTP account': { smtp: 1 }, 'Telegram account': { telegram: 1 },
   });
   assert.deepStrictEqual(a.credentials.find((c) => c.credentialName === 'OpenRouter API').roles['ai-provider'].sort(), ['W13 – Ask Model', 'W9 – Ask Model']);
-  assert.strictEqual(a.nodes, 124);
+  assert.strictEqual(a.nodes, 132);
 });
 
-test('the as-supplied copy still has the two shared credentials, and the authoritative file is exactly build-selected (OpenRouter config, then the W1 race guard, then the W12 pause check) applied to it', () => {
+test('the as-supplied copy still has the two shared credentials, and the authoritative file is exactly build-selected (OpenRouter config, then the W1 race guard, then the W12 pause check, then W15) applied to it', () => {
   const supplied = JSON.parse(read(SUPPLIED));
   assert.deepStrictEqual(audit(supplied).credentials.filter((c) => c.shared).map((c) => c.credentialName).sort(), ['Header Auth account 2', 'OpenRouter API']);
   const { wf, changed } = build(supplied);
   assert.strictEqual(JSON.stringify(wf), JSON.stringify(auth), 'the committed authoritative file is current');
   assert.strictEqual(changed.length, 16, 'the OpenRouter step touches 16 nodes');
-  assert.strictEqual(auth.nodes.length, supplied.nodes.length + 6 + 5, 'the race guard adds exactly 6 nodes and the W12 pause check exactly 5');
+  assert.strictEqual(auth.nodes.length, supplied.nodes.length + 6 + 5 + 21, 'the race guard adds exactly 6 nodes, the W12 pause check exactly 5 and W15 exactly 21');
   assert.strictEqual(supplied.id, auth.id);
   assert.strictEqual(auth.active, false);
 });
@@ -82,7 +82,8 @@ test('the W1 race guard (and, separately, the W12 pause check) is in the selecte
   const names = new Set(supplied.nodes.map((n) => n.name));
   const added = auth.nodes.filter((n) => !names.has(n.name) && /^W1 – /.test(n.name));
   assert.strictEqual(added.length, 6);
-  assert.strictEqual(auth.nodes.filter((n) => !names.has(n.name)).length, 6 + 5, 'the only other added nodes are the 5 of the W12 pause check');
+  assert.strictEqual(auth.nodes.filter((n) => !names.has(n.name)).length, 6 + 5 + 21, 'the only other added nodes are the 5 of the W12 pause check and the 21 of W15');
+  assert.strictEqual(auth.nodes.filter((n) => !names.has(n.name) && /^W15 – /.test(n.name)).length, 21, 'W15 adds its own section');
   for (const n of added) for (const c of Object.values(n.credentials || {})) assert.strictEqual(c.name, 'Header Auth account 2', n.name);
   assert.deepStrictEqual(propose(auth).wf, auth, 'propose-fixes has nothing left to change on the selected file');
 });

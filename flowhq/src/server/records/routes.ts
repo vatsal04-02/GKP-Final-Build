@@ -19,7 +19,7 @@ const rxBody = z.object({ rxId: z.string().max(20).optional(), baseVersion: z.nu
 const paise = z.number().int().min(0).max(99_99_99_999_99);
 const paymentBody = z.object({ amountPaise: paise, method: z.enum(PAYMENT_METHODS), reference: text(120), paidOn: date });
 const invoiceBody = z.object({ patientId: z.string().min(1).max(40), date, lines: z.array(z.object({ description: text(200), qty: z.number().int(), unitPaise: paise })).max(30), discountPaise: paise, applyTax: z.boolean(), notes: text(1000),
-  idemKey: z.string().min(8).max(64), payment: paymentBody.optional() });
+  idemKey: z.string().min(8).max(64), payment: paymentBody.optional(), doctor: text(120).optional() });
 
 export function recordsRoutes() {
   const r = new Hono<E>();
@@ -42,7 +42,7 @@ export function recordsRoutes() {
   r.get('/clinic', (c) => c.json(svc(c).clinic()));
   r.get('/clinic-summary', async (c) => { const sc = scope(c); return c.json(await svc(c).doctorSummary(Number(c.req.query('days') || 7), sc, !sc.only && c.get('ctx').viewer.role === 'admin')); });
 
-  r.get('/patients', async (c) => c.json(await svc(c).listPatients({ q: c.req.query('q'), status: c.req.query('status') || undefined, followUp: c.req.query('followUp') === '1', owing: c.req.query('owing') === '1',
+  r.get('/patients', async (c) => c.json(await svc(c).listPatients({ q: c.req.query('q'), status: c.req.query('status') || undefined, followUp: c.req.query('followUp') === '1', owing: c.req.query('owing') === '1', from: c.req.query('from') || undefined, to: c.req.query('to') || undefined,
     sort: c.req.query('sort'), dir: c.req.query('dir') === 'desc' ? 'desc' : 'asc', page: Number(c.req.query('page') || 1), pageSize: Number(c.req.query('pageSize') || 50), week: c.req.query('week') }, scope(c))));
   r.get('/patients/check', async (c) => c.json({ matches: await svc(c).findDuplicates(c.req.query('name') || '', c.req.query('phone') || '', c.req.query('except') || undefined) }));
   r.post('/patients', async (c) => {
@@ -78,7 +78,11 @@ export function recordsRoutes() {
 
   r.get('/invoices', async (c) => c.json(await svc(c).listInvoices({ patientId: c.req.query('patient') || undefined, status: c.req.query('status') || undefined, q: c.req.query('q') }, scope(c))));
   r.post('/invoices', async (c) => {
-    const out = await svc(c).createInvoice(invoiceBody.parse(await c.req.json()) as InvoiceInput, who(c), doctorScope(c));
+    const body = invoiceBody.parse(await c.req.json()) as InvoiceInput;
+    // a doctor's login always raises invoices under their own name; anyone else (admin, front desk) says which doctor the bill belongs to
+    if (doctorOf(c) || !body.doctor?.trim()) delete body.doctor;
+    else { const hit = svc(c).clinic().clinicians.find((x) => x.name.trim().toLowerCase() === body.doctor!.trim().toLowerCase()); if (!hit) throw bad('unknown_doctor', 'Unknown doctor', 400); body.doctor = hit.name; }
+    const out = await svc(c).createInvoice(body, who(c), doctorScope(c));
     return c.json(out, out.duplicate ? 200 : 201);
   });
   r.get('/invoices/:no', async (c) => c.json(found(await svc(c).getInvoice(c.req.param('no'), scope(c)))));

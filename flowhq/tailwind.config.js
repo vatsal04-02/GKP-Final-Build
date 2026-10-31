@@ -13,8 +13,9 @@ export default {
         accent: { DEFAULT: v('accent'), strong: v('accent-strong') }, sage: v('sage'),
         ok: v('ok'), warn: v('warn'), bad: v('bad'),
       },
-      fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'], display: ['"Playfair Display"', 'Georgia', 'serif'], mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'] },
-      borderRadius: { xl: '12px', '2xl': '16px' },
+      // Noto Sans for text (it covers Devanagari, so Hindi patient names render in the same family), Figtree for headings and figures.
+      fontFamily: { sans: ['"Noto Sans"', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'], display: ['Figtree', '"Noto Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'], mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'] },
+      borderRadius: { lg: '8px', xl: '10px', '2xl': '14px' },
       boxShadow: {
         glow: '0 0 0 1px rgb(var(--blue) / 0.35), 0 6px 20px -8px rgb(var(--blue) / 0.35)',
         card: 'var(--shadow-card)',

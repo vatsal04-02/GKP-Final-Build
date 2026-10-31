@@ -60,7 +60,7 @@ export default function Bookings() {
           <div className="divide-y divide-line">
             {days.map((d) => (
               <section key={d.key} aria-label={d.label}>
-                <h2 className="sticky top-0 z-[1] flex items-center justify-between border-b border-line bg-surface/95 px-5 py-2 text-[12px] font-semibold uppercase tracking-wide text-muted backdrop-blur">
+                <h2 className="sticky top-0 z-[1] flex items-center justify-between border-b border-line bg-surface/95 px-5 py-2 text-[12.5px] font-semibold text-muted backdrop-blur">
                   <span>{d.label}</span><span className="num normal-case">{tt(`${d.items.length} ${d.items.length === 1 ? '{booking.singular|lower}' : '{booking.plural|lower}'}`)}</span>
                 </h2>
                 <ul className="divide-y divide-line/60">{d.items.map((b) => <BookingRow key={b.id} b={b} />)}</ul>
@@ -100,7 +100,7 @@ function BookingRow({ b }: { b: Booking }) {
         {b.automationsDone.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {b.automationsDone.map((a, i) => (
-              <span key={i} title={`${automation(a.key).name}${a.at ? ` · ${dateTime(f, a.at)}` : ''}`} className="inline-flex items-center gap-1 rounded-md border border-line bg-bg-2 px-1.5 py-0.5 text-[11px] text-fg-2"><Check className="h-3 w-3 text-blue-bright" />{a.label}</span>
+              <span key={i} title={`${automation(a.key).name}${a.at ? ` · ${dateTime(f, a.at)}` : ''}`} className="inline-flex items-center gap-1 rounded-md border border-line bg-bg-2 px-1.5 py-0.5 text-[12px] text-fg-2"><Check className="h-3 w-3 text-blue-bright" />{a.label}</span>
             ))}
           </div>
         )}

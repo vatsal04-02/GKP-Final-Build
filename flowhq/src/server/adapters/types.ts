@@ -6,8 +6,9 @@ import type {
 } from '../../core/domain';
 
 import type { RecordsService } from '../records/service';
+import type { StaffBooking } from '../booking/staff-service';
 export type Role = 'admin' | 'staff';
-export interface Viewer { email: string; name: string; role: Role; clinician?: string }   // clinician: set for a doctor's login
+export interface Viewer { email: string; name: string; role: Role; clinician?: string; doctorId?: string; grants?: string[] }   // doctorId: the stable Doctors.Doctor_ID this login is (booking rights); clinician: the name used on prescriptions   // clinician: set for a doctor's login
 export interface Ctx { viewer: Viewer; now: number }
 
 export interface BackendWorkspaceInfo {
@@ -17,6 +18,7 @@ export interface BackendWorkspaceInfo {
   locale: string;
   currency: string | null;
   channels: ChannelKey[];
+  protected?: boolean;        // the main workspace (the first one ever registered): it cannot be removed
 }
 
 export interface Supported { modules: ModuleKey[]; automations: AutomationKey[]; metrics: MetricKey[] }
@@ -53,6 +55,8 @@ export interface WorkspaceBackend {
   saveKnowledge(item: Partial<KnowledgeItem> & { id?: string }, ctx: Ctx): Promise<KnowledgeItem>;
   // Clinic records (patients, prescriptions, invoices, visits): present only when the backend has the Clinic Records tables
   records?(): RecordsService | null;
+  // Appointment booking (the one service that creates / moves / cancels appointments). Works against the clinic's Grist doc; fails closed if its tables are missing.
+  booking?(): StaffBooking | null;
   settings(ctx: Ctx): Promise<SettingsView>;
   updateSettings(values: Record<string, string>, ctx: Ctx): Promise<SettingsView>;
 }
@@ -62,5 +66,9 @@ export interface BackendAdapter {
   label: string;
   listWorkspaces(): Promise<BackendWorkspaceInfo[]>;
   workspace(id: string): Promise<WorkspaceBackend | null>;
-  health(): Promise<{ ok: boolean; detail: string }>;
+  /** Optional: create a new, separate workspace with its own empty data (admin only; the API checks that). */
+  createWorkspace?(input: { name: string }): Promise<BackendWorkspaceInfo>;
+  /** Optional: remove a workspace from FLOW HQ (admin only). Its data is kept in the backend, not erased. The main workspace refuses. */
+  deleteWorkspace?(id: string): Promise<void>;
+  health(): Promise<{ ok: boolean; detail: string; audit?: 'ok' | 'amber' | 'red' | null }>;   // audit = the worst audit-outbox state of the workspaces that have a booking service (null = none yet)
 }

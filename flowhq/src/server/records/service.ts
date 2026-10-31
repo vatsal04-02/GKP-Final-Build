@@ -95,7 +95,7 @@ export class RecordsService {
     return { fields: f };
   }
 
-  async listPatients(q: { q?: string; status?: string; followUp?: boolean; owing?: boolean; sort?: string; dir?: 'asc' | 'desc'; page?: number; pageSize?: number; week?: string }, scope?: Scope): Promise<PatientList> {
+  async listPatients(q: { q?: string; status?: string; followUp?: boolean; owing?: boolean; from?: string; to?: string; sort?: string; dir?: 'asc' | 'desc'; page?: number; pageSize?: number; week?: string }, scope?: Scope): Promise<PatientList> {
     const [pr, inv, pay, vis] = await Promise.all([this.rows(RT.patients), this.rows(RT.invoices), this.rows(RT.payments), this.rows(RT.visits)]);
     let rows = this.summarise(pr.map((r) => this.toPatient(r)).filter((p) => p.patientId), inv, pay, vis, scope);
     const term = (q.q || '').trim().toLowerCase(); const digits = term.replace(/\D/g, '');
@@ -103,6 +103,9 @@ export class RecordsService {
     if (q.status) rows = rows.filter((p) => p.status === q.status);
     if (q.followUp) { const t = this.today(); rows = rows.filter((p) => p.followUpOn && p.followUpOn <= t && p.status === 'Active'); }
     if (q.owing) rows = rows.filter((p) => p.outstandingPaise > 0);
+    // registration date range (inclusive); patients with no registration date drop out of a dated view
+    if (q.from && validDate(q.from)) rows = rows.filter((p) => !!p.registeredOn && p.registeredOn >= q.from!);
+    if (q.to && validDate(q.to)) rows = rows.filter((p) => !!p.registeredOn && p.registeredOn <= q.to!);
     const key: Record<string, (p: PatientRow) => string | number> = { serial: (p) => p.serialNo, name: (p) => p.name.toLowerCase(), registered: (p) => p.registeredOn || '', outstanding: (p) => p.outstandingPaise, latestVisit: (p) => p.latestVisit || '', followUp: (p) => p.followUpOn || '9999', billed: (p) => p.billedPaise };
     const k = key[q.sort || 'serial'] || key.serial!; const dir = q.dir === 'desc' ? -1 : 1;
     rows.sort((a, b) => { const x = k(a); const y = k(b); return (x < y ? -1 : x > y ? 1 : 0) * dir || a.serialNo - b.serialNo; });
@@ -227,6 +230,15 @@ export class RecordsService {
       await this.add(RT.prescriptions, [{ Rx_ID: rxId, Version: version, Patient_ID: input.patientId, Rx_Date: dateIn(input.rxDate || this.today()), Treating_Physio: input.treatingPhysio.trim(), BP: input.bp.trim(), Vitals: input.vitals.trim(), History: input.history,
         Examination: input.examination, Diagnosis: input.diagnosis, Treatment_Plan: input.treatmentPlan, Exercises: input.exercises, Advice: input.advice, Follow_Up_On: dateIn(input.followUpOn), Created_At: this.ts(), Created_By: a.name }]);
       await this.audit(a, version === 1 ? 'rx.create' : 'rx.update', rxId, `${input.patientId} v${version}`);   // ids only: no clinical text in the log
+      // The follow-up date the doctor writes becomes the patient's: the dashboard, the register's "Follow-up due" and the W15 reminder all
+      // read Patients.Follow_Up_On. Only when this save SETS or CHANGES it: re-saving an old prescription (a typo fix) must not drag the
+      // patient back to its old date, and a prescription without a date never clears one set elsewhere (e.g. the dashboard's Reschedule).
+      const before = version > 1 ? dateOut(all.find((r) => r.fields.Rx_ID === rxId && n(r.fields.Version) === version - 1)?.fields.Follow_Up_On) : null;
+      if (input.followUpOn && input.followUpOn !== before) {
+        const p = patients.find((r) => r.fields.Patient_ID === input.patientId)!;
+        await this.patch(RT.patients, p.id, { Follow_Up_On: dateIn(input.followUpOn) });
+        await this.audit(a, 'patient.followup', input.patientId, `follow-up ${input.followUpOn} (${rxId})`);
+      }
       return (await this.getPrescription(rxId))!;
     });
   }
@@ -325,7 +337,7 @@ export class RecordsService {
       // lines first, header last: an invoice exists only once its header is written
       await this.add(RT.invoiceLines, t.lines.map((l, i) => ({ Invoice_No: invoiceNo, Line_No: i + 1, Description: l.description, Qty: l.qty, Unit_Price_Paise: l.unitPaise, Line_Total_Paise: l.totalPaise })));
       await this.add(RT.invoices, [{ Invoice_No: invoiceNo, Patient_ID: input.patientId, Invoice_Date: dateIn(input.date), Status: 'issued', Subtotal_Paise: t.subtotalPaise, Discount_Paise: t.discountPaise, Tax_Paise: t.taxPaise, Total_Paise: t.totalPaise,
-        Tax_Label: rateBp && tax ? tax.label : '', Tax_Rate_Bp: rateBp, Notes: input.notes.trim(), Void_Reason: '', Idem_Key: input.idemKey, Created_At: this.ts(), Created_By: a.clinician || a.name }]);   // the doctor who raises an invoice owns its dues
+        Tax_Label: rateBp && tax ? tax.label : '', Tax_Rate_Bp: rateBp, Notes: input.notes.trim(), Void_Reason: '', Idem_Key: input.idemKey, Created_At: this.ts(), Created_By: a.clinician || input.doctor || a.name }]);   // the doctor who raises an invoice owns its dues
       await this.audit(a, 'invoice.create', invoiceNo, `${input.patientId} total ${t.totalPaise}p`);
       let paymentError: string | undefined;
       if (input.payment) {

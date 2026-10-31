@@ -45,7 +45,7 @@ export default function Ai() {
             <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue/20 blur-3xl" />
             <div className="relative flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-bright to-blue text-white shadow-glow"><Sparkles className="h-5 w-5" /></span>
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue text-white"><Sparkles className="h-5 w-5" /></span>
                 <div>
                   <h2 className="text-[15px] font-semibold">Mode</h2>
                   <p className="mt-0.5 max-w-xl text-[13px] text-fg-2">{d?.mode ? MODE_HELP[d.mode.value] : ' '}</p>
@@ -98,7 +98,7 @@ export default function Ai() {
               {!d ? <SkeletonRows rows={5} /> : !d.recentDecisions.length ? <EmptyState className="py-10" icon={<Sparkles className="h-5 w-5" />} title="No decisions yet" body={`They appear as soon as messages arrive with the mode set to Draft or Auto.`} /> : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-left text-[13px]">
-                    <thead><tr className="text-[11.5px] uppercase tracking-wide text-muted"><th className="px-3 py-2 font-medium">Message</th><th className="px-3 py-2 font-medium">Intent</th><th className="px-3 py-2 font-medium">Decision</th><th className="px-3 py-2 font-medium">Confidence</th><th className="px-3 py-2 font-medium">When</th></tr></thead>
+                    <thead><tr className="text-[12.5px] text-muted"><th className="px-3 py-2 font-medium">Message</th><th className="px-3 py-2 font-medium">Intent</th><th className="px-3 py-2 font-medium">Decision</th><th className="px-3 py-2 font-medium">Confidence</th><th className="px-3 py-2 font-medium">When</th></tr></thead>
                     <tbody>
                       {d.recentDecisions.map((m) => {
                         const st = STATUS_LABEL[m.ai?.status || ''] || { label: m.ai?.status || '—', tone: 'neutral' as const };

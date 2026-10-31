@@ -42,8 +42,8 @@ export default function Attendance() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] border-collapse text-[13px]">
               <thead><tr>
-                <th className="border-b border-r border-line/70 bg-sage/40 px-3 py-2 text-left text-[11.5px] font-semibold uppercase tracking-wide text-fg-2">Patient</th>
-                {data.data!.days.map((d, i) => <th key={d} className={cn('w-[84px] border-b border-r border-line/70 bg-sage/40 px-1 py-2 text-center text-[11.5px] font-semibold text-fg-2 last:border-r-0', d === today && 'text-accent-strong')}>{NAMES[i]}<div className="text-[10.5px] font-normal text-muted">{d.slice(8)}/{d.slice(5, 7)}</div></th>)}
+                <th className="border-b border-r border-line/70 bg-sage/40 px-3 py-2 text-left text-[12.5px] font-semibold text-fg-2">Patient</th>
+                {data.data!.days.map((d, i) => <th key={d} className={cn('w-[84px] border-b border-r border-line/70 bg-sage/40 px-1 py-2 text-center text-[11.5px] font-semibold text-fg-2 last:border-r-0', d === today && 'text-accent-strong')}>{NAMES[i]}<div className="text-[11.5px] font-normal text-muted">{d.slice(8)}/{d.slice(5, 7)}</div></th>)}
               </tr></thead>
               <tbody>
                 {rows.map((r) => (

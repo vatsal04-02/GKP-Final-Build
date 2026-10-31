@@ -5,6 +5,7 @@
 import type { GristRecord } from '../grist';
 import type { WorkspaceProfile } from '../profiles';
 import { clinicModules } from '../adapters/autopilot/shared';
+import { demoBookingTables } from './booking';
 
 interface Flavor {
   slug: string; name: string; doc: string; profile: WorkspaceProfile;
@@ -206,7 +207,7 @@ export function demoDocs(nowMs: number) {
     const metrics = clinicModules.cmWeeklyMetrics({ leads, appointments: appts, conversations: convs, messages: msgs, runlog: logs }, nowMs, win, { messages: 5000, runlog: 5000 });
     const rep = clinicModules.cmRenderReport(metrics, { summary: '', observations: [], recommendations: [], dropped: 0, error: 'demo data: no AI call' }, fl.name, win, !!fl.settings.review_link);
     log('W9-weekly-report', rep.text, Math.min(now - 60, win.end + 9 * H), 'ok', 'AI text not used: demo data: no AI call');
-    docs[fl.doc] = { Settings: settings, LEADS: leads, Appointments: appts, Conversations: convs, Messages: msgs, Run_Log: logs, Knowledge: knowledge, ...(fl.slug === 'demo-physio' ? clinicRecords(nowMs, fl.staff) : {}) };
+    docs[fl.doc] = { Settings: settings, LEADS: leads, Appointments: appts, Conversations: convs, Messages: msgs, Run_Log: logs, Knowledge: knowledge, ...(fl.slug === 'demo-physio' ? { ...clinicRecords(nowMs, fl.staff), ...demoBookingTables(nowMs, appts) } : {}) };
   });
   const profiles: Record<string, WorkspaceProfile> = Object.fromEntries(FLAVORS.map((f) => [f.slug, f.profile]));
   return { docs, profiles };

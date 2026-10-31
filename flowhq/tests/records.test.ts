@@ -114,6 +114,20 @@ describe('prescriptions', () => {
     expect((await svc.listPrescriptions({ patientId: 'GK-P-000001' }))).toHaveLength(1);        // the list shows the latest only
     expect((await svc.getPrescription('RX-000001'))!.versions).toEqual([1, 2]);
   });
+  it('the follow-up date the doctor writes becomes the patient\'s, only when the save sets or changes it (W15 and the dashboard read it)', async () => {
+    const { svc, docs } = setup(); await patient(svc);
+    const fu = async () => (await svc.listPatients({})).rows[0]!.followUpOn;
+    await svc.savePrescription(rx('GK-P-000001', { followUpOn: '2026-10-20' }), STAFF);
+    expect(await fu()).toBe('2026-10-20');                                       // a new prescription sets it
+    await svc.updatePatient('GK-P-000001', { followUpOn: '2026-10-25' }, STAFF);  // the dashboard's Reschedule
+    await svc.savePrescription({ ...rx('GK-P-000001', { followUpOn: '2026-10-20', diagnosis: 'typo fixed' }), rxId: 'RX-000001', baseVersion: 1 }, STAFF);
+    expect(await fu()).toBe('2026-10-25');                                       // re-saving the SAME date (a typo fix) does not undo the reschedule
+    await svc.savePrescription({ ...rx('GK-P-000001', { followUpOn: '2026-11-02' }), rxId: 'RX-000001', baseVersion: 2 }, STAFF);
+    expect(await fu()).toBe('2026-11-02');                                       // changing it on the prescription moves the patient's date
+    await svc.savePrescription(rx('GK-P-000001', { followUpOn: null }), STAFF);
+    expect(await fu()).toBe('2026-11-02');                                       // a prescription without a date never clears it
+    expect(docs.D!.Audit_Log!.filter((r) => r.fields.Action === 'patient.followup').map((r) => r.fields.Summary)).toEqual(['follow-up 2026-10-20 (RX-000001)', 'follow-up 2026-11-02 (RX-000001)']);
+  });
   it('refuses a stale edit and a move to another patient', async () => {
     const { svc } = setup(); await patient(svc); await patient(svc, 'Other Test', '9111111111');
     await svc.savePrescription(rx('GK-P-000001'), STAFF);
