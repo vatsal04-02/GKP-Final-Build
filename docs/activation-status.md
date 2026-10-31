@@ -29,8 +29,9 @@ Verified with the REAL FLOW HQ server process and a real Grist, switch OFF (`flo
 | Dr. Sandeep Tiwari (DR-002, MPT (PT)) | Evening | Mon-Sat | 16:00-20:00 |
 Sunday closed. 30-minute slots, capacity 1 per slot, AI needs 120 minutes notice, buffer 0, no closures or leave entered, both shifts enabled. (The schedule rows leave slot length and capacity blank: they inherit the clinic values above.) Edit in FLOW HQ > Schedule > Doctors & hours. **Approve or change these, then `booking_enabled` can be switched ON in Schedule (admin).**
 
-## Found in live Settings: placeholders that must be corrected before any live patient messaging
-`clinic_name = Clinic CRM Test`; `booking_link` and `review_link` = `https://example.com/...`; `owner_phone` and `staff_alert_phones` end in `9999`; `TEST_MODE = TRUE`. The AI quotes the clinic name and links, review requests use `review_link`, and staff alerts use `owner_phone`. Edit in Grist (`Settings` table) or FLOW HQ Settings.
+## Live Settings placeholders (corrected on 1 Nov 2026 from verified information; one set still open)
+Corrected: `clinic_name` = Geeta Krishna Physiotherapy Centre (registry and `flowhq/config/clinic.json`), `booking_link` = https://geetakrishnaphysiotherapy.co.in/#book (the clinic's own website booking form), `review_link` = empty (no verified Google review link exists, and review requests are not sent while it is empty). Before: `Clinic CRM Test`, `https://example.com/book`, `https://example.com/review`.
+STILL OPEN, no verified value exists: `owner_phone` and `staff_alert_phones` end in `9999` (a placeholder). With `TEST_MODE=TRUE` staff alerts go to `TEST_PHONE`, so nothing is lost today; before going live the owner must supply the real WhatsApp number(s) for alerts.
 
 ## Evidence that real AI and real WhatsApp delivery already worked (31 Oct, under V4)
 The real model (`openai/gpt-4o-mini`) held a Hinglish conversation with +919322146560 (availability, services, doctors, a booking attempt); every reply was delivered and read (Send_Ledger `read`). Under 4D this still has to be re-proved (section below).
