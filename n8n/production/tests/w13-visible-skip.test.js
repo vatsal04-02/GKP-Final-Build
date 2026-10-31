@@ -180,7 +180,9 @@ test('AI unavailable (HTTP 500, timeout): hand-off to staff with the fixed holdi
     const m = inMsg(x.g);
     assert.deepStrictEqual([m.AI_Action, m.AI_Status, m.Needs_Human, Number(m.Intent ? 1 : 0)], ['handoff', 'handed_off', true, 0], name);
     assert.match(m.AI_Reason, /could not decide/, name);
-    assert.strictEqual(x.cl.calls.length, 1, name);
+    // With the 4D retry (W13 – Ask Model Retry Check) a temporary 5xx is repeated up to 3 requests in total and a timeout once (2); without it, one call.
+    const retry = loaded.nodes.some((n) => n.name === 'W13 – Ask Model Retry Check');
+    assert.strictEqual(x.cl.calls.length, retry ? (name === 'http 500' ? 3 : 2) : 1, name);
     assert(x.meta.calls.some((c) => c.body.template && c.body.template.name === 'human_handoff_alert'), `${name}: staff alerted`);
     const patient = x.meta.calls.filter((c) => c.body.type === 'text');
     assert(patient.length <= 1 && patient.every((c) => /team/i.test(c.body.text.body)), `${name}: only the fixed holding text`);

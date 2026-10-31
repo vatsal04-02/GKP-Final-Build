@@ -56,6 +56,10 @@ const TARGETS = {
   },
 };
 
+// Slice 4D: 4C + the AI retry / backoff that the workflow deployed on the production n8n (V4) already has (n8n/final/tools/patch-4d-ai-retry.js).
+// Everything 4C expects still applies; 4d-ai-retry.test.js proves the delta (and runs the retry Code node itself).
+TARGETS.fourd = { ...TARGETS.fourc, file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4d.json'), finalSuites: [...TARGETS.fourc.finalSuites, '4d-ai-retry'] };
+
 function runTarget(name, t) {
   const file = TARGETS[name] ? t.file : path.resolve(name);
   console.log(`\n=== ${name}: ${path.relative(process.cwd(), file)}`);
@@ -84,7 +88,7 @@ function runTarget(name, t) {
   if (r.status !== 0) { console.log('  FAIL'); process.exit(1); }
 }
 const arg = process.argv[2];
-const names = arg ? [arg] : ['reference', 'authoritative', 'fourc'];
+const names = arg ? [arg] : ['reference', 'authoritative', 'fourc', 'fourd'];
 let bad = 0;
 for (const n of names) bad += runTarget(n, TARGETS[n] || { file: path.resolve(n), env: {}, known: [] });
 process.exit(bad ? 1 : 0);

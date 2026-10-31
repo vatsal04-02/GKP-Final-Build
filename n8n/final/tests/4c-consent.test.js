@@ -38,12 +38,16 @@ const unreadable = (g, table) => { const real = g.handle.bind(g); g.handle = (m,
 test('build: 13 nodes added (6 consent + 7 W13 booking), 15 changed, the 4C candidate is exactly build(candidate), and the patches refuse to run twice', () => {
   assert.strictEqual(ADDED.length, 13);
   assert.strictEqual(consentPatch.ADDED.length, 6);
-  assert.strictEqual(wf.nodes.length, base.nodes.length + 13);
+  // The 4D file is 4C + the AI retry nodes (n8n/final/tools/patch-4d-ai-retry.js): the same identity holds one layer up, and everything below is checked on the 4C part.
+  const is4d = wf.nodes.some((x) => x.name === 'W13 – Ask Model Retry Check');
+  const wf4c = is4d ? JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4c.json'), 'utf8')) : wf;
+  if (is4d) assert.strictEqual(JSON.stringify(require('../tools/patch-4d-ai-retry').patch(wf4c)), JSON.stringify(wf), 'the committed 4D candidate is exactly patch4d(4C)');
+  assert.strictEqual(wf4c.nodes.length, base.nodes.length + 13);
   for (const n of ADDED) { assert(wf.nodes.some((x) => x.name === n), `${n} missing`); assert(!base.nodes.some((x) => x.name === n), `${n} was already in the base`); }
-  assert.strictEqual(JSON.stringify(build(base)), JSON.stringify(wf), 'the committed 4C candidate is exactly build(candidate)');
-  assert.throws(() => build(wf), /already exists/);
+  assert.strictEqual(JSON.stringify(build(base)), JSON.stringify(wf4c), 'the committed 4C candidate is exactly build(candidate)');
+  assert.throws(() => build(wf4c), /already exists/);
   const was = new Map(base.nodes.map((n) => [n.name, JSON.stringify(n)]));
-  const changed = wf.nodes.filter((n) => was.has(n.name) && was.get(n.name) !== JSON.stringify(n)).map((n) => n.name).sort();
+  const changed = wf4c.nodes.filter((n) => was.has(n.name) && was.get(n.name) !== JSON.stringify(n)).map((n) => n.name).sort();
   assert.deepStrictEqual(changed, [...CHANGED].sort());
   assert.strictEqual(wf.active, false, 'the candidate is not active');
   // credentials by role: the booking API has its OWN credential and nothing else may use it; every other new HTTP node uses the Grist credential only

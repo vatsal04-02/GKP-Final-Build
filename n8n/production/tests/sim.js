@@ -169,6 +169,8 @@ function simulate(wf, opts) {
   let steps = 0;
   const $workflow = { id: opts.workflowId, name: wf.name };
   const queue = [{ name: start, inputs: items }];
+  const runCount = {};
+  result.waits = [];
 
   const accessor = (name, idx) => {
     if (!(name in runData)) throw new Error(`Node '${name}' hasn't been executed`);
@@ -181,6 +183,7 @@ function simulate(wf, opts) {
       let { name, inputs } = queue.shift();
       if (++steps > 20000) throw new Error('sim: more than 20000 node runs (endless loop?)');
       const node = byName[name];
+      const $runIndex = runCount[name] || 0; runCount[name] = $runIndex + 1;   // n8n: how many times this node has already run in this execution (loops)
       result.visited.push(name);
       const p = node.parameters || {};
       if (node.executeOnce) inputs = inputs.slice(0, 1);   // n8n setting "Execute Once": first item only
@@ -208,15 +211,20 @@ function simulate(wf, opts) {
           if (p.mode === 'runOnceForAllItems' || p.mode === undefined) {   // n8n's default mode is "all items"
             const $input = { all: () => inputs, first: () => inputs[0] };
             const first = inputs[0] ? inputs[0].json : undefined;           // n8n: $json = the first item here
-            const r = new Function('$', '$input', '$json', '$getWorkflowStaticData', '$env', p.jsCode)((n) => accessor(n, 0), $input, first, staticFn, opts.env || {});
+            const r = new Function('$', '$input', '$json', '$getWorkflowStaticData', '$env', '$runIndex', p.jsCode)((n) => accessor(n, 0), $input, first, staticFn, opts.env || {}, $runIndex);
             outputs = [Array.isArray(r) ? r : r ? [r] : []];
           } else {
             outputs = [inputs.map((it, i) => {
-              const r = new Function('$json', '$', '$getWorkflowStaticData', '$env', p.jsCode)(it.json, (n) => accessor(n, i), staticFn, opts.env || {});
+              const r = new Function('$json', '$', '$getWorkflowStaticData', '$env', '$runIndex', p.jsCode)(it.json, (n) => accessor(n, i), staticFn, opts.env || {}, $runIndex);
               if (!r || !r.json) throw new Error(`Code node ${name} did not return {json}`);
               return r;
             })];
           }
+          break;
+        }
+        case 'n8n-nodes-base.wait': {   // a Wait node passes its items on unchanged after the delay; the simulator records the delay and does not sleep
+          inputs.forEach((it, i) => result.waits.push({ node: name, seconds: Number(resolve(p.amount, ctxFor(it, i))) }));
+          outputs = [inputs];
           break;
         }
         case 'n8n-nodes-base.if': {
@@ -269,9 +277,10 @@ function simulate(wf, opts) {
                 if (!opts.openrouter) throw new Error('sim: no fake OpenRouter (opts.openrouter)');
                 const headers = {};
                 if (p.sendHeaders) for (const hd of p.headerParameters.parameters) headers[hd.name] = resolve(hd.value, ctx);
-                const r = opts.openrouter(method, url, headers, body);   // { status, body } or throws (timeout / network)
+                const r = opts.openrouter(method, url, headers, body);   // { status, body, headers? } or throws (timeout / network)
                 if (r.status >= 400 && !resp.neverError) throw new Error(`Request failed with status code ${r.status}`);
-                return { json: r.body };
+                // "Include response headers and status" (fullResponse), as n8n returns it; the fake may supply headers (e.g. Retry-After)
+                return { json: resp.fullResponse ? { statusCode: r.status, statusMessage: '', headers: r.headers || {}, body: r.body } : r.body };
               }
               // Slice 4C: the FLOW HQ booking API (opts.booking(method, url, headers, body) -> { status, body } or throws). ONLY its own credential may call it, and it may call nothing else.
               if (/\/api\/booking\//.test(String(url))) {

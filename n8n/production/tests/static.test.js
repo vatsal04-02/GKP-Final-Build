@@ -111,7 +111,8 @@ test('external hosts appear only as configurable defaults: no literal URL in an 
 });
 
 test('the AI provider is reached only by W13 – Ask Model and W9 – Ask Model, and both are behind the external-AI gate', () => {
-  const ai = real.filter((n) => /Ask Model/.test(n.name));
+  // the HTTP nodes that call the provider (4D adds a Code, an IF and a Wait node around W13 – Ask Model that call nothing)
+  const ai = real.filter((n) => /Ask Model/.test(n.name) && n.type === 'n8n-nodes-base.httpRequest');
   assert.deepStrictEqual(ai.map((n) => n.name).sort(), ['W13 – Ask Model', 'W9 – Ask Model']);
   for (const n of ai) assert(!/allowUnauthorizedCerts/.test(JSON.stringify(n.parameters)));
   assert(byName['W9 – External AI?']);
