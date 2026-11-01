@@ -17,6 +17,8 @@ export type ModuleKey =
   | 'payments' | 'campaigns' | 'forms' | 'staff' | 'analytics'
   // clinical records (patient register, prescriptions, invoices, attendance): shown only when the clinic doc has the Clinic Records tables
   | 'patients' | 'prescriptions' | 'invoices' | 'visits'
+  // the clinic's own people (not patients): needs the optional Staff_Attendance table
+  | 'staff_attendance'
   // appointment booking control (calendar, appointments, doctors, the AI booking switch): shown only when the booking tables exist
   | 'schedule';
 

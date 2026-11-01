@@ -329,6 +329,13 @@ mistaken for a registered patient. No n8n workflow reads or writes these tables,
 3. Edit `config/clinic.json`: name, address, clinicians with registration numbers, timings. `"tax": null` means **no tax is ever added**; set `{ "label": "GST", "ratePercent": 5 }` only with the clinic's real rate. In Docker the file is mounted read-only (`deploy/docker-compose.flowhq.yml`); other setups use `FLOWHQ_CLINIC_FILE`.
 4. The pages appear within a minute of the tables existing. Nothing else is configured.
 
+**Staff attendance (optional fifth page).** The clinic's own people (not patients): **Staff attendance** in the Care menu. The same `provision-records` command creates one extra table, `Staff_Attendance`
+(additive; a clinic that has not created it keeps all four pages above, and only this page stays hidden). It then appears within a minute, with no restart.
+- Who is listed: every FLOW HQ login that can open the workspace, plus each doctor in `config/clinic.json` who has no login of their own. A person's key is their login email (or `doctor:<name>`), so renaming a person in `config/clinic.json` that has no login starts a new row; the old marks stay in Grist and show as "No longer on the team list" for the weeks they cover.
+- Each day: Present, Absent, Half day or Leave, with optional check-in / check-out (`HH:MM`, clinic time) and a note. **Check in now / Check out now** stamp the real clinic time for today; pressing check-in twice changes nothing. A day cannot be marked in the future, check-out must be later than check-in, and times are only kept for Present / Half day.
+- One row per person per day (marking again updates it); clearing a mark empties its status and never deletes the row. Every change is also written to `Audit_Log` (`staffatt.set` / `staffatt.checkin` / `staffatt.checkout`, with the date, status and times but never the free-text note). The Month summary shows days per status and hours worked (only days with both a check-in and a later check-out).
+- Admin and front desk can mark anyone; a doctor's own login (one with `clinician` set) sees and marks only itself. Like the other records tables, make `Staff_Attendance` read-only for front desk in Grist so changes go through FLOW HQ.
+
 **Rules the app enforces (on the server, not just in the screen)**
 - Ids are stable text (`GK-P-000001`, `RX-000001`, `GK-2026-000001`, `PAY-000001`), generated under a lock and checked after the write. Row numbers are never ids.
 - Money is integer paise. `Total = Subtotal − Discount + Tax`; `Balance = Total − payments`. Overpayment, negative or fractional quantities, and a discount above the subtotal are refused.

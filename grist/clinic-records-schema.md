@@ -118,6 +118,20 @@ One row per patient per day (marking the same day again updates it). Feeds the M
 | Recorded_By | Text | |
 | Created_At | DateTime | |
 
+## Staff_Attendance
+**Optional table** (the clinical pages work without it; the "Staff attendance" page appears only once it exists). One row per staff member per day: marking the same day again updates the row, and every change is also written to `Audit_Log` (`staffatt.set`, `staffatt.checkin`, `staffatt.checkout`), so the history of who changed what is kept. Rows are never deleted: clearing a mark empties `Status`.
+| Column | Type | Notes |
+|---|---|---|
+| Staff_Key | Text | stable key of the person: the FLOW HQ login's email (lower case), or `doctor:<name>` for a doctor in `config/clinic.json` who has no login |
+| Staff_Name | Text | the name as shown when the mark was made |
+| Att_Date | Date | clinic-local day; never in the future |
+| Status | Choice | Present, Absent, Half day, Leave (empty = cleared) |
+| Check_In | Text | `HH:MM` 24-hour clinic-local time, only with Present / Half day |
+| Check_Out | Text | `HH:MM`, later than `Check_In` |
+| Notes | Text | up to 500 characters |
+| Recorded_By | Text | login email of who made the last change |
+| Created_At, Updated_At | DateTime | |
+
 ## Audit_Log
 Who did what, when. Never contains clinical text or image data.
 | Column | Type | Notes |
@@ -131,7 +145,7 @@ Who did what, when. Never contains clinical text or image data.
 ## Access (set in Grist by the agency): verified recipe
 FLOW HQ writes with the API key of its own Grist user (the "service user", an **editor** of the clinic doc, read access to the registry doc). Left alone, every
 front-desk **editor** can create, change and delete rows in these tables directly in Grist (verified: before the rules below, an editor's write succeeded).
-So, in the clinic doc: **Access Rules** > add a table rule for each of the 8 tables above, with these two rules **in this order**:
+So, in the clinic doc: **Access Rules** > add a table rule for each of the 8 required tables above (and for `Staff_Attendance` once you have created it), with these two rules **in this order**:
 
 | # | Condition (Advanced) | Permissions |
 |---|---|---|

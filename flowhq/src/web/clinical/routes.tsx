@@ -6,6 +6,7 @@ const Register = lazy(() => import('./Register'));
 const Prescriptions = lazy(() => import('./Prescriptions'));
 const Invoices = lazy(() => import('./Invoices'));
 const Attendance = lazy(() => import('./Attendance'));
+const StaffAttendance = lazy(() => import('./StaffAttendance'));
 const Schedule = lazy(() => import('./Schedule'));
 const PaymentManagement = lazy(() => import('./PaymentManagement'));
 const PrintPrescription = lazy(() => import('./PrintPages').then((m) => ({ default: m.PrintPrescription })));
@@ -16,6 +17,7 @@ export const CLINICAL_PAGES: Array<{ module: ModuleKey; path: string; el: ReactE
   { module: 'prescriptions', path: 'prescriptions/:rxId?', el: <Prescriptions /> },
   { module: 'invoices', path: 'invoices/:invoiceNo?', el: <Invoices /> },
   { module: 'visits', path: 'attendance', el: <Attendance /> },
+  { module: 'staff_attendance', path: 'staff-attendance', el: <StaffAttendance /> },
   { module: 'schedule', path: 'schedule', el: <Schedule /> },
   { module: 'payments', path: 'payments', el: <PaymentManagement /> },
 ];

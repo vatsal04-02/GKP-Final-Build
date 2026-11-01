@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { GristClient, memoryGrist, type GristRecord } from '../src/server/grist';
 import { RecordsService, sniffImage, type Actor, type ClinicConfig } from '../src/server/records/service';
-import { RECORD_COLUMNS, RECORD_TABLE_NAMES, colNames } from '../src/server/records/schema';
+import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, colNames } from '../src/server/records/schema';
 import type { InvoiceInput, PrescriptionInput } from '../src/core/clinical';
 
 const NOW = Date.UTC(2026, 9, 7, 6, 30);          // 2026-10-07 12:00 IST (a Wednesday)
@@ -14,8 +14,8 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]);
 
 function setup(opts: { tax?: ClinicConfig['tax']; failOn?: (m: string, t: string) => boolean; now?: () => number } = {}) {
-  const docs: Record<string, Record<string, GristRecord[]>> = { D: Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, [] as GristRecord[]])) };
-  const columns = Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)]));
+  const docs: Record<string, Record<string, GristRecord[]>> = { D: Object.fromEntries([...RECORD_TABLE_NAMES, STAFF_ATT].map((t) => [t, [] as GristRecord[]])) };
+  const columns = { ...Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)])), [STAFF_ATT]: STAFF_COLUMNS[STAFF_ATT].map(([n]) => n) };
   const mem = memoryGrist(docs, { columns, failOn: opts.failOn });
   const svc = new RecordsService(new GristClient('http://memory', '', mem), 'D', { tz: 'Asia/Kolkata', clinic: () => ({ ...CLINIC, tax: opts.tax ?? null }), now: opts.now || (() => NOW) });
   return { svc, docs, mem };
@@ -34,6 +34,13 @@ describe('schema doc and code agree', () => {
       for (const c of colNames(t)) expect(section!, `${t}.${c}`).toMatch(new RegExp(`\\b${c}\\b`));
     }
     expect(Object.keys(RECORD_COLUMNS).sort()).toEqual([...RECORD_TABLE_NAMES].sort());
+  });
+  it('the OPTIONAL Staff_Attendance table is documented too, and is deliberately not one of the required tables', () => {
+    const section = md.split(/^## /m).find((x) => x.startsWith(STAFF_ATT + '\n'));
+    expect(section, 'Staff_Attendance in the doc').toBeTruthy();
+    for (const [c] of STAFF_COLUMNS[STAFF_ATT]) expect(section!, `${STAFF_ATT}.${c}`).toMatch(new RegExp(`\\b${c}\\b`));
+    expect((RECORD_TABLE_NAMES as string[]).includes(STAFF_ATT)).toBe(false);   // otherwise every clinical page would vanish in a clinic that has not created it
+    expect(Object.keys(ALL_RECORD_COLUMNS).sort()).toEqual([...RECORD_TABLE_NAMES, STAFF_ATT].sort());
   });
 });
 
@@ -273,6 +280,128 @@ describe('visits and attendance', () => {
     const { svc } = setup(); await patient(svc);
     expect(await code(svc.setVisit({ patientId: 'GK-P-000001', date: '2026-10-08', status: 'Attended' }, STAFF))).toBe('future_date');
     expect(await code(svc.setVisit({ patientId: 'GK-P-404', date: '2026-10-07', status: 'Attended' }, STAFF))).toBe('unknown_patient');
+  });
+});
+
+describe('staff attendance', () => {
+  const TEAM = [{ key: 'admin@test', name: 'Alex' }, { key: 'sam@test', name: 'Sam' }, { key: 'doctor:dr test', name: 'Dr Test' }];
+  const rowsOf = (docs: Record<string, Record<string, GristRecord[]>>) => docs.D![STAFF_ATT]!;
+  const auditOf = (docs: Record<string, Record<string, GristRecord[]>>) => docs.D!.Audit_Log!.map((r) => r.fields);
+
+  it('saves a mark, updates the same day in place, clears it without deleting, and shows a Monday-Sunday week', async () => {
+    const { svc, docs } = setup();
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', checkIn: '09:10', checkOut: '17:30', notes: 'on time' }, TEAM, ADMIN);   // Monday
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Absent' }, TEAM, ADMIN);
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Half day', checkIn: '09:00', checkOut: '13:00' }, TEAM, ADMIN);   // same day: updated, not duplicated
+    expect(rowsOf(docs)).toHaveLength(2);
+    expect(rowsOf(docs)[0]!.fields).toMatchObject({ Staff_Key: 'sam@test', Staff_Name: 'Sam', Status: 'Present', Check_In: '09:10', Check_Out: '17:30', Notes: 'on time', Recorded_By: 'admin@test' });
+    const w = await svc.staffWeek('2026-10-07', TEAM, 'admin@test');
+    expect([w.weekStart, w.days.length, w.days[6], w.today, w.now, w.canMarkOthers]).toEqual(['2026-10-05', 7, '2026-10-11', '2026-10-07', '12:00', true]);
+    expect(w.rows.map((r) => r.name)).toEqual(['Alex', 'Sam', 'Dr Test']);
+    const sam = w.rows.find((r) => r.key === 'sam@test')!;
+    expect(sam.cells['2026-10-05']).toEqual({ status: 'Present', checkIn: '09:10', checkOut: '17:30', notes: 'on time' });
+    expect(sam.cells['2026-10-06']).toMatchObject({ status: 'Half day', checkIn: '09:00', checkOut: '13:00' }); expect(sam.cells['2026-10-07']).toBeNull();
+    expect(w.rows.find((r) => r.key === 'admin@test')!.isMe).toBe(true);
+    // clearing empties the status but the row (and its history in the audit log) stays
+    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: null }, TEAM, ADMIN)).toBeNull();
+    expect((await svc.staffWeek('2026-10-05', TEAM, 'x')).rows.find((r) => r.key === 'sam@test')!.cells['2026-10-06']).toBeNull();
+    expect(rowsOf(docs)).toHaveLength(2); expect(rowsOf(docs)[1]!.fields.Status).toBe('');
+    // an older week keeps its marks
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-09-29', status: 'Leave' }, TEAM, ADMIN);
+    expect((await svc.staffWeek('2026-09-29', TEAM, 'x')).rows.find((r) => r.key === 'sam@test')!.cells['2026-09-29']!.status).toBe('Leave');
+  });
+
+  it('keeps someone who left the team list visible in the weeks they have marks, but not in other weeks', async () => {
+    const { svc } = setup();
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
+    const left = TEAM.filter((p) => p.key !== 'sam@test');
+    const w = await svc.staffWeek('2026-10-05', left, 'x'); const sam = w.rows.find((r) => r.key === 'sam@test')!;
+    expect([sam.former, sam.name, sam.cells['2026-10-05']!.status]).toEqual([true, 'Sam', 'Present']);
+    expect((await svc.staffWeek('2026-10-12', left, 'x')).rows.some((r) => r.key === 'sam@test')).toBe(false);
+  });
+
+  it('refuses bad input and writes nothing', async () => {
+    const { svc, docs } = setup();
+    const set = (i: Partial<Parameters<typeof svc.setStaffMark>[0]>) => code(svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-07', status: 'Present', ...i }, TEAM, ADMIN));
+    expect(await set({ date: '2026-10-08' })).toBe('future_date');
+    expect(await set({ date: '2026-02-30' })).toBe('invalid_date');
+    expect(await set({ staffKey: 'nobody@test' })).toBe('unknown_staff');
+    expect(await set({ checkIn: '9:5' })).toBe('invalid_time');
+    expect(await set({ checkIn: '25:00' })).toBe('invalid_time');
+    expect(await set({ checkOut: '17:00' })).toBe('checkin_missing');
+    expect(await set({ checkIn: '17:00', checkOut: '09:00' })).toBe('checkout_before_checkin');
+    expect(await set({ checkIn: '09:00', checkOut: '09:00' })).toBe('checkout_before_checkin');
+    expect(await set({ status: 'Absent', checkIn: '09:00' })).toBe('times_need_present');
+    expect(await set({ status: 'Leave', checkIn: '09:00', checkOut: '10:00' })).toBe('times_need_present');
+    expect(rowsOf(docs)).toHaveLength(0); expect(auditOf(docs)).toHaveLength(0);
+  });
+
+  it('check in / check out stamp the real clinic time, once, and in order', async () => {
+    let t = Date.UTC(2026, 9, 7, 3, 45);   // 09:15 IST
+    const { svc, docs } = setup({ now: () => t });
+    expect(await code(svc.clockStaff('sam@test', 'out', TEAM, ADMIN))).toBe('not_checked_in');
+    const a = await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
+    expect([a.duplicate, a.mark.status, a.mark.checkIn]).toEqual([false, 'Present', '09:15']);
+    t = Date.UTC(2026, 9, 7, 4, 30);       // 10:00 IST: pressing check-in again changes nothing
+    const again = await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
+    expect([again.duplicate, again.mark.checkIn]).toEqual([true, '09:15']);
+    expect(rowsOf(docs)).toHaveLength(1);
+    t = Date.UTC(2026, 9, 7, 12, 10);      // 17:40 IST
+    const out = await svc.clockStaff('sam@test', 'out', TEAM, ADMIN);
+    expect([out.mark.checkIn, out.mark.checkOut]).toEqual(['09:15', '17:40']);
+    expect(await code(svc.clockStaff('sam@test', 'out', TEAM, ADMIN))).toBe('already_checked_out');
+    expect(rowsOf(docs)[0]!.fields).toMatchObject({ Check_In: '09:15', Check_Out: '17:40', Status: 'Present' });
+    expect(auditOf(docs).map((a) => a.Action)).toEqual(['staffatt.checkin', 'staffatt.checkout']);
+    expect(await code(svc.clockStaff('nobody@test', 'in', TEAM, ADMIN))).toBe('unknown_staff');
+  });
+
+  it('checking in over a day marked Absent turns it into Present, and keeps the note', async () => {
+    const { svc, docs } = setup({ now: () => Date.UTC(2026, 9, 7, 3, 45) });
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-07', status: 'Absent', notes: 'called in sick' }, TEAM, ADMIN);
+    const r = await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
+    expect([r.mark.status, r.mark.checkIn, r.mark.notes]).toEqual(['Present', '09:15', 'called in sick']);
+    expect(rowsOf(docs)).toHaveLength(1);
+  });
+
+  it('a check-out in the same minute as the check-in is refused', async () => {
+    const { svc } = setup({ now: () => Date.UTC(2026, 9, 7, 3, 45) });
+    await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
+    expect(await code(svc.clockStaff('sam@test', 'out', TEAM, ADMIN))).toBe('checkout_too_soon');
+  });
+
+  it('month summary counts days by status and adds up hours only for complete in/out pairs', async () => {
+    const { svc } = setup();
+    const m = (date: string, status: 'Present' | 'Absent' | 'Half day' | 'Leave', checkIn = '', checkOut = '') => svc.setStaffMark({ staffKey: 'sam@test', date, status, checkIn, checkOut }, TEAM, ADMIN);
+    await m('2026-10-01', 'Present', '09:00', '17:00');   // 8h
+    await m('2026-10-02', 'Present', '09:00');             // no check-out: counted as present, no hours
+    await m('2026-10-03', 'Half day', '09:00', '13:30');  // 4h30
+    await m('2026-10-05', 'Absent'); await m('2026-10-06', 'Leave'); await m('2026-10-07', 'Leave');
+    await m('2026-09-30', 'Present', '09:00', '10:00');   // other month: not counted
+    const s = await svc.staffMonth('2026-10', TEAM); const sam = s.rows.find((r) => r.key === 'sam@test')!;
+    expect(s.month).toBe('2026-10');
+    expect(sam).toMatchObject({ present: 2, halfDay: 1, absent: 1, leave: 2, workedMinutes: 8 * 60 + 4 * 60 + 30 });
+    expect(s.rows.find((r) => r.key === 'admin@test')).toMatchObject({ present: 0, workedMinutes: 0 });
+    expect((await svc.staffMonth('garbage', TEAM)).month).toBe('2026-10');   // an invalid month falls back to the current one
+    expect((await svc.staffMonth('2026-09', TEAM)).rows.find((r) => r.key === 'sam@test')!.present).toBe(1);
+  });
+
+  it('onlyKey limits both views to one person', async () => {
+    const { svc } = setup();
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
+    await svc.setStaffMark({ staffKey: 'admin@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
+    const w = await svc.staffWeek('2026-10-05', TEAM, 'sam@test', 'sam@test');
+    expect([w.rows.map((r) => r.key), w.canMarkOthers]).toEqual([['sam@test'], false]);
+    expect((await svc.staffMonth('2026-10', TEAM, 'sam@test')).rows.map((r) => r.key)).toEqual(['sam@test']);
+  });
+
+  it('every change is audited without the free-text note, and a missing audit write does not lose the saved mark', async () => {
+    const { svc, docs } = setup();
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', checkIn: '09:00', notes: 'PRIVATE-NOTE-TEXT' }, TEAM, ADMIN);
+    const a = auditOf(docs)[0]!;
+    expect([a.Action, a.User, a.Record]).toEqual(['staffatt.set', 'admin@test', 'sam@test']); expect(JSON.stringify(auditOf(docs))).not.toContain('PRIVATE-NOTE-TEXT');
+    const f = setup({ failOn: (m, t) => m === 'POST' && t === 'Audit_Log' });
+    await f.svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
+    expect(f.docs.D![STAFF_ATT]).toHaveLength(1);
   });
 });
 

@@ -21,7 +21,7 @@ import { PAYMENT_TABLES } from '../../payments/schema';
 import { BOOKING_TABLES } from '../../booking/schema';
 import { AuditOutbox, FileStore } from '../../booking/outbox';
 import path from 'node:path';
-import { RECORD_TABLE_NAMES } from '../../records/schema';
+import { RECORD_TABLE_NAMES, STAFF_ATT } from '../../records/schema';
 
 export interface AutopilotConfig {
   gristBaseUrl: string;
@@ -171,10 +171,13 @@ class AutopilotWorkspace implements WorkspaceBackend {
     const noPay: string[] = [];
     await Promise.all(Object.keys(PAYMENT_TABLES).map(async (t) => { try { await this.grist.records(this.docId, t, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noPay.push(t); else unreachable = true; } }));
     const bookingModules: Supported['modules'] = noBooking.length === 0 ? (noPay.length === 0 ? ['schedule', 'payments'] : ['schedule']) : [];
+    // Staff attendance is OPTIONAL: its table is not in RECORD_TABLE_NAMES, so a clinic without it keeps every other clinical page
+    let noStaff = false;
+    try { await this.grist.records(this.docId, STAFF_ATT, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noStaff = true; else unreachable = true; }
     if (unreachable) { this.probedAt = Date.now() - 50000; return; }   // keep the last known state, look again in 10 s
     if (missing.length === 0) {
-      this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...RECORD_MODULES, ...bookingModules] };
-      this.recordsSvc ||= new RecordsService(this.grist, this.docId, { tz: this.cfg.timezone, clinic: () => this.cfg.clinic ? this.cfg.clinic(this.info.id, this.info.name) : { idPrefix: 'GK', name: this.info.name, tagline: '', address: '', phones: [], timings: '', runBy: '', clinicians: [], tax: null } });
+      this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...RECORD_MODULES, ...(noStaff ? [] : (['staff_attendance'] as Supported['modules'])), ...bookingModules] };
+      this.recordsSvc ||= new RecordsService(this.grist, this.docId, { tz: this.cfg.timezone, ...(this.cfg.now ? { now: this.cfg.now } : {}), clinic: () => this.cfg.clinic ? this.cfg.clinic(this.info.id, this.info.name) : { idPrefix: 'GK', name: this.info.name, tagline: '', address: '', phones: [], timings: '', runBy: '', clinicians: [], tax: null } });
     } else {
       this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...bookingModules] }; this.recordsSvc = null;
       if (missing.length < RECORD_TABLE_NAMES.length) console.warn(`FLOW HQ: clinic records tables missing in ${this.info.id}: ${missing.join(', ')} (run npm run provision-records)`);

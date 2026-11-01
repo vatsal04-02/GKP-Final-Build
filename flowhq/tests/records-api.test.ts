@@ -6,27 +6,38 @@ import { memoryGrist } from '../src/server/grist';
 import { ProfileStore } from '../src/server/profiles';
 import { createAutopilotAdapter } from '../src/server/adapters/autopilot';
 import { demoDocs } from '../src/server/demo/fixtures';
-import { RECORD_TABLE_NAMES, colNames } from '../src/server/records/schema';
+import { RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, colNames } from '../src/server/records/schema';
 import { loadClinicConfig } from '../src/server/clinic';
 
 const NOW = Date.UTC(2026, 9, 7, 6, 30);
 const PW = 'correct horse 42';
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xff, 0xd9]);
 const J = { 'content-type': 'application/json', 'x-flowhq-csrf': '1' };
-let app: ReturnType<typeof createApp>; let admin = ''; let staff = '';
+let app: ReturnType<typeof createApp>; let admin = ''; let staff = ''; let doctor = '';
+const STAFF_COLS = STAFF_COLUMNS[STAFF_ATT].map(([n]) => n);
 
-beforeAll(async () => {
+// withStaffTable=false is a clinic that has the required records tables but has not created the optional Staff_Attendance one yet
+function build(withStaffTable: boolean) {
   const d = demoDocs(NOW);
   const physioDoc = (d.docs.REGISTRY!.Clinics!.find((r) => r.fields.Clinic_Slug === 'demo-physio')!.fields.Grist_Doc_ID) as string;
   for (const t of RECORD_TABLE_NAMES) d.docs[physioDoc]![t] = [];            // only the physio clinic has the records tables
+  delete d.docs[physioDoc]![STAFF_ATT];
+  if (withStaffTable) d.docs[physioDoc]![STAFF_ATT] = [];
   const clinic = loadClinicConfig('config/clinic.json');
-  const mem = memoryGrist(d.docs, { columns: Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)])) });
-  const adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: 'k', registryDocId: 'REGISTRY', timezone: 'Asia/Kolkata', locale: 'en-IN', currency: 'INR', fetchImpl: mem, clinic, cacheMs: 0 });
+  const mem = memoryGrist(d.docs, { columns: { ...Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)])), ...(withStaffTable ? { [STAFF_ATT]: STAFF_COLS } : {}) } });
+  const adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: 'k', registryDocId: 'REGISTRY', timezone: 'Asia/Kolkata', locale: 'en-IN', currency: 'INR', fetchImpl: mem, clinic, cacheMs: 0, now: () => NOW });
   const h = hashPassword(PW);
-  const users: UserRecord[] = [{ email: 'admin@test', name: 'Alex', role: 'admin', workspaces: ['*'], passwordHash: h }, { email: 'staff@test', name: 'Sam', role: 'staff', workspaces: ['demo-physio'], passwordHash: h }, { email: 'salon@test', name: 'Sal', role: 'staff', workspaces: ['demo-salon'], passwordHash: h }];
-  app = createApp({ adapter, profiles: new ProfileStore(null, 'clinic', d.profiles), users, sessionSecret: 'test-session-secret-0123456789abcdef-xyz', secureCookies: true, demo: false, now: () => NOW });
-  const login = async (email: string) => (await app.request('/api/auth/login', { method: 'POST', headers: { ...J, 'x-forwarded-for': email }, body: JSON.stringify({ email, password: PW }) })).headers.get('set-cookie')!.split(';')[0]!;
-  admin = await login('admin@test'); staff = await login('staff@test');
+  // doc@test is Dr. Mahesh Tiwari's own login (a doctor in config/clinic.json): it may only see and mark itself
+  const users: UserRecord[] = [{ email: 'admin@test', name: 'Alex', role: 'admin', workspaces: ['*'], passwordHash: h }, { email: 'staff@test', name: 'Sam', role: 'staff', workspaces: ['demo-physio'], passwordHash: h }, { email: 'salon@test', name: 'Sal', role: 'staff', workspaces: ['demo-salon'], passwordHash: h },
+    { email: 'doc@test', name: 'Dr Doc', role: 'staff', workspaces: ['demo-physio'], clinician: 'Dr. Mahesh Tiwari', passwordHash: h }];
+  const a = createApp({ adapter, profiles: new ProfileStore(null, 'clinic', d.profiles), users, sessionSecret: 'test-session-secret-0123456789abcdef-xyz', secureCookies: true, demo: false, now: () => NOW });
+  const login = async (email: string) => (await a.request('/api/auth/login', { method: 'POST', headers: { ...J, 'x-forwarded-for': email }, body: JSON.stringify({ email, password: PW }) })).headers.get('set-cookie')!.split(';')[0]!;
+  return { app: a, login };
+}
+
+beforeAll(async () => {
+  const b = build(true); app = b.app;
+  admin = await b.login('admin@test'); staff = await b.login('staff@test'); doctor = await b.login('doc@test');
 });
 const call = async (cookie: string, path: string, method = 'GET', body?: unknown) => {
   const r = await app.request(`/api/w/demo-physio${path}`, { method, headers: { cookie, ...J }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -51,6 +62,63 @@ describe('access control', () => {
     expect((await app.request('/api/w/demo-physio/patients', { method: 'POST', headers: { cookie: staff, 'content-type': 'application/json' }, body: '{"name":"X"}' })).status).toBe(403);
     const salon = (await app.request('/api/auth/login', { method: 'POST', headers: { ...J, 'x-forwarded-for': 's' }, body: JSON.stringify({ email: 'salon@test', password: PW }) })).headers.get('set-cookie')!.split(';')[0]!;
     expect((await app.request('/api/w/demo-physio/patients', { headers: { cookie: salon } })).status).toBe(404);
+  });
+});
+
+describe('staff attendance over HTTP', () => {
+  it('the page appears only where the optional Staff_Attendance table exists; without it every other clinical page stays', async () => {
+    expect((await call(admin, '/workspace')).json.modules).toContain('staff_attendance');
+    const b = build(false); const a = await b.login('admin@test');
+    const w = await (await b.app.request('/api/w/demo-physio/workspace', { headers: { cookie: a } })).json() as { modules: string[] };
+    expect(w.modules).toEqual(expect.arrayContaining(['patients', 'prescriptions', 'invoices', 'visits'])); expect(w.modules).not.toContain('staff_attendance');
+    expect((await b.app.request('/api/w/demo-physio/staff-attendance', { headers: { cookie: a } })).status).toBe(404);
+    expect((await b.app.request('/api/w/demo-physio/patients', { headers: { cookie: a } })).status).toBe(200);
+    const salon = await (await app.request('/api/w/demo-salon/workspace', { headers: { cookie: admin } })).json() as { modules: string[] };
+    expect(salon.modules).not.toContain('staff_attendance');
+  });
+
+  it('the team list is this workspace\'s logins plus doctors who have no login of their own', async () => {
+    const r = await call(staff, '/staff-attendance?week=2026-10-07');
+    expect(r.status).toBe(200);
+    const keys = (r.json.rows as Array<{ key: string }>).map((x) => x.key);
+    expect(keys).toEqual(expect.arrayContaining(['admin@test', 'staff@test', 'doc@test', 'doctor:dr. sandeep tiwari']));
+    expect(keys).not.toContain('salon@test');                       // a login of another workspace
+    expect(keys).not.toContain('doctor:dr. mahesh tiwari');         // Dr. Mahesh has a login, so he is not listed twice
+    expect([r.json.weekStart, r.json.canMarkOthers, r.json.rows.find((x: { key: string }) => x.key === 'staff@test').isMe]).toEqual(['2026-10-05', true, true]);
+  });
+
+  it('front desk and admin mark anyone; the mark is saved and shows up; clock in/out works for oneself', async () => {
+    const put = await call(staff, '/staff-attendance', 'PUT', { staffKey: 'admin@test', date: '2026-10-06', status: 'Present', checkIn: '09:00', checkOut: '17:00', notes: 'ok' });
+    expect([put.status, put.json.mark.status]).toEqual([200, 'Present']);
+    const row = (await call(admin, '/staff-attendance?week=2026-10-05')).json.rows.find((x: { key: string }) => x.key === 'admin@test');
+    expect(row.cells['2026-10-06']).toEqual({ status: 'Present', checkIn: '09:00', checkOut: '17:00', notes: 'ok' });
+    const inn = await call(staff, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'in' });
+    expect([inn.status, inn.json.duplicate, inn.json.mark.checkIn]).toEqual([200, false, '12:00']);
+    expect((await call(staff, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'in' })).json.duplicate).toBe(true);
+    const out = await call(staff, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'out' });
+    expect([out.status, out.json.error.code]).toEqual([409, 'checkout_too_soon']);   // the test clock does not move
+    const month = await call(admin, '/staff-attendance/month?month=2026-10');
+    expect([month.status, month.json.rows.find((x: { key: string }) => x.key === 'admin@test').present]).toEqual([200, 1]);
+  });
+
+  it('rejects bad input with a clear error', async () => {
+    const body = { staffKey: 'staff@test', date: '2026-10-07', status: 'Present' };
+    expect((await call(staff, '/staff-attendance', 'PUT', { ...body, status: 'Sleeping' })).status).toBe(400);
+    expect((await call(staff, '/staff-attendance', 'PUT', { ...body, date: '2026-10-09' })).json.error.code).toBe('future_date');
+    expect((await call(staff, '/staff-attendance', 'PUT', { ...body, staffKey: 'ghost@test' })).status).toBe(404);
+    expect((await call(staff, '/staff-attendance', 'PUT', { ...body, checkIn: '17:00', checkOut: '09:00' })).json.error.code).toBe('checkout_before_checkin');
+    expect((await app.request('/api/w/demo-physio/staff-attendance', { method: 'PUT', headers: { cookie: staff, 'content-type': 'application/json' }, body: JSON.stringify(body) })).status).toBe(403);   // no CSRF header
+    expect((await app.request('/api/w/demo-physio/staff-attendance')).status).toBe(401);
+  });
+
+  it('a doctor\'s own login sees and marks only itself', async () => {
+    const r = await call(doctor, '/staff-attendance?week=2026-10-05');
+    expect([r.json.canMarkOthers, (r.json.rows as Array<{ key: string }>).map((x) => x.key)]).toEqual([false, ['doc@test']]);
+    expect((await call(doctor, '/staff-attendance', 'PUT', { staffKey: 'doc@test', date: '2026-10-07', status: 'Present' })).status).toBe(200);
+    const other = await call(doctor, '/staff-attendance', 'PUT', { staffKey: 'staff@test', date: '2026-10-07', status: 'Absent' });
+    expect([other.status, other.json.error.code]).toEqual([403, 'forbidden']);
+    expect((await call(doctor, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'in' })).status).toBe(403);
+    expect((await call(doctor, '/staff-attendance/month?month=2026-10')).json.rows.map((x: { key: string }) => x.key)).toEqual(['doc@test']);
   });
 });
 

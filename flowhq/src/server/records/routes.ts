@@ -1,10 +1,14 @@
 // Clinic records API (mounted under /api/w/:ws). Auth, CSRF and workspace access are applied by the parent app before these run.
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import { PAYMENT_METHODS, PATIENT_STATUSES, SEXES, VISIT_STATUSES, type InvoiceInput } from '../../core/clinical';
+import { PAYMENT_METHODS, PATIENT_STATUSES, SEXES, STAFF_STATUSES, VISIT_STATUSES, type InvoiceInput } from '../../core/clinical';
 import type { Ctx, WorkspaceBackend } from '../adapters/types';
 import { bad } from './ids';
-import type { Actor, RecordsService, Scope } from './service';
+import type { Actor, RecordsService, Scope, StaffPerson } from './service';
+
+// A FLOW HQ login that can open this workspace (the app supplies them; this module never sees password hashes).
+export interface TeamLogin { email: string; name: string; clinician?: string }
+export interface RecordsRouteOptions { logins?: (workspaceId: string) => TeamLogin[] }
 
 type E = { Variables: { backend: WorkspaceBackend; ctx: Ctx } };
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -21,7 +25,7 @@ const paymentBody = z.object({ amountPaise: paise, method: z.enum(PAYMENT_METHOD
 const invoiceBody = z.object({ patientId: z.string().min(1).max(40), date, lines: z.array(z.object({ description: text(200), qty: z.number().int(), unitPaise: paise })).max(30), discountPaise: paise, applyTax: z.boolean(), notes: text(1000),
   idemKey: z.string().min(8).max(64), payment: paymentBody.optional(), doctor: text(120).optional() });
 
-export function recordsRoutes() {
+export function recordsRoutes(opts: RecordsRouteOptions = {}) {
   const r = new Hono<E>();
   const svc = (c: Context<E>): RecordsService => { const s = c.get('backend').records?.(); if (!s) throw bad('records_unavailable', 'Clinic records are not set up for this workspace yet', 404); return s; };
   // A doctor's login is bound to ONE name from config/clinic.json: it only ever sees that doctor's prescriptions and dues (the patient register is shared).
@@ -95,6 +99,33 @@ export function recordsRoutes() {
   r.put('/visits', async (c) => {
     const b = z.object({ patientId: z.string().min(1).max(40), date, status: z.enum(VISIT_STATUSES).nullable(), notes: text(500).optional() }).parse(await c.req.json());
     return c.json({ visit: await svc(c).setVisit(b, who(c)) });
+  });
+
+  // ---- staff attendance: the clinic's own people. Team list = every login that can open this workspace + doctors in config/clinic.json who have no login.
+  // Admin and front desk may mark anyone; a doctor's own login sees and marks only itself. The page exists only once the Staff_Attendance table does.
+  const staffSvc = (c: Context<E>): RecordsService => { const s = svc(c); if (!c.get('backend').supported.modules.includes('staff_attendance')) throw bad('staff_attendance_unavailable', 'Staff attendance is not set up for this workspace yet', 404); return s; };
+  const meKey = (c: Context<E>) => c.get('ctx').viewer.email.trim().toLowerCase();
+  const onlyMe = (c: Context<E>) => (c.get('ctx').viewer.clinician ? meKey(c) : undefined);
+  const team = (c: Context<E>): StaffPerson[] => {
+    const logins = opts.logins?.(c.get('backend').info.id) || [];
+    const out: StaffPerson[] = logins.map((l) => ({ key: l.email.trim().toLowerCase(), name: l.name }));
+    const seen = new Set(logins.flatMap((l) => [l.name, l.clinician || ''].map((x) => x.trim().toLowerCase()).filter(Boolean)));
+    for (const d of svc(c).clinic().clinicians) { const nm = d.name.trim(); if (nm && !seen.has(nm.toLowerCase())) out.push({ key: `doctor:${nm.toLowerCase()}`, name: nm }); }
+    return out;
+  };
+  const mayMark = (c: Context<E>, key: string) => { const only = onlyMe(c); if (only && key !== only) throw bad('forbidden', 'You can only record your own attendance', 403); };
+  const hhmm = z.string().max(5);
+  r.get('/staff-attendance', async (c) => c.json(await staffSvc(c).staffWeek(c.req.query('week') || '', team(c), meKey(c), onlyMe(c))));
+  r.get('/staff-attendance/month', async (c) => c.json(await staffSvc(c).staffMonth(c.req.query('month') || '', team(c), onlyMe(c))));
+  r.put('/staff-attendance', async (c) => {
+    const b = z.object({ staffKey: z.string().min(1).max(200), date, status: z.enum(STAFF_STATUSES).nullable(), checkIn: hhmm.optional(), checkOut: hhmm.optional(), notes: text(500).optional() }).parse(await c.req.json());
+    const sv = staffSvc(c); mayMark(c, b.staffKey);
+    return c.json({ mark: await sv.setStaffMark(b, team(c), who(c)) });
+  });
+  r.post('/staff-attendance/clock', async (c) => {
+    const b = z.object({ staffKey: z.string().min(1).max(200), kind: z.enum(['in', 'out']) }).parse(await c.req.json());
+    const sv = staffSvc(c); mayMark(c, b.staffKey);
+    return c.json(await sv.clockStaff(b.staffKey, b.kind, team(c), who(c)));
   });
   return r;
 }

@@ -36,6 +36,21 @@ export interface InvoiceInput { patientId: string; doctor?: string; date: string
 export interface Visit { patientId: string; date: string; status: VisitStatus; notes: string }
 export interface VisitWeek { weekStart: string; days: string[]; rows: Array<{ patientId: string; name: string; phone: string; cells: Record<string, { status: VisitStatus; notes: string } | null> }> }
 
+// ---- staff attendance (the clinic's own people, not patients). Stored in the optional Staff_Attendance table.
+export const STAFF_STATUSES = ['Present', 'Absent', 'Half day', 'Leave'] as const;
+export type StaffStatus = (typeof STAFF_STATUSES)[number];
+export interface StaffMark { status: StaffStatus; checkIn: string; checkOut: string; notes: string }   // times are "HH:MM", clinic-local, "" when not recorded
+export interface StaffWeek {
+  weekStart: string; days: string[]; today: string; now: string;   // now: the clinic-local "HH:MM" right now
+  canMarkOthers: boolean;                                          // false for a doctor's own login: it sees and marks only itself
+  rows: Array<{ key: string; name: string; isMe: boolean; former: boolean; cells: Record<string, StaffMark | null> }>;   // former: no longer on the team list, kept because they have marks in this week
+}
+export interface StaffMonth {
+  month: string;   // YYYY-MM
+  rows: Array<{ key: string; name: string; present: number; halfDay: number; absent: number; leave: number; workedMinutes: number }>;
+}
+export interface StaffMarkInput { staffKey: string; date: string; status: StaffStatus | null; checkIn?: string; checkOut?: string; notes?: string }
+
 export interface PatientProfile { patient: PatientRow; prescriptions: Prescription[]; invoices: Invoice[]; payments: Payment[]; visits: Visit[] }
 
 export interface ClinicProfile {

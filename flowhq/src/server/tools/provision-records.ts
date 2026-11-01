@@ -4,6 +4,7 @@
 // Reads GRIST_BASE_URL, GRIST_API_KEY and GRIST_REGISTRY_DOC_ID from the environment (e.g. node --env-file=.env). Prints no secrets.
 import { GristClient } from '../grist';
 import { provision } from '../records/provision';
+import { ALL_RECORD_COLUMNS } from '../records/schema';
 
 const [slug, ...flags] = process.argv.slice(2);
 const apply = flags.includes('--apply');
@@ -15,5 +16,5 @@ const reg = (await grist.records(registry, 'Clinics')).find((r) => String(r.fiel
 const doc = reg ? String(reg.fields.Grist_Doc_ID || '').trim() : '';
 if (!doc) { console.error(`No clinic "${slug}" with a Grist_Doc_ID in the registry`); process.exit(1); }
 
-const { changes } = await provision(grist, doc, apply, console.log);
+const { changes } = await provision(grist, doc, apply, console.log, ALL_RECORD_COLUMNS);
 console.log(changes ? (apply ? 'Done. Reload FLOW HQ: the clinical pages appear within a minute.' : 'Dry run only. Run again with --apply to create these.') : 'Nothing to do: all Clinic Records tables and columns already exist.');

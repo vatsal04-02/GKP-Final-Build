@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { provision, type ProvisionClient } from '../src/server/records/provision';
-import { RECORD_COLUMNS, RECORD_TABLE_NAMES } from '../src/server/records/schema';
+import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS } from '../src/server/records/schema';
 
 function fake(existing: Record<string, string[]>) {
   const calls: string[] = [];
@@ -40,5 +40,33 @@ describe('provisioning the Clinic Records tables', () => {
     await provision(f.c, 'DOC', true);
     expect(seen['Rx_Images.File']!.type).toBe('Attachments'); expect(seen['Patients.Created_At']!.type).toBe('DateTime:Asia/Kolkata'); expect(seen['Patients.Registered_On']!.type).toBe('Date');
     expect(seen['Patients.Sex']!.type).toBe('Choice'); expect(JSON.parse(seen['Patients.Sex']!.widgetOptions!).choices).toEqual(['Male', 'Female', 'Other']); seen = {};
+  });
+});
+
+describe('provisioning with the optional Staff_Attendance table (what npm run provision-records runs)', () => {
+  const required = Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, RECORD_COLUMNS[t].map(([n]) => n)]));
+  it('on a clinic that already has the required tables, adds ONLY the new table and touches nothing else', async () => {
+    const f = fake({ ...required });
+    const r = await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS);
+    expect(f.calls).toEqual([`create ${STAFF_ATT} ${STAFF_COLUMNS[STAFF_ATT].length}`]); expect(r.changes).toBe(1);
+    expect(Object.keys(f.existing).sort()).toEqual([...RECORD_TABLE_NAMES, STAFF_ATT].sort());
+  });
+  it('a dry run reports it without creating it, and a second apply finds nothing to do', async () => {
+    const f = fake({ ...required }); const lines: string[] = [];
+    expect((await provision(f.c, 'DOC', false, (l) => lines.push(l), ALL_RECORD_COLUMNS)).changes).toBe(1);
+    expect(f.calls).toEqual([]); expect(lines).toEqual([`would create table ${STAFF_ATT} (${STAFF_COLUMNS[STAFF_ATT].length} columns)`]);
+    await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS); f.calls.length = 0;
+    expect((await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS)).changes).toBe(0); expect(f.calls).toEqual([]);
+  });
+  it('creates Status as a Choice, Att_Date as a Date and Updated_At as a DateTime', async () => {
+    const seen: Record<string, { type: string; widgetOptions?: string }> = {};
+    const f = fake({ ...required }); f.c.createTable = async (_d, id, cols) => { for (const x of cols) seen[`${id}.${x.id}`] = x.fields as never; };
+    await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS);
+    expect(seen[`${STAFF_ATT}.Status`]!.type).toBe('Choice'); expect(JSON.parse(seen[`${STAFF_ATT}.Status`]!.widgetOptions!).choices).toEqual(['Present', 'Absent', 'Half day', 'Leave']);
+    expect(seen[`${STAFF_ATT}.Att_Date`]!.type).toBe('Date'); expect(seen[`${STAFF_ATT}.Updated_At`]!.type).toBe('DateTime:Asia/Kolkata');
+  });
+  it('the default (required-only) provisioning is unchanged and does NOT create the optional table', async () => {
+    const f = fake({}); await provision(f.c, 'DOC', true);
+    expect(Object.keys(f.existing)).not.toContain(STAFF_ATT);
   });
 });

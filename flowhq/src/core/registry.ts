@@ -14,6 +14,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   prescriptions: { key: 'prescriptions', core: false, label: 'Prescriptions', page: '/prescriptions', icon: 'clipboard-list', shortcut: 'g n', order: 3.4 },
   invoices: { key: 'invoices', core: false, label: 'Invoices & Payments', page: '/invoices', icon: 'receipt', shortcut: 'g v', order: 3.6 },
   visits: { key: 'visits', core: false, label: 'Attendance', page: '/attendance', icon: 'calendar-check', shortcut: 'g u', order: 3.8 },
+  staff_attendance: { key: 'staff_attendance', core: false, label: 'Staff attendance', page: '/staff-attendance', icon: 'user-check', shortcut: 'g f', order: 3.9 },   // the clinic's own people; appears only when the Staff_Attendance table exists
   bookings: { key: 'bookings', core: false, label: '{booking.plural}', page: '/bookings', icon: 'calendar', shortcut: 'g b', order: 4 },
   schedule: { key: 'schedule', core: false, label: 'Schedule', page: '/schedule', icon: 'calendar-clock', shortcut: 'g k', order: 4.2 },
   automations: { key: 'automations', core: true, label: 'Automations', page: '/automations', icon: 'workflow', shortcut: 'g a', order: 5 },
@@ -36,7 +37,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
 };
 // Sidebar sections: the dashboard stays pinned at the top; everything else is grouped. A module that is not enabled simply does not show.
 export const NAV_GROUPS: Array<{ key: string; label: string; modules: ModuleKey[] }> = [
-  { key: 'care', label: 'Care', modules: ['inbox', 'contacts', 'patients', 'bookings', 'schedule', 'prescriptions', 'visits'] },
+  { key: 'care', label: 'Care', modules: ['inbox', 'contacts', 'patients', 'bookings', 'schedule', 'prescriptions', 'visits', 'staff_attendance'] },
   { key: 'money', label: 'Money', modules: ['invoices', 'payments'] },
   { key: 'system', label: 'System', modules: ['automations', 'tasks', 'reports', 'activity', 'ai', 'settings'] },
 ];
@@ -127,7 +128,7 @@ export interface WorkspaceProfileInput {
   modules?: { enable?: ModuleKey[]; disable?: ModuleKey[] };
   dashboardMetrics?: MetricKey[];
 }
-const RECORDS_MODULES: ModuleKey[] = ['patients', 'prescriptions', 'invoices', 'visits', 'schedule', 'payments'];
+const RECORDS_MODULES: ModuleKey[] = ['patients', 'prescriptions', 'invoices', 'visits', 'staff_attendance', 'schedule', 'payments'];
 export function resolveProfile(input: WorkspaceProfileInput, supported: { modules: ModuleKey[]; automations: AutomationKey[]; metrics: MetricKey[] }) {
   const p = INDUSTRIES[input.industry] || INDUSTRIES.custom;
   let terminology = mergeTerminology(p.terminology, input.terminology);

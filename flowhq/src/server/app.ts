@@ -237,7 +237,7 @@ export function createApp(d: AppDeps) {
   });
 
   app.route('/api/w/:ws', scheduleRoutes());     // appointment booking control for staff and admins (rights enforced inside the booking service)
-  app.route('/api/w/:ws', recordsRoutes());      // patients, prescriptions, invoices, payments, visits (only live when the clinic doc has the records tables)
+  app.route('/api/w/:ws', recordsRoutes({ logins: (ws) => d.users.filter((u) => canAccess(u, ws)).map((u) => ({ email: u.email, name: u.name, ...(u.clinician ? { clinician: u.clinician } : {}) })) }));      // patients, prescriptions, invoices, payments, visits (only live when the clinic doc has the records tables)
 
   app.all('/api/*', (c) => err(c, 404, 'not_found', 'No such API route'));
   return app;

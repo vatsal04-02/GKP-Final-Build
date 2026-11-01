@@ -113,7 +113,11 @@ function clinicRecords(nowMs: number, staff: string[]): Record<string, GristReco
     lines.push({ id: i + 1, fields: { Invoice_No: no, Line_No: 1, Description: 'Physiotherapy session', Qty: total / 800, Unit_Price_Paise: 80000, Line_Total_Paise: total * 100 } });
     if (paid > 0) { ++pid; payments.push({ id: pid, fields: { Payment_ID: `PAY-${String(pid).padStart(6, '0')}`, Invoice_No: no, Patient_ID: id(pi), Paid_On: day(off), Amount_Paise: paid * 100, Method: pid % 2 ? 'UPI' : 'Cash', Reference: '', Notes: '', Voided: false, Void_Reason: '', Idem_Key: `demo-p-${pid}`, Created_At: Math.min(t, day(off) + 42000), Created_By: staff[0] } }); }
   });
-  return { Patients: patients, Visits: visits, Prescriptions: prescriptions, Rx_Images: [], Invoices: invoices, Invoice_Lines: lines, Payments: payments, Audit_Log: [] };
+  // staff attendance for the two demo logins (admin@flowhq.demo, staff@flowhq.demo): the last few days, so the page has something to show
+  const staffAtt: GristRecord[] = []; let sid = 0;
+  const mark = (key: string, name: string, off: number, st: string, inn = '', out = '') => staffAtt.push({ id: ++sid, fields: { Staff_Key: key, Staff_Name: name, Att_Date: day(off), Status: st, Check_In: inn, Check_Out: out, Notes: '', Recorded_By: key, Created_At: day(off) + 33000, Updated_At: day(off) + 33000 } });
+  for (const off of [-4, -3, -2, -1]) { mark('admin@flowhq.demo', 'Alex (admin)', off, 'Present', '09:05', '17:30'); mark('staff@flowhq.demo', 'Sam', off, off === -3 ? 'Leave' : off === -2 ? 'Half day' : 'Present', off === -3 ? '' : '09:20', off === -3 ? '' : off === -2 ? '13:10' : '17:45'); }
+  return { Patients: patients, Visits: visits, Prescriptions: prescriptions, Rx_Images: [], Invoices: invoices, Invoice_Lines: lines, Payments: payments, Audit_Log: [], Staff_Attendance: staffAtt };
 }
 
 export function demoDocs(nowMs: number) {
