@@ -49,6 +49,26 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
 
       <p class="hero__hi rise" style="--d:300ms" lang="hi">दर्द से राहत, सही इलाज के साथ।</p>
 
+      <!-- Proof first: the three facts a visitor weighs before anything else. Rating and review count are the live
+           Google figures when they are configured (data-live-* hooks, see google-reviews.ts). -->
+      <div class="proof rise" style="--d:300ms" role="group" aria-label="Geeta Krishna Physiotherapy at a glance">
+        <div class="proof__item">
+          <span class="proof__label"><span>Since</span></span>
+          <strong class="proof__num">{clinic.since}</strong>
+        </div>
+        <div class="proof__item">
+          <span class="proof__label"><span>{stats.patients.label}</span></span>
+          <strong class="proof__num">{stats.patients.count}{stats.patients.suffix}</strong>
+        </div>
+        <div class="proof__item">
+          <span class="proof__label"><span><span data-live-count>{clinic.rating.count}</span> <span class="proof__g">Google </span>reviews</span></span>
+          <strong class="proof__num">
+            <span data-live-rating>{clinic.rating.value}</span><Icon name="star" size={20} class="proof__star" />
+          </strong>
+        </div>
+        <span class="sr-only" data-live-text="Rated {rating} out of 5 stars from {count} Google reviews">Rated {clinic.rating.value} out of 5 stars from {clinic.rating.count} Google reviews</span>
+      </div>
+
       <div id="hero-cta" class="hero__cta rise" style="--d:360ms" data-hero-cta>
         <a class="btn btn-primary btn-glow" href={links.whatsapp} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location="hero">
           <Icon name="message-circle" size={20} />
@@ -62,23 +82,6 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
       </div>
 
       <div class="badges rise" style="--d:480ms">
-        <p class="status status--since">Since <strong>{clinic.since}</strong></p>
-
-        <div class="rating">
-          <span class="stars" aria-hidden="true">
-            {Array.from({ length: 5 }).map(() => <Icon name="star" size={15} class="star" />)}
-          </span>
-          <span class="rating__text">
-            <strong data-live-rating>{clinic.rating.value}</strong> · <span data-live-count>{clinic.rating.count}</span> Google reviews
-          </span>
-          <span class="sr-only" data-live-text="Rated {rating} out of 5 stars from {count} Google reviews">Rated {clinic.rating.value} out of 5 stars from {clinic.rating.count} Google reviews</span>
-        </div>
-
-        <p class="status status--patients">
-          <Icon name="users" size={15} />
-          <span><strong>{stats.patients.count}{stats.patients.suffix}</strong> {stats.patients.label}</span>
-        </p>
-
         <!-- Live status, computed in the browser against clinic time (IST) -->
         <p class="status" data-open-status data-schedule={JSON.stringify(schedule)}>
           <span class="status__dot" aria-hidden="true"></span>
@@ -244,7 +247,7 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
     flex-direction: column;
     gap: 0.7rem;
     width: 100%;
-    margin-top: 1.5rem;
+    margin-top: 1.1rem;
     text-shadow: none;
   }
   .hero__cta .btn {
@@ -267,8 +270,74 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
     margin-top: 1.1rem;
     text-shadow: none;
   }
-  /* Dark chips (no blur: a blur over a playing video would be redrawn every frame) */
-  .rating,
+  /* Proof row: three large serif figures, each under a small caps caption. A solid pine tint (no blur: a blur over a
+     playing video would be redrawn every frame) keeps it legible over the picture and sets it apart from the headline. */
+  .proof {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr) minmax(0, 1fr); /* the middle figure is the widest */
+    width: 100%;
+    max-width: 34rem;
+    margin-top: 1.1rem;
+    padding: 0.65rem 0;
+    border: 1px solid rgb(250 248 242 / 0.22);
+    border-radius: 14px;
+    background: rgb(12 59 54 / 0.62);
+    text-shadow: none;
+    color: var(--color-ivory);
+  }
+  .proof__item {
+    display: grid;
+    align-content: center;
+    gap: 0.3rem;
+    padding: 0.1rem 0.5rem;
+    text-align: center;
+  }
+  .proof__item + .proof__item {
+    border-left: 1px solid rgb(250 248 242 / 0.22);
+  }
+  /* One-line captions above each figure, so the three numbers line up */
+  .proof__label {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    font-size: 0.5625rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    line-height: 1.3;
+    text-transform: uppercase;
+    color: var(--color-sand);
+  }
+  .proof__label > span {
+    white-space: nowrap;
+  }
+  /* "Google" is dropped from the caption on narrow phones (the screen-reader text still says it) */
+  .proof__g {
+    display: none;
+  }
+  @media (min-width: 460px) {
+    .proof__g {
+      display: inline;
+    }
+  }
+  .proof__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+    font: 400 clamp(1.5rem, 1.1rem + 1.5vw, 2.5rem) / 1 var(--font-serif);
+    letter-spacing: -0.01em;
+    font-variant-numeric: lining-nums tabular-nums;
+    color: var(--color-ivory);
+  }
+  .proof__num :global(.proof__star) {
+    fill: #e0ac45;
+    color: #e0ac45;
+    stroke-width: 1.5;
+    margin-top: -0.2rem;
+  }
+
+  /* Open-now chip */
   .status {
     display: inline-flex;
     align-items: center;
@@ -279,38 +348,9 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
     border-radius: 999px;
     background: rgb(12 59 54 / 0.62);
     font-size: 0.8125rem;
+    font-weight: 600;
     line-height: 1.2;
     color: var(--color-ivory);
-  }
-  .stars {
-    display: inline-flex;
-    gap: 2px;
-    color: #e0ac45;
-  }
-  .stars :global(.star) {
-    fill: currentColor;
-    stroke-width: 1.5;
-  }
-  .rating strong {
-    font: 400 1.1875rem/1 var(--font-serif);
-  }
-  .status {
-    font-weight: 600;
-  }
-  .status--since {
-    padding-inline: 0.95rem;
-    border-color: rgb(233 223 201 / 0.5);
-    letter-spacing: 0.04em;
-  }
-  .status--since strong {
-    font: 400 1.1875rem/1 var(--font-serif);
-    color: var(--color-sand);
-  }
-  .status--patients {
-    padding-left: 0.85rem;
-  }
-  .status--patients strong {
-    font: 400 1.1875rem/1 var(--font-serif);
   }
   .status__dot {
     flex: none;
@@ -474,9 +514,19 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
     .badges {
       margin-top: 1.4rem;
     }
-    .rating,
     .status {
       font-size: 0.875rem;
+    }
+    .proof {
+      margin-top: 1.6rem;
+      padding-block: 1rem;
+    }
+    .proof__item {
+      padding-inline: 0.7rem;
+    }
+    .proof__label {
+      font-size: 0.6875rem;
+      letter-spacing: 0.13em;
     }
     .hero__pause {
       right: max(32px, calc((100vw - 1280px) / 2 + 32px));
