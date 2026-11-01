@@ -8,7 +8,11 @@ import { BackendError, type GristClient, type GristRecord } from '../grist';
 import { dayKey } from '../time';
 import { normalizePhone } from '../adapters/autopilot/shared';
 import { addDays, bad, dateIn, dateOut, mondayOf, Mutex, maxSeq, pad, validDate } from './ids';
-import { RT, STAFF_ATT, STAFF_MEMBERS } from './schema';
+import { hashPassword, verifyPassword } from '../auth';
+import { RT, STAFF_ATT, STAFF_MEMBERS, STAFF_SETTINGS } from './schema';
+
+const LOCK_KEY = 'edit_password_hash';
+const MAX_WRONG = 5; const WRONG_WINDOW_MS = 10 * 60000;   // 5 wrong edit passwords per person, then 10 minutes of waiting
 
 // A person on the clinic's team list (built by the route from the FLOW HQ logins and config/clinic.json). The key is stable; the name is display only.
 export interface StaffPerson { key: string; name: string }
@@ -551,9 +555,40 @@ export class RecordsService {
     });
   }
 
+  // ---- the edit lock: a day that already has a mark can only be changed or cleared with the attendance edit password (set by an admin; only its hash is stored)
+  private wrong = new Map<string, { n: number; first: number }>();
+  private async lockRow() { return (await this.rows(STAFF_SETTINGS)).find((r) => s(r.fields.Key) === LOCK_KEY && s(r.fields.Value)); }
+  async lockPasswordSet(): Promise<boolean> { return !!(await this.lockRow()); }
+  setEditPassword(password: string, a: Actor): Promise<void> {
+    return this.lock.run(async () => {
+      if (a.role !== 'admin') throw bad('forbidden', 'Only an admin can set the attendance edit password', 403);
+      if (typeof password !== 'string' || password.length < 8) throw bad('weak_password', 'Use at least 8 characters', 400);
+      if (password.length > 200) throw bad('weak_password', 'That password is too long', 400);
+      const fields = { Value: hashPassword(password), Updated_At: this.ts(), Updated_By: a.email };
+      const row = (await this.rows(STAFF_SETTINGS)).find((r) => s(r.fields.Key) === LOCK_KEY);
+      if (row) await this.patch(STAFF_SETTINGS, row.id, fields); else await this.add(STAFF_SETTINGS, [{ Key: LOCK_KEY, ...fields }]);
+      this.wrong.delete(a.email.toLowerCase());
+      await this.audit(a, 'staffatt.password_set', LOCK_KEY, 'edit password set');   // never the password
+    });
+  }
+  // Throws unless `password` is the edit password. Wrong guesses are counted per person and audited.
+  private async unlock(password: string | undefined, a: Actor, staffKey: string, date: string) {
+    const who = a.email.toLowerCase(); const t = this.now(); const w = this.wrong.get(who);
+    if (w && t - w.first <= WRONG_WINDOW_MS && w.n >= MAX_WRONG) throw bad('too_many_attempts', 'Too many wrong passwords. Wait 10 minutes and try again.', 429);
+    const row = await this.lockRow();
+    if (!row) throw bad('lock_not_set', 'This day is already marked and locked. Ask the admin to set the attendance edit password first.', 403);
+    if (!password) throw bad('edit_password_required', 'This day is already marked. Enter the attendance edit password to change it.', 403);
+    if (!verifyPassword(password, s(row.fields.Value))) {
+      this.wrong.set(who, w && t - w.first <= WRONG_WINDOW_MS ? { n: w.n + 1, first: w.first } : { n: 1, first: t });
+      await this.audit(a, 'staffatt.edit_denied', staffKey, `${date} wrong password`);
+      throw bad('edit_password_wrong', 'That password is not right', 403);
+    }
+    this.wrong.delete(who);
+  }
+
   // The week, Monday to Sunday: everyone on the team list, plus anyone who has a mark that week but has since left the list.
-  // onlyKey: a doctor's own login sees and marks only itself (and cannot manage the team).
-  async staffWeek(weekStart: string, team: StaffPerson[], meKey: string, onlyKey?: string): Promise<StaffWeek> {
+  // onlyKey: a doctor's own login sees and marks only itself (and cannot manage the team). canSetPassword: the viewer is an admin.
+  async staffWeek(weekStart: string, team: StaffPerson[], meKey: string, onlyKey?: string, canSetPassword = false): Promise<StaffWeek> {
     const w0 = mondayOf(validDate(weekStart) ? weekStart : this.today()); const days = Array.from({ length: 7 }, (_, i) => addDays(w0, i));
     const all = (await this.rows(STAFF_ATT)).map((r) => this.toStaff(r)).filter((x): x is NonNullable<typeof x> => !!x && x.date >= w0 && x.date <= days[6]!);
     const people = new Map<string, { name: string; former: boolean }>(team.map((p) => [p.key, { name: p.name, former: false }]));
@@ -562,7 +597,7 @@ export class RecordsService {
       key, name: p.name, isMe: key === meKey, former: p.former, removable: !p.former && key.startsWith('staff:'),
       cells: Object.fromEntries(days.map((d) => [d, all.find((x) => x.key === key && x.date === d)?.mark || null])) as Record<string, StaffMark | null>,
     }));
-    return { weekStart: w0, days, today: this.today(), canMarkOthers: !onlyKey, canManageTeam: !onlyKey, rows };
+    return { weekStart: w0, days, today: this.today(), canMarkOthers: !onlyKey, canManageTeam: !onlyKey, lockPasswordSet: await this.lockPasswordSet(), canSetLockPassword: canSetPassword && !onlyKey, rows };
   }
 
   // Days per status for one calendar month (YYYY-MM).
@@ -582,6 +617,7 @@ export class RecordsService {
   }
 
   // Set (or clear, with status null) one person's mark for one day. A note left out keeps its saved value.
+  // The FIRST mark of a day is free. Once a day is marked it is locked: changing or clearing it needs the edit password (saving the same status and note again changes nothing).
   setStaffMark(i: StaffMarkInput, team: StaffPerson[], a: Actor): Promise<StaffMark | null> {
     return this.lock.run(async () => {
       if (!validDate(i.date)) throw bad('invalid_date', 'Enter a valid date');
@@ -593,12 +629,15 @@ export class RecordsService {
       const prev = row ? this.toStaff(row)?.mark : undefined;
       const status = i.status;
       const notes = i.notes !== undefined ? i.notes.trim().slice(0, 500) : (prev?.notes ?? '');
+      if (prev && status === prev.status && notes === prev.notes) return prev;          // nothing would change
+      if (!prev && !status) return null;                                                // clearing a day that is not marked
+      if (prev) await this.unlock(i.editPassword, a, i.staffKey, i.date);              // a marked day: needs the edit password (throws otherwise, nothing is written)
       const name = person?.name || (row ? s(row.fields.Staff_Name) : '') || i.staffKey;
       const fields = { Staff_Name: name, Status: status ?? '', Notes: status ? notes : '', Recorded_By: a.email, Updated_At: this.ts() };
       if (row) await this.patch(STAFF_ATT, row.id, fields);
       else if (status) await this.add(STAFF_ATT, [{ Staff_Key: i.staffKey, Att_Date: dateIn(i.date), Created_At: this.ts(), ...fields }]);
       else return null;
-      await this.audit(a, 'staffatt.set', i.staffKey, `${i.date} ${status ?? 'cleared'}`);
+      await this.audit(a, prev ? 'staffatt.override' : 'staffatt.set', i.staffKey, prev ? `${i.date} ${prev.status} -> ${status ?? 'cleared'}` : `${i.date} ${status}`);
       return status ? { status, notes } : null;
     });
   }

@@ -118,12 +118,19 @@ export function recordsRoutes(opts: RecordsRouteOptions = {}) {
   const team = async (c: Context<E>): Promise<StaffPerson[]> => [...baseTeam(c), ...(await svc(c).activeStaffMembers())];
   const mayMark = (c: Context<E>, key: string) => { const only = onlyMe(c); if (only && key !== only) throw bad('forbidden', 'You can only record your own attendance', 403); };
   const mayManage = (c: Context<E>) => { if (onlyMe(c)) throw bad('forbidden', 'Only the front desk or an admin can change the staff list', 403); };
-  r.get('/staff-attendance', async (c) => c.json(await staffSvc(c).staffWeek(c.req.query('week') || '', await team(c), meKey(c), onlyMe(c))));
+  r.get('/staff-attendance', async (c) => c.json(await staffSvc(c).staffWeek(c.req.query('week') || '', await team(c), meKey(c), onlyMe(c), c.get('ctx').viewer.role === 'admin')));
   r.get('/staff-attendance/month', async (c) => c.json(await staffSvc(c).staffMonth(c.req.query('month') || '', await team(c), onlyMe(c))));
   r.put('/staff-attendance', async (c) => {
-    const b = z.object({ staffKey: z.string().min(1).max(200), date, status: z.enum(STAFF_STATUSES).nullable(), notes: text(500).optional() }).parse(await c.req.json());
+    const b = z.object({ staffKey: z.string().min(1).max(200), date, status: z.enum(STAFF_STATUSES).nullable(), notes: text(500).optional(), editPassword: z.string().max(200).optional() }).parse(await c.req.json());
     const sv = staffSvc(c); mayMark(c, b.staffKey);
-    return c.json({ mark: await sv.setStaffMark(b, await team(c), who(c)) });
+    return c.json({ mark: await sv.setStaffMark(b, await team(c), who(c)) });   // a day that already has a mark is refused here without the right editPassword
+  });
+  // the attendance edit password: only an admin sets or changes it (the server stores only a hash)
+  r.put('/staff-attendance/edit-password', async (c) => {
+    const b = z.object({ password: z.string().max(200) }).parse(await c.req.json());
+    const sv = staffSvc(c); if (c.get('ctx').viewer.role !== 'admin' || onlyMe(c)) throw bad('forbidden', 'Only an admin can set the attendance edit password', 403);
+    await sv.setEditPassword(b.password, who(c));
+    return c.json({ ok: true });
   });
   r.post('/staff-attendance/members', async (c) => {
     const b = z.object({ name: z.string().max(200) }).parse(await c.req.json());

@@ -92,7 +92,7 @@ export function Segmented<T extends string>({ value, onChange, options, size = '
     return (
       <div className="flex max-w-full gap-1 overflow-x-auto border-b border-line" role="tablist">
         {options.map((o) => (
-          <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
+          <button key={o.value} type="button" role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
             className={cn('-mb-px inline-flex h-10 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-[13.5px] font-semibold transition-colors duration-150', value === o.value ? 'border-accent-strong text-fg' : 'border-transparent font-medium text-fg-2 hover:text-fg')}>
             {o.label}
             {o.count !== undefined && <span className="num text-[12px] font-medium text-muted">{o.count}</span>}
@@ -104,7 +104,7 @@ export function Segmented<T extends string>({ value, onChange, options, size = '
   return (
     <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-line-2 bg-surface p-0.5" role="tablist">
       {options.map((o) => (
-        <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
+        <button key={o.value} type="button" role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
           className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors duration-150', size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]', value === o.value ? 'bg-blue text-white' : 'text-fg-2 hover:bg-surface-2 hover:text-fg')}>
           {o.label}
           {o.count !== undefined && <span className={cn('num px-0.5 text-[12px]', value === o.value ? 'text-white/80' : 'text-muted')}>{o.count}</span>}

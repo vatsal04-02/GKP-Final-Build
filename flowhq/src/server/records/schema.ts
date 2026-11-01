@@ -21,10 +21,12 @@ export const RECORD_TABLE_NAMES = Object.values(RT);
 // A clinic that has not provisioned them keeps all its clinical pages; only the "Staff attendance" page stays hidden (it needs BOTH).
 export const STAFF_ATT = 'Staff_Attendance';
 export const STAFF_MEMBERS = 'Staff_Members';
-export const STAFF_TABLE_NAMES = [STAFF_ATT, STAFF_MEMBERS] as const;
+export const STAFF_SETTINGS = 'Staff_Settings';   // key/value: the hash of the attendance edit password (never the password itself)
+export const STAFF_TABLE_NAMES = [STAFF_ATT, STAFF_MEMBERS, STAFF_SETTINGS] as const;
 export const STAFF_COLUMNS: Record<(typeof STAFF_TABLE_NAMES)[number], Array<[string, ColType]>> = {
   [STAFF_ATT]: [['Staff_Key', 'Text'], ['Staff_Name', 'Text'], ['Att_Date', 'Date'], ['Status', ['Present', 'Absent', 'Half day', 'Leave']], ['Notes', 'Text'], ['Recorded_By', 'Text'], ['Created_At', 'DateTime'], ['Updated_At', 'DateTime']],
   [STAFF_MEMBERS]: [['Staff_Key', 'Text'], ['Name', 'Text'], ['Active', 'Bool'], ['Created_At', 'DateTime'], ['Created_By', 'Text']],
+  [STAFF_SETTINGS]: [['Key', 'Text'], ['Value', 'Text'], ['Updated_At', 'DateTime'], ['Updated_By', 'Text']],
 };
 // what npm run provision-records creates: the required tables plus the optional ones
 export const ALL_RECORD_COLUMNS: Record<string, Array<[string, ColType]>> = { ...RECORD_COLUMNS, ...STAFF_COLUMNS };

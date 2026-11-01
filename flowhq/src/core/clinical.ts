@@ -44,6 +44,8 @@ export interface StaffWeek {
   weekStart: string; days: string[]; today: string;
   canMarkOthers: boolean;                                          // false for a doctor's own login: it sees and marks only itself
   canManageTeam: boolean;                                          // add / remove people by name (admin and front desk)
+  lockPasswordSet: boolean;                                        // false: marked days are locked for everyone until an admin sets the edit password
+  canSetLockPassword: boolean;                                     // admins only
   // former: no longer on the team list, kept because they have marks in this week. removable: someone added by name on the page (logins and doctors are not)
   rows: Array<{ key: string; name: string; isMe: boolean; former: boolean; removable: boolean; cells: Record<string, StaffMark | null> }>;
 }
@@ -51,7 +53,8 @@ export interface StaffMonth {
   month: string;   // YYYY-MM
   rows: Array<{ key: string; name: string; present: number; halfDay: number; absent: number; leave: number }>;
 }
-export interface StaffMarkInput { staffKey: string; date: string; status: StaffStatus | null; notes?: string }
+// A day that already has a mark is locked: changing or clearing it needs editPassword (the first mark of a day does not)
+export interface StaffMarkInput { staffKey: string; date: string; status: StaffStatus | null; notes?: string; editPassword?: string }
 export interface StaffMember { key: string; name: string }
 
 export interface PatientProfile { patient: PatientRow; prescriptions: Prescription[]; invoices: Invoice[]; payments: Payment[]; visits: Visit[] }

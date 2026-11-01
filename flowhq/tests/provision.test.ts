@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { provision, type ProvisionClient } from '../src/server/records/provision';
-import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, STAFF_MEMBERS, STAFF_TABLE_NAMES } from '../src/server/records/schema';
+import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, STAFF_MEMBERS, STAFF_SETTINGS, STAFF_TABLE_NAMES } from '../src/server/records/schema';
 
 function fake(existing: Record<string, string[]>) {
   const calls: string[] = [];
@@ -46,23 +46,24 @@ describe('provisioning the Clinic Records tables', () => {
 describe('provisioning with the optional staff tables (what npm run provision-records runs)', () => {
   const required = Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, RECORD_COLUMNS[t].map(([n]) => n)]));
   const create = (t: (typeof STAFF_TABLE_NAMES)[number]) => `create ${t} ${STAFF_COLUMNS[t].length}`;
-  it('on a clinic that has the required tables, adds ONLY the two staff tables and touches nothing else', async () => {
+  it('on a clinic that has the required tables, adds ONLY the three staff tables and touches nothing else', async () => {
     const f = fake({ ...required });
     const r = await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS);
-    expect(f.calls).toEqual(STAFF_TABLE_NAMES.map(create)); expect(r.changes).toBe(2);
+    expect(f.calls).toEqual(STAFF_TABLE_NAMES.map(create)); expect(r.changes).toBe(3);
     expect(Object.keys(f.existing).sort()).toEqual([...RECORD_TABLE_NAMES, ...STAFF_TABLE_NAMES].sort());
   });
-  it('PRODUCTION CASE: Staff_Attendance already exists with the two old clock-time columns: only Staff_Members is created, the old columns are left alone', async () => {
+  it('PRODUCTION CASE (v2 deployed): Staff_Attendance (with the two old clock-time columns) and Staff_Members already exist: only Staff_Settings is created, nothing else is touched', async () => {
     const legacy = [...STAFF_COLUMNS[STAFF_ATT].map(([n]) => n), 'Check_In', 'Check_Out'];
-    const f = fake({ ...required, [STAFF_ATT]: legacy });
+    const members = STAFF_COLUMNS[STAFF_MEMBERS].map(([n]) => n);
+    const f = fake({ ...required, [STAFF_ATT]: legacy, [STAFF_MEMBERS]: members });
     const r = await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS);
-    expect(f.calls).toEqual([create(STAFF_MEMBERS)]); expect(r.changes).toBe(1);
-    expect(f.existing[STAFF_ATT]).toEqual(legacy);                       // nothing renamed, retyped, added or removed
+    expect(f.calls).toEqual([create(STAFF_SETTINGS)]); expect(r.changes).toBe(1);
+    expect(f.existing[STAFF_ATT]).toEqual(legacy); expect(f.existing[STAFF_MEMBERS]).toEqual(members);   // nothing renamed, retyped, added or removed
     expect((await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS)).changes).toBe(0);
   });
   it('a dry run reports them without creating anything, and a second apply finds nothing to do', async () => {
     const f = fake({ ...required }); const lines: string[] = [];
-    expect((await provision(f.c, 'DOC', false, (l) => lines.push(l), ALL_RECORD_COLUMNS)).changes).toBe(2);
+    expect((await provision(f.c, 'DOC', false, (l) => lines.push(l), ALL_RECORD_COLUMNS)).changes).toBe(3);
     expect(f.calls).toEqual([]); expect(lines).toEqual(STAFF_TABLE_NAMES.map((t) => `would create table ${t} (${STAFF_COLUMNS[t].length} columns)`));
     await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS); f.calls.length = 0;
     expect((await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS)).changes).toBe(0); expect(f.calls).toEqual([]);
@@ -73,6 +74,7 @@ describe('provisioning with the optional staff tables (what npm run provision-re
     await provision(f.c, 'DOC', true, () => {}, ALL_RECORD_COLUMNS);
     expect(seen[`${STAFF_ATT}.Status`]!.type).toBe('Choice'); expect(JSON.parse(seen[`${STAFF_ATT}.Status`]!.widgetOptions!).choices).toEqual(['Present', 'Absent', 'Half day', 'Leave']);
     expect(seen[`${STAFF_ATT}.Att_Date`]!.type).toBe('Date'); expect(seen[`${STAFF_ATT}.Updated_At`]!.type).toBe('DateTime:Asia/Kolkata');
+    expect(seen[`${STAFF_SETTINGS}.Updated_At`]!.type).toBe('DateTime:Asia/Kolkata'); expect(seen[`${STAFF_SETTINGS}.Value`]!.type).toBe('Text');
     expect(seen[`${STAFF_MEMBERS}.Active`]!.type).toBe('Bool'); expect(seen[`${STAFF_MEMBERS}.Created_At`]!.type).toBe('DateTime:Asia/Kolkata');
     expect(seen[`${STAFF_ATT}.Check_In`]).toBeUndefined();               // the clock-time columns are not created any more
   });

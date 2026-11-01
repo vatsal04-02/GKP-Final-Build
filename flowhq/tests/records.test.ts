@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { GristClient, memoryGrist, type GristRecord } from '../src/server/grist';
 import { RecordsService, sniffImage, type Actor, type ClinicConfig } from '../src/server/records/service';
-import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, STAFF_MEMBERS, STAFF_TABLE_NAMES, colNames } from '../src/server/records/schema';
+import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, STAFF_MEMBERS, STAFF_SETTINGS, STAFF_TABLE_NAMES, colNames } from '../src/server/records/schema';
 import type { InvoiceInput, PrescriptionInput } from '../src/core/clinical';
 
 const NOW = Date.UTC(2026, 9, 7, 6, 30);          // 2026-10-07 12:00 IST (a Wednesday)
@@ -288,27 +288,29 @@ describe('visits and attendance', () => {
 });
 
 describe('staff attendance', () => {
-  const TEAM = [{ key: 'admin@test', name: 'Alex' }, { key: 'sam@test', name: 'Sam' }, { key: 'doctor:dr test', name: 'Dr Test' }];
+  const PWD = 'attendance-pass-9';
+  const TEAM =[{ key: 'admin@test', name: 'Alex' }, { key: 'sam@test', name: 'Sam' }, { key: 'doctor:dr test', name: 'Dr Test' }];
   const rowsOf = (docs: Record<string, Record<string, GristRecord[]>>) => docs.D![STAFF_ATT]!;
   const auditOf = (docs: Record<string, Record<string, GristRecord[]>>) => docs.D!.Audit_Log!.map((r) => r.fields);
 
   it('saves a mark, updates the same day in place, clears it without deleting, and shows a Monday-Sunday week', async () => {
-    const { svc, docs } = setup();
+    const { svc, docs } = setup(); await svc.setEditPassword(PWD, ADMIN);
     await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', notes: 'on time' }, TEAM, ADMIN);   // Monday
     await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Absent' }, TEAM, ADMIN);
-    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Half day' }, TEAM, ADMIN);   // same day: updated, not duplicated
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Half day', editPassword: PWD }, TEAM, ADMIN);   // same day: updated (with the edit password), not duplicated
     expect(rowsOf(docs)).toHaveLength(2);
     expect(rowsOf(docs)[0]!.fields).toMatchObject({ Staff_Key: 'sam@test', Staff_Name: 'Sam', Status: 'Present', Notes: 'on time', Recorded_By: 'admin@test' });
     expect(Object.keys(rowsOf(docs)[0]!.fields).sort()).toEqual(['Att_Date', 'Created_At', 'Notes', 'Recorded_By', 'Staff_Key', 'Staff_Name', 'Status', 'Updated_At']);   // no clock-time columns
     const w = await svc.staffWeek('2026-10-07', TEAM, 'admin@test');
-    expect([w.weekStart, w.days.length, w.days[6], w.today, w.canMarkOthers, w.canManageTeam]).toEqual(['2026-10-05', 7, '2026-10-11', '2026-10-07', true, true]);
+    expect([w.weekStart, w.days.length, w.days[6], w.today, w.canMarkOthers, w.canManageTeam, w.lockPasswordSet, w.canSetLockPassword]).toEqual(['2026-10-05', 7, '2026-10-11', '2026-10-07', true, true, true, false]);
+    expect((await svc.staffWeek('2026-10-07', TEAM, 'admin@test', undefined, true)).canSetLockPassword).toBe(true);
     expect(w.rows.map((r) => r.name)).toEqual(['Alex', 'Sam', 'Dr Test']);
     const sam = w.rows.find((r) => r.key === 'sam@test')!;
     expect(sam.cells['2026-10-05']).toEqual({ status: 'Present', notes: 'on time' });
     expect(sam.cells['2026-10-06']).toEqual({ status: 'Half day', notes: '' }); expect(sam.cells['2026-10-07']).toBeNull();
     expect(w.rows.find((r) => r.key === 'admin@test')!.isMe).toBe(true);
     // clearing empties the status but the row (and its history in the audit log) stays
-    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: null }, TEAM, ADMIN)).toBeNull();
+    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: null, editPassword: PWD }, TEAM, ADMIN)).toBeNull();
     expect((await svc.staffWeek('2026-10-05', TEAM, 'x')).rows.find((r) => r.key === 'sam@test')!.cells['2026-10-06']).toBeNull();
     expect(rowsOf(docs)).toHaveLength(2); expect(rowsOf(docs)[1]!.fields.Status).toBe('');
     // an older week keeps its marks
@@ -317,10 +319,10 @@ describe('staff attendance', () => {
   });
 
   it('a note is kept when a later change leaves it out, and replaced when sent', async () => {
-    const { svc } = setup();
+    const { svc } = setup(); await svc.setEditPassword(PWD, ADMIN);
     await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Absent', notes: 'called in sick' }, TEAM, ADMIN);
-    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Leave' }, TEAM, ADMIN)).toEqual({ status: 'Leave', notes: 'called in sick' });
-    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Leave', notes: '' }, TEAM, ADMIN)).toEqual({ status: 'Leave', notes: '' });
+    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Leave', editPassword: PWD }, TEAM, ADMIN)).toEqual({ status: 'Leave', notes: 'called in sick' });
+    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Leave', notes: '', editPassword: PWD }, TEAM, ADMIN)).toEqual({ status: 'Leave', notes: '' });
   });
 
   it('keeps someone who left the team list visible in the weeks they have marks, but not in other weeks', async () => {
@@ -416,6 +418,89 @@ describe('staff attendance', () => {
     const w = await svc.staffWeek('2026-10-05', TEAM, 'sam@test', 'sam@test');
     expect([w.rows.map((r) => r.key), w.canMarkOthers, w.canManageTeam]).toEqual([['sam@test'], false, false]);
     expect((await svc.staffMonth('2026-10', TEAM, 'sam@test')).rows.map((r) => r.key)).toEqual(['sam@test']);
+  });
+
+  describe('a marked day is locked: changing or clearing it needs the edit password', () => {
+    const mark = (svc: ReturnType<typeof setup>['svc'], over: Partial<Parameters<ReturnType<typeof setup>['svc']['setStaffMark']>[0]> = {}, actor: Actor = ADMIN) => svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', ...over }, TEAM, actor);
+    const STAFF_USER: Actor = { email: 'desk@test', name: 'Desk', role: 'staff' };
+    const stored = (docs: Record<string, Record<string, GristRecord[]>>) => docs.D![STAFF_SETTINGS]!.map((r) => r.fields);
+
+    it('the FIRST mark of a day is free; with no edit password set, a marked day cannot be changed or cleared by anyone, admin included', async () => {
+      const { svc, docs } = setup();
+      expect(await mark(svc, { status: 'Absent' })).toEqual({ status: 'Absent', notes: '' });           // free: nobody needed a password
+      expect((await svc.staffWeek('2026-10-05', TEAM, 'x')).lockPasswordSet).toBe(false);
+      expect(await code(mark(svc, { status: 'Present' }))).toBe('lock_not_set');
+      expect(await code(mark(svc, { status: null }))).toBe('lock_not_set');
+      expect(await code(mark(svc, { status: 'Present', editPassword: 'anything-at-all' }, STAFF_USER))).toBe('lock_not_set');
+      expect(rowsOf(docs)[0]!.fields.Status).toBe('Absent'); expect(rowsOf(docs)).toHaveLength(1);       // nothing was written
+    });
+
+    it('with a password set: missing and wrong passwords are refused and change nothing; the right one changes it, whoever the person is', async () => {
+      const { svc, docs } = setup(); await svc.setEditPassword(PWD, ADMIN);
+      await mark(svc, { status: 'Absent' });
+      expect(await code(mark(svc, { status: 'Present' }))).toBe('edit_password_required');
+      expect(await code(mark(svc, { status: 'Present', editPassword: '' }))).toBe('edit_password_required');
+      expect(await code(mark(svc, { status: 'Present', editPassword: 'wrong-password' }, STAFF_USER))).toBe('edit_password_wrong');
+      expect(await code(mark(svc, { status: null, editPassword: 'wrong-password' }))).toBe('edit_password_wrong');             // clearing is locked too
+      expect(rowsOf(docs)[0]!.fields.Status).toBe('Absent');
+      expect(await mark(svc, { status: 'Present', editPassword: PWD }, STAFF_USER)).toEqual({ status: 'Present', notes: '' });  // the password, not the role, is the key
+      expect(await mark(svc, { status: null, editPassword: PWD })).toBeNull();
+      expect(rowsOf(docs)[0]!.fields.Status).toBe('');                                                                          // cleared, row kept
+      expect(await mark(svc, { status: 'Leave' })).toEqual({ status: 'Leave', notes: '' });                                     // an unmarked day is free again
+      expect(rowsOf(docs)).toHaveLength(1);
+    });
+
+    it('saving the same status and note again changes nothing and needs no password; a note-only change is a change', async () => {
+      const { svc, docs } = setup(); await svc.setEditPassword(PWD, ADMIN);
+      await mark(svc, { status: 'Absent', notes: 'sick' }); const audits = auditOf(docs).length;
+      expect(await mark(svc, { status: 'Absent', notes: 'sick' })).toEqual({ status: 'Absent', notes: 'sick' });
+      expect(await mark(svc, { status: 'Absent' })).toEqual({ status: 'Absent', notes: 'sick' });                                // note left out = kept
+      expect(auditOf(docs)).toHaveLength(audits);
+      expect(await code(mark(svc, { status: 'Absent', notes: 'changed my mind' }))).toBe('edit_password_required');
+    });
+
+    it('audits first marks as staffatt.set, edits as staffatt.override (old -> new), wrong tries as staffatt.edit_denied; the password is never logged or stored as text', async () => {
+      const { svc, docs } = setup(); await svc.setEditPassword(PWD, ADMIN);
+      await mark(svc, { status: 'Absent' });
+      await code(mark(svc, { status: 'Present', editPassword: 'wrong-guess-123' }, STAFF_USER));
+      await mark(svc, { status: 'Present', editPassword: PWD }, STAFF_USER);
+      await mark(svc, { status: null, editPassword: PWD });
+      expect(auditOf(docs).map((a) => [a.Action, a.User, a.Summary])).toEqual([
+        ['staffatt.password_set', 'admin@test', 'edit password set'], ['staffatt.set', 'admin@test', '2026-10-05 Absent'], ['staffatt.edit_denied', 'desk@test', '2026-10-05 wrong password'],
+        ['staffatt.override', 'desk@test', '2026-10-05 Absent -> Present'], ['staffatt.override', 'admin@test', '2026-10-05 Present -> cleared']]);
+      const everything = JSON.stringify([auditOf(docs), rowsOf(docs).map((r) => r.fields), stored(docs)]);
+      expect(everything).not.toContain(PWD); expect(everything).not.toContain('wrong-guess-123');
+      expect(stored(docs)).toHaveLength(1); expect(stored(docs)[0]).toMatchObject({ Key: 'edit_password_hash', Updated_By: 'admin@test' }); expect(String(stored(docs)[0]!.Value)).toMatch(/^scrypt\$/);
+    });
+
+    it('only an admin can set or change the password; it must be at least 8 characters; the old one stops working', async () => {
+      const { svc, docs } = setup();
+      expect(await code(svc.setEditPassword(PWD, STAFF_USER))).toBe('forbidden');
+      expect(await code(svc.setEditPassword('short', ADMIN))).toBe('weak_password');
+      expect(await code(svc.setEditPassword('x'.repeat(201), ADMIN))).toBe('weak_password');
+      expect(stored(docs)).toHaveLength(0);
+      await svc.setEditPassword(PWD, ADMIN); await mark(svc, { status: 'Absent' });
+      await svc.setEditPassword('a-brand-new-password', ADMIN);
+      expect(stored(docs)).toHaveLength(1);                                                                                      // updated in place, not duplicated
+      expect(await code(mark(svc, { status: 'Present', editPassword: PWD }))).toBe('edit_password_wrong');
+      expect((await mark(svc, { status: 'Present', editPassword: 'a-brand-new-password' }))!.status).toBe('Present');
+    });
+
+    it('5 wrong passwords block that person for 10 minutes (even the right password); other people and later times are unaffected', async () => {
+      let t = Date.UTC(2026, 9, 7, 6, 30);
+      const { svc } = setup({ now: () => t }); await svc.setEditPassword(PWD, ADMIN); await mark(svc, { status: 'Absent' });
+      for (let i = 0; i < 5; i++) expect(await code(mark(svc, { status: 'Present', editPassword: `wrong-${i}` }, STAFF_USER))).toBe('edit_password_wrong');
+      expect(await code(mark(svc, { status: 'Present', editPassword: PWD }, STAFF_USER))).toBe('too_many_attempts');             // blocked, even with the right one
+      expect((await mark(svc, { status: 'Present', editPassword: PWD }, ADMIN))!.status).toBe('Present');                       // another person is not blocked
+      t += 9 * 60000; expect(await code(mark(svc, { status: 'Absent', editPassword: PWD }, STAFF_USER))).toBe('too_many_attempts');
+      t += 2 * 60000; expect((await mark(svc, { status: 'Absent', editPassword: PWD }, STAFF_USER))!.status).toBe('Absent');      // after 10+ minutes
+    });
+
+    it('a correct password resets the count of wrong ones', async () => {
+      const { svc } = setup(); await svc.setEditPassword(PWD, ADMIN); await mark(svc, { status: 'Absent' });
+      for (let r = 0; r < 3; r++) { for (let i = 0; i < 4; i++) await code(mark(svc, { status: 'Present', editPassword: 'nope-nope' }, STAFF_USER)); await mark(svc, { status: r % 2 ? 'Absent' : 'Present', editPassword: PWD }, STAFF_USER); }
+      expect((await mark(svc, { status: 'Leave', editPassword: PWD }, STAFF_USER))!.status).toBe('Leave');
+    });
   });
 
   it('every change is audited without the free-text note, and a missing audit write does not lose the saved mark', async () => {

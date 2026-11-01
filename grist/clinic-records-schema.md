@@ -119,7 +119,7 @@ One row per patient per day (marking the same day again updates it). Feeds the M
 | Created_At | DateTime | |
 
 ## Staff_Attendance
-**Optional table** (the clinical pages work without it; the "Staff attendance" page appears only once this table AND `Staff_Members` exist). One row per staff member per day: marking the same day again updates the row, and every change is also written to `Audit_Log` (`staffatt.set`), so the history of who changed what is kept. Rows are never deleted: clearing a mark empties `Status`. There are no clock times: a day is only Present, Absent, Half day or Leave. (A table created by the first version of this page may carry two extra empty columns, `Check_In` and `Check_Out`; they are ignored and never written.)
+**Optional table** (the clinical pages work without it; the "Staff attendance" page appears only once this table, `Staff_Members` AND `Staff_Settings` exist). One row per staff member per day. **A marked day is locked:** the first mark of a day is free, but changing or clearing it needs the attendance edit password (see `Staff_Settings`), enforced by the server; every change is written to `Audit_Log` (`staffatt.set` for a first mark, `staffatt.override` with the old and new status for an edit, `staffatt.edit_denied` for a wrong password), so the history of who changed what is kept. Rows are never deleted: clearing a mark empties `Status`. There are no clock times: a day is only Present, Absent, Half day or Leave. (A table created by the first version of this page may carry two extra empty columns, `Check_In` and `Check_Out`; they are ignored and never written.)
 | Column | Type | Notes |
 |---|---|---|
 | Staff_Key | Text | stable key of the person: the FLOW HQ login's email (lower case), `doctor:<name>` for a doctor in `config/clinic.json` who has no login, or `staff:000001` for someone added on the page (see `Staff_Members`) |
@@ -138,6 +138,14 @@ One row per patient per day (marking the same day again updates it). Feeds the M
 | Name | Text | 1 to 80 characters, unique ignoring capitals and extra spaces |
 | Active | Toggle | off = removed from the list |
 | Created_At, Created_By | DateTime, Text | |
+
+## Staff_Settings
+**Optional table**, the third part of the staff attendance page: settings for the page. Today it holds one row, `Key = edit_password_hash`: a salted scrypt hash of the **attendance edit password** that an admin sets on the page (the password itself is never stored or logged). Until that row exists, marked days are locked for everybody. Changing the password updates the row; nothing is deleted.
+| Column | Type | Notes |
+|---|---|---|
+| Key | Text | `edit_password_hash` |
+| Value | Text | `scrypt$<salt>$<hash>` |
+| Updated_At, Updated_By | DateTime, Text | who last set it (login email) and when |
 
 ## Audit_Log
 Who did what, when. Never contains clinical text or image data.

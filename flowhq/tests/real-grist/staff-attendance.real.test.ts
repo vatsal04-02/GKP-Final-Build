@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RecordsService, type Actor, type StaffPerson } from '../../src/server/records/service';
 import { provision } from '../../src/server/records/provision';
-import { ALL_RECORD_COLUMNS, STAFF_ATT, STAFF_COLUMNS, STAFF_MEMBERS } from '../../src/server/records/schema';
+import { ALL_RECORD_COLUMNS, STAFF_ATT, STAFF_COLUMNS, STAFF_MEMBERS, STAFF_SETTINGS } from '../../src/server/records/schema';
 import { PW, REAL_ENABLED, createStaging, deleteStaging, startServer, type Server, type Staging } from './harness';
 
 const d = describe.skipIf(!REAL_ENABLED);
@@ -12,6 +12,7 @@ const ADMIN: Actor = { email: 'admin@test', name: 'Owner', role: 'admin' };
 const TEAM: StaffPerson[] = [{ key: 'admin@test', name: 'Owner' }, { key: 'desk@test', name: 'Front desk' }];
 const CLINIC = { idPrefix: 'GK', name: 'Staging', tagline: '', address: '', phones: [], timings: '', runBy: '', clinicians: [], tax: null };
 const NOW = Date.UTC(2026, 9, 7, 3, 45);   // Wednesday 2026-10-07 09:15 IST
+const LOCK_PW = 'attendance-lock-pw-1';
 
 d('staff attendance on a real Grist', () => {
   let s: Staging; let srv: Server | undefined;
@@ -19,17 +20,38 @@ d('staff attendance on a real Grist', () => {
   afterAll(async () => { if (srv) await srv.stop().catch(() => undefined); if (s) await deleteStaging(s).catch(() => undefined); });
   const svc = () => new RecordsService(s.client, s.clinicDocId, { tz: 'Asia/Kolkata', clinic: () => CLINIC, now: () => NOW });
 
-  it('PRODUCTION CASE: an older Staff_Attendance (with Check_In / Check_Out) already exists; provisioning adds only Staff_Members, changes nothing else, and is repeatable', async () => {
-    // exactly what production has today: the first version of the table, with the two clock-time columns
+  it('PRODUCTION CASE: Staff_Attendance (with the old Check_In / Check_Out columns) and Staff_Members already exist; provisioning adds only Staff_Settings, changes nothing else, and is repeatable', async () => {
+    // exactly what production has today (v2): the attendance table with the two old clock-time columns, and the members table
     await s.client.createTable(s.clinicDocId, STAFF_ATT, [...STAFF_COLUMNS[STAFF_ATT].map(([n]) => n), 'Check_In', 'Check_Out'].map((id) => ({ id, fields: { type: id === 'Att_Date' ? 'Date' : id === 'Status' ? 'Choice' : id === 'Created_At' || id === 'Updated_At' ? 'DateTime:Asia/Kolkata' : 'Text', label: id, ...(id === 'Status' ? { widgetOptions: JSON.stringify({ choices: ['Present', 'Absent', 'Half day', 'Leave'] }) } : {}) } })) as never);
-    const before = (await s.client.columnIds(s.clinicDocId, STAFF_ATT)).sort();
-    expect(await s.client.tableIds(s.clinicDocId)).not.toContain(STAFF_MEMBERS);
+    await provision(s.client, s.clinicDocId, true, () => {}, { [STAFF_MEMBERS]: STAFF_COLUMNS[STAFF_MEMBERS] });
+    const before = (await s.client.columnIds(s.clinicDocId, STAFF_ATT)).sort(); const beforeM = (await s.client.columnIds(s.clinicDocId, STAFF_MEMBERS)).sort();
+    expect(await s.client.tableIds(s.clinicDocId)).not.toContain(STAFF_SETTINGS);
     const lines: string[] = [];
     expect((await provision(s.client, s.clinicDocId, true, (l) => lines.push(l), ALL_RECORD_COLUMNS)).changes).toBe(1);
-    expect(lines).toEqual([`creating table ${STAFF_MEMBERS} (${STAFF_COLUMNS[STAFF_MEMBERS].length} columns)`]);
+    expect(lines).toEqual([`creating table ${STAFF_SETTINGS} (${STAFF_COLUMNS[STAFF_SETTINGS].length} columns)`]);
     expect((await s.client.columnIds(s.clinicDocId, STAFF_ATT)).sort()).toEqual(before);                                  // untouched
-    expect((await s.client.columnIds(s.clinicDocId, STAFF_MEMBERS)).sort()).toEqual(STAFF_COLUMNS[STAFF_MEMBERS].map(([n]) => n).sort());
+    expect((await s.client.columnIds(s.clinicDocId, STAFF_MEMBERS)).sort()).toEqual(beforeM);                             // untouched
+    expect((await s.client.columnIds(s.clinicDocId, STAFF_SETTINGS)).sort()).toEqual(STAFF_COLUMNS[STAFF_SETTINGS].map(([n]) => n).sort());
     expect((await provision(s.client, s.clinicDocId, true, () => {}, ALL_RECORD_COLUMNS)).changes).toBe(0);
+  }, 90000);
+
+  it('the lock on a real Grist: a marked day needs the edit password; only a hash is stored; wrong tries are audited', async () => {
+    const team = [...TEAM];
+    await svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-01', status: 'Absent' }, team, ADMIN);                  // first mark: free
+    expect((await svc().staffWeek('2026-10-01', team, 'x')).lockPasswordSet).toBe(false);
+    expect(await svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-01', status: 'Present' }, team, ADMIN).then(() => 'ok', (e) => e.code)).toBe('lock_not_set');
+    await svc().setEditPassword(LOCK_PW, ADMIN);
+    const row = (await s.client.records(s.clinicDocId, STAFF_SETTINGS))[0]!.fields;
+    expect(row).toMatchObject({ Key: 'edit_password_hash', Updated_By: 'admin@test' }); expect(String(row.Value)).toMatch(/^scrypt\$/); expect(String(row.Value)).not.toContain(LOCK_PW); expect(typeof row.Updated_At).toBe('number');
+    expect((await s.client.records(s.clinicDocId, STAFF_SETTINGS))).toHaveLength(1);
+    const code = (p: Promise<unknown>) => p.then(() => 'ok', (e: { code?: string }) => e.code);
+    expect(await code(svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-01', status: 'Present' }, team, ADMIN))).toBe('edit_password_required');
+    expect(await code(svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-01', status: 'Present', editPassword: 'not-the-password' }, team, ADMIN))).toBe('edit_password_wrong');
+    expect((await s.client.records(s.clinicDocId, STAFF_ATT)).find((r) => r.fields.Att_Date === Date.UTC(2026, 9, 1) / 1000)!.fields.Status).toBe('Absent');   // unchanged
+    expect(await svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-01', status: 'Present', editPassword: LOCK_PW }, team, ADMIN)).toEqual({ status: 'Present', notes: '' });
+    const audit = (await s.client.records(s.clinicDocId, 'Audit_Log')).map((r) => `${r.fields.Action}|${r.fields.Summary}`);
+    expect(audit).toEqual(expect.arrayContaining(['staffatt.password_set|edit password set', 'staffatt.edit_denied|2026-10-01 wrong password', 'staffatt.override|2026-10-01 Absent -> Present']));
+    expect(JSON.stringify(audit)).not.toContain(LOCK_PW);
   }, 90000);
 
   it('names are added and removed with real Bool / DateTime columns; marks keep their real Date type; nothing is lost across new service instances; all audited', async () => {
@@ -42,11 +64,11 @@ d('staff attendance on a real Grist', () => {
     expect(team.map((p) => p.name)).toEqual(['Owner', 'Front desk', 'Priya Sharma']);
     await svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-05', status: 'Present', notes: 'on time' }, team, ADMIN);
     await svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-06', status: 'Leave' }, team, ADMIN);
-    await svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-06', status: 'Half day' }, team, ADMIN);                // same day: updated in place
+    await svc().setStaffMark({ staffKey: 'desk@test', date: '2026-10-06', status: 'Half day', editPassword: LOCK_PW }, team, ADMIN);   // same day: updated in place (a marked day needs the password)
     await svc().setStaffMark({ staffKey: 'staff:000001', date: '2026-10-05', status: 'Absent' }, team, ADMIN);
     const raw = await s.client.records(s.clinicDocId, STAFF_ATT);
-    expect(raw).toHaveLength(3);
-    const monday = raw.find((r) => r.fields.Staff_Key === 'desk@test' && r.fields.Status === 'Present')!.fields;
+    expect(raw).toHaveLength(4);                                                                                            // + the 2026-10-01 row from the lock test
+    const monday = raw.find((r) => r.fields.Staff_Key === 'desk@test' && r.fields.Att_Date === Date.UTC(2026, 9, 5) / 1000)!.fields;
     expect(monday).toMatchObject({ Staff_Name: 'Front desk', Notes: 'on time', Recorded_By: 'admin@test', Check_In: '', Check_Out: '' });   // the old time columns stay empty
     expect(monday.Att_Date).toBe(Date.UTC(2026, 9, 5) / 1000);                                                              // a real Grist Date
 
@@ -62,11 +84,11 @@ d('staff attendance on a real Grist', () => {
     expect((await s.client.records(s.clinicDocId, STAFF_MEMBERS))).toHaveLength(1);
 
     const month = await svc().staffMonth('2026-10', [...TEAM, ...(await svc().activeStaffMembers())]);
-    expect(month.rows.find((r) => r.key === 'desk@test')).toMatchObject({ present: 1, halfDay: 1, absent: 0, leave: 0 });
+    expect(month.rows.find((r) => r.key === 'desk@test')).toMatchObject({ present: 2, halfDay: 1, absent: 0, leave: 0 });   // 10-01 (edited to Present), 10-05, and 10-06 as Half day
     expect(month.rows.find((r) => r.key === 'staff:000001')).toMatchObject({ absent: 1 });
 
     const audit = (await s.client.records(s.clinicDocId, 'Audit_Log')).map((r) => String(r.fields.Action));
-    expect(audit.filter((x) => x === 'staff.add')).toHaveLength(2); expect(audit.filter((x) => x === 'staff.remove')).toHaveLength(1); expect(audit.filter((x) => x === 'staffatt.set')).toHaveLength(4);
+    expect(audit.filter((x) => x === 'staff.add')).toHaveLength(2); expect(audit.filter((x) => x === 'staff.remove')).toHaveLength(1); expect(audit.filter((x) => x === 'staffatt.set')).toHaveLength(4); expect(audit.filter((x) => x === 'staffatt.override')).toHaveLength(2);
   }, 90000);
 
   it('through the real server: the page is offered, a name is added and marked over HTTP, and all of it is still there after the server restarts', async () => {
@@ -85,12 +107,22 @@ d('staff attendance on a real Grist', () => {
     expect((await call(srv.base, cookie, '/staff-attendance/members', 'POST', { name: 'ravi  kumar' })).status).toBe(409);
     const put = await call(srv.base, cookie, '/staff-attendance', 'PUT', { staffKey: 'staff:000002', date: today, status: 'Present', notes: 'saved over HTTP' });
     expect([put.status, put.json.mark]).toEqual([200, { status: 'Present', notes: 'saved over HTTP' }]);
+    // the lock over real HTTP: the edit password set earlier lives in Grist; a front-desk login cannot set it, and cannot change a marked day without it
+    expect((await call(srv.base, cookie, '/staff-attendance/edit-password', 'PUT', { password: 'desk-tries-this-1' })).status).toBe(403);
+    const locked = await call(srv.base, cookie, '/staff-attendance', 'PUT', { staffKey: 'staff:000002', date: today, status: 'Absent' });
+    expect([locked.status, locked.json.error.code]).toEqual([403, 'edit_password_required']);
+    expect((await call(srv.base, cookie, '/staff-attendance', 'PUT', { staffKey: 'staff:000002', date: today, status: 'Absent', editPassword: 'wrong-wrong-1' })).json.error.code).toBe('edit_password_wrong');
+    expect((await call(srv.base, cookie, '/staff-attendance', 'PUT', { staffKey: 'staff:000002', date: today, status: 'Present', notes: 'saved over HTTP', editPassword: LOCK_PW })).status).toBe(200);   // right password, no change: fine
 
     await srv.stop(); srv = await startServer(s, { reuse: srv });                // restart the real server process
     cookie = await login(srv.base); await waitModule(srv.base, cookie);
     const after = await call(srv.base, cookie, '/staff-attendance');
     const ravi = (after.json.rows as Array<{ key: string; name: string; removable: boolean; cells: Record<string, { status: string; notes: string } | null> }>).find((r) => r.key === 'staff:000002')!;
     expect([ravi.name, ravi.removable, ravi.cells[today]]).toEqual(['Ravi Kumar', true, { status: 'Present', notes: 'saved over HTTP' }]);
+    expect(after.json.lockPasswordSet).toBe(true);                                                                                                  // the password survived the restart
+    expect((await call(srv.base, cookie, '/staff-attendance', 'PUT', { staffKey: 'staff:000002', date: today, status: 'Absent' })).json.error.code).toBe('edit_password_required');   // and so did the lock
+    expect((await call(srv.base, cookie, '/staff-attendance', 'PUT', { staffKey: 'staff:000002', date: today, status: 'Leave', editPassword: LOCK_PW })).json.mark.status).toBe('Leave');
+    expect((await call(srv.base, cookie, '/staff-attendance', 'PUT', { staffKey: 'staff:000002', date: today, status: 'Present', editPassword: LOCK_PW })).json.mark.status).toBe('Present');
     expect((await call(srv.base, cookie, `/staff-attendance/members/${encodeURIComponent('staff:000002')}`, 'DELETE')).status).toBe(200);
     expect(((await call(srv.base, cookie, '/staff-attendance')).json.rows as Array<{ key: string; former: boolean }>).find((r) => r.key === 'staff:000002')!.former).toBe(true);   // hidden from the list, today's mark kept
     expect((await s.client.records(s.clinicDocId, STAFF_ATT)).some((r) => r.fields.Staff_Key === 'staff:000002' && r.fields.Notes === 'saved over HTTP')).toBe(true);

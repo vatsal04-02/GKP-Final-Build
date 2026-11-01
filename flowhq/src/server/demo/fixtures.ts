@@ -5,6 +5,7 @@
 import type { GristRecord } from '../grist';
 import type { WorkspaceProfile } from '../profiles';
 import { clinicModules } from '../adapters/autopilot/shared';
+import { hashPassword } from '../auth';
 import { demoBookingTables } from './booking';
 
 interface Flavor {
@@ -118,7 +119,8 @@ function clinicRecords(nowMs: number, staff: string[]): Record<string, GristReco
   const mark = (key: string, name: string, off: number, st: string) => staffAtt.push({ id: ++sid, fields: { Staff_Key: key, Staff_Name: name, Att_Date: day(off), Status: st, Notes: '', Recorded_By: key, Created_At: day(off) + 33000, Updated_At: day(off) + 33000 } });
   for (const off of [-4, -3, -2, -1]) { mark('admin@flowhq.demo', 'Alex (admin)', off, 'Present'); mark('staff@flowhq.demo', 'Sam', off, off === -3 ? 'Leave' : off === -2 ? 'Half day' : 'Present'); mark('staff:000001', 'Priya (receptionist)', off, off === -1 ? 'Absent' : 'Present'); }
   const staffMembers: GristRecord[] = [{ id: 1, fields: { Staff_Key: 'staff:000001', Name: 'Priya (receptionist)', Active: true, Created_At: day(-30) + 33000, Created_By: 'admin@flowhq.demo' } }];
-  return { Patients: patients, Visits: visits, Prescriptions: prescriptions, Rx_Images: [], Invoices: invoices, Invoice_Lines: lines, Payments: payments, Audit_Log: [], Staff_Attendance: staffAtt, Staff_Members: staffMembers };
+  return { Patients: patients, Visits: visits, Prescriptions: prescriptions, Rx_Images: [], Invoices: invoices, Invoice_Lines: lines, Payments: payments, Audit_Log: [], Staff_Attendance: staffAtt, Staff_Members: staffMembers,
+    Staff_Settings: [{ id: 1, fields: { Key: 'edit_password_hash', Value: hashPassword('demo1234'), Updated_At: t, Updated_By: 'admin@flowhq.demo' } }] };   // demo only: the edit password is demo1234
 }
 
 export function demoDocs(nowMs: number) {

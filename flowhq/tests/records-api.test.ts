@@ -128,6 +128,31 @@ describe('staff attendance over HTTP', () => {
     expect((await call(staff, `/staff-attendance/members/${encodeURIComponent('staff:000001')}`, 'DELETE')).status).toBe(200); // leave the list tidy for the other tests
   });
 
+  it('a marked day is locked over HTTP: no password set = nobody can change it; only an admin sets the password; then it is the password that unlocks, for anyone', async () => {
+    const put = (cookie: string, body: Record<string, unknown>) => call(cookie, '/staff-attendance', 'PUT', { staffKey: 'staff@test', date: '2026-10-02', ...body });
+    const week = async (cookie: string) => (await call(cookie, '/staff-attendance?week=2026-09-28')).json;
+    expect([(await week(admin)).lockPasswordSet, (await week(admin)).canSetLockPassword, (await week(staff)).canSetLockPassword, (await week(doctor)).canSetLockPassword]).toEqual([false, true, false, false]);
+    expect((await put(staff, { status: 'Absent' })).status).toBe(200);                                                                // first mark: free
+    for (const who of [staff, admin, doctor]) { const r = await put(who, { status: 'Present' }); expect([r.status, r.json.error.code]).toEqual(who === doctor ? [403, 'forbidden'] : [403, 'lock_not_set']); }   // (a doctor login may only mark itself)
+    // setting the password: admin only, at least 8 characters, needs the CSRF header
+    expect((await call(staff, '/staff-attendance/edit-password', 'PUT', { password: 'front-desk-pass' })).json.error.code).toBe('forbidden');
+    expect((await call(doctor, '/staff-attendance/edit-password', 'PUT', { password: 'doctor-pass-123' })).status).toBe(403);
+    expect((await call(admin, '/staff-attendance/edit-password', 'PUT', { password: 'short' })).json.error.code).toBe('weak_password');
+    expect((await app.request('/api/w/demo-physio/staff-attendance/edit-password', { method: 'PUT', headers: { cookie: admin, 'content-type': 'application/json' }, body: JSON.stringify({ password: 'owner-secret-1' }) })).status).toBe(403);   // no CSRF header
+    expect((await call(admin, '/staff-attendance/edit-password', 'PUT', { password: 'owner-secret-1' })).status).toBe(200);
+    expect([(await week(staff)).lockPasswordSet, JSON.stringify(await week(staff))].map((x, i) => (i === 1 ? String(x).includes('owner-secret-1') : x))).toEqual([true, false]);   // the response never carries the password
+    // now: missing -> 403 edit_password_required, wrong -> 403 edit_password_wrong, right -> saved
+    expect((await put(staff, { status: 'Present' })).json.error.code).toBe('edit_password_required');
+    expect((await put(staff, { status: 'Present', editPassword: 'guess-1234' })).json.error.code).toBe('edit_password_wrong');
+    expect((await put(staff, { status: null, editPassword: 'guess-1234' })).status).toBe(403);
+    expect((await week(admin)).rows.find((x: { key: string }) => x.key === 'staff@test').cells['2026-10-02'].status).toBe('Absent');         // nothing changed
+    const ok = await put(staff, { status: 'Present', editPassword: 'owner-secret-1' });
+    expect([ok.status, ok.json.mark.status]).toEqual([200, 'Present']);
+    expect((await put(staff, { status: null, editPassword: 'owner-secret-1' })).json.mark).toBeNull();
+    expect((await put(staff, { status: 'Leave' })).status).toBe(200);                                                                  // cleared = unmarked: free again
+    expect((await put(staff, { status: 'Leave' })).status).toBe(200);                                                                  // same status again: no change, no password
+  });
+
   it('rejects bad input with a clear error', async () => {
     const body = { staffKey: 'staff@test', date: '2026-10-07', status: 'Present' };
     expect((await call(staff, '/staff-attendance', 'PUT', { ...body, status: 'Sleeping' })).status).toBe(400);

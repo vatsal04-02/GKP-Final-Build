@@ -2,7 +2,7 @@
 // A day is only Present, Absent, Half day or Leave (plus a note). Every mark is saved to the clinic's Grist (Staff_Attendance) and logged in the audit log.
 import { useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, UserCheck, UserPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, KeyRound, Lock, UserCheck, UserPlus } from 'lucide-react';
 import { STAFF_STATUSES, type StaffMonth, type StaffStatus, type StaffWeek } from '@core/clinical';
 import { api, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
@@ -30,7 +30,7 @@ export default function StaffAttendance() {
   const { ws } = useWs();
   const qc = useQueryClient(); const today = useToday();
   const [week, setWeek] = useState(() => mondayOf(today)); const [tab, setTab] = useState<'week' | 'month'>('week'); const [month, setMonth] = useState(() => today.slice(0, 7));
-  const [target, setTarget] = useState<Target | null>(null); const [adding, setAdding] = useState(false); const [removing, setRemoving] = useState<Row | null>(null);
+  const [target, setTarget] = useState<Target | null>(null); const [adding, setAdding] = useState(false); const [removing, setRemoving] = useState<Row | null>(null); const [settingPw, setSettingPw] = useState(false);
   const data = useQuery({ queryKey: ['staff-att', ws.id, 'week', week], queryFn: () => api<StaffWeek>(wsPath(ws.id, `/staff-attendance?week=${week}`)), placeholderData: keepPreviousData });
   const sum = useQuery({ queryKey: ['staff-att', ws.id, 'month', month], queryFn: () => api<StaffMonth>(wsPath(ws.id, `/staff-attendance/month?month=${month}`)), enabled: tab === 'month', placeholderData: keepPreviousData });
   const refresh = () => qc.invalidateQueries({ queryKey: ['staff-att', ws.id] });
@@ -46,10 +46,12 @@ export default function StaffAttendance() {
         <div className="flex flex-wrap items-center gap-3">
           <Segmented value={tab} onChange={setTab} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month summary' }]} />
           {w?.canManageTeam && <Button size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>Add staff</Button>}
+          {w?.canSetLockPassword && <Button size="sm" icon={<KeyRound className="h-4 w-4" />} onClick={() => setSettingPw(true)}>{w.lockPasswordSet ? 'Change edit password' : 'Set edit password'}</Button>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-fg-2">{STAFF_STATUSES.map((s) => <span key={s} className="inline-flex items-center gap-1"><span className={cn('inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-semibold', LOOK[s].cls)}>{LOOK[s].glyph}</span>{s}</span>)}</div>
       </div>
 
+      {w && !w.lockPasswordSet && <p className="mb-3 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-[13px] text-fg-2" role="status"><Lock className="mt-0.5 h-4 w-4 shrink-0 text-warn" /><span>A marked day is locked, and no edit password has been set yet, so nobody can change a mark. {w.canSetLockPassword ? 'Use "Set edit password" above so mistakes can be corrected.' : 'Ask the admin to set the attendance edit password.'}</span></p>}
       {tab === 'week' ? (
         <Card className="overflow-hidden">
           {data.isLoading ? <SkeletonRows rows={6} /> : data.error ? <ErrorState error={data.error} retry={() => data.refetch()} /> : !rows.length ? <EmptyState icon={<UserCheck className="h-5 w-5" />} title="No staff to show" body="People with a FLOW HQ login and the doctors in the clinic details appear here automatically. Use Add staff for anyone else." /> : (
@@ -73,9 +75,10 @@ export default function StaffAttendance() {
                         const c = r.cells[d]; const future = d > w!.today;
                         return (
                           <td key={d} className="border-b border-r border-line/60 p-1 text-center last:border-r-0">
-                            <button type="button" disabled={future} onClick={() => setTarget({ row: r, date: d })} aria-label={`${r.name}, ${fdate(d)}: ${c ? c.status : 'not marked'}`} title={c?.notes || undefined}
-                              className={cn('h-10 w-full rounded-lg text-base font-semibold transition-colors', c ? LOOK[c.status].cls : 'text-line-2 hover:bg-sage/40', future && 'cursor-not-allowed opacity-40')}>
+                            <button type="button" disabled={future} onClick={() => setTarget({ row: r, date: d })} aria-label={`${r.name}, ${fdate(d)}: ${c ? `${c.status}, locked` : 'not marked'}`} title={c?.notes || undefined}
+                              className={cn('relative h-10 w-full rounded-lg text-base font-semibold transition-colors', c ? LOOK[c.status].cls : 'text-line-2 hover:bg-sage/40', future && 'cursor-not-allowed opacity-40')}>
                               {c ? LOOK[c.status].glyph : '·'}
+                              {c && <Lock className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 opacity-60" aria-hidden />}
                             </button>
                           </td>
                         );
@@ -110,33 +113,68 @@ export default function StaffAttendance() {
           )}
         </Card>
       )}
-      {target && <MarkDialog target={target} onClose={() => setTarget(null)} onSaved={() => { refresh(); setTarget(null); }} />}
+      {target && w && <MarkDialog target={target} lockSet={w.lockPasswordSet} canSetPassword={w.canSetLockPassword} onSetPassword={() => { setTarget(null); setSettingPw(true); }} onClose={() => setTarget(null)} onSaved={() => { refresh(); setTarget(null); }} />}
+      {settingPw && w && <PasswordDialog changing={w.lockPasswordSet} onClose={() => setSettingPw(false)} onSaved={() => { refresh(); setSettingPw(false); }} />}
       {adding && <AddDialog onClose={() => setAdding(false)} onSaved={() => { refresh(); setAdding(false); }} />}
       {removing && <RemoveDialog row={removing} onClose={() => setRemoving(null)} onDone={() => { refresh(); setRemoving(null); }} />}
     </Page>
   );
 }
 
-function MarkDialog({ target, onClose, onSaved }: { target: Target; onClose: () => void; onSaved: () => void }) {
+function MarkDialog({ target, lockSet, canSetPassword, onSetPassword, onClose, onSaved }: { target: Target; lockSet: boolean; canSetPassword: boolean; onSetPassword: () => void; onClose: () => void; onSaved: () => void }) {
   const { ws } = useWs(); const toast = useToast();
   const { row, date } = target; const cur = row.cells[date];
-  const [status, setStatus] = useState<StaffStatus>(cur?.status || 'Present'); const [notes, setNotes] = useState(cur?.notes || ''); const [err, setErr] = useState('');
+  const [status, setStatus] = useState<StaffStatus>(cur?.status || 'Present'); const [notes, setNotes] = useState(cur?.notes || ''); const [pw, setPw] = useState(''); const [err, setErr] = useState('');
+  const marked = !!cur;                                   // a marked day is locked: changing or clearing it needs the edit password (the server enforces this)
   const save = useMutation({
-    mutationFn: (clear: boolean) => api(wsPath(ws.id, '/staff-attendance'), { method: 'PUT', body: clear ? { staffKey: row.key, date, status: null } : { staffKey: row.key, date, status, notes } }),
+    mutationFn: (clear: boolean) => api(wsPath(ws.id, '/staff-attendance'), { method: 'PUT', body: { staffKey: row.key, date, status: clear ? null : status, ...(clear ? {} : { notes }), ...(marked ? { editPassword: pw } : {}) } }),
     onSuccess: (_r, clear) => { toast('ok', clear ? 'Mark cleared' : 'Attendance saved'); onSaved(); },
     onError: (e) => setErr(errText(e)),
   });
+  const go = (clear: boolean) => { setErr(''); if (marked && !pw) { setErr('Enter the attendance edit password'); return; } save.mutate(clear); };
+  if (marked && !lockSet) return (
+    <Modal open onClose={onClose} label="Marked day is locked" className="w-[min(460px,96vw)]">
+      <div className="space-y-3.5 p-5">
+        <div><h2 className="flex items-center gap-2 text-lg font-semibold"><Lock className="h-4 w-4" />{row.name}</h2><p className="text-[13px] text-fg-2">{fdate(date)} · marked <b>{cur!.status}</b></p></div>
+        <p className="text-[13px] text-fg-2">This day is already marked, so it is locked. No attendance edit password has been set yet, so it cannot be changed.{canSetPassword ? ' Set one now to be able to correct marks.' : ' Ask the admin to set the attendance edit password.'}</p>
+        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Close</Button>{canSetPassword && <Button type="button" variant="primary" onClick={onSetPassword}>Set edit password</Button>}</div>
+      </div>
+    </Modal>
+  );
   return (
     <Modal open onClose={onClose} label="Mark attendance" className="w-[min(460px,96vw)]">
-      <form className="space-y-3.5 p-5" onSubmit={(e) => { e.preventDefault(); setErr(''); save.mutate(false); }}>
+      <form className="space-y-3.5 p-5" onSubmit={(e) => { e.preventDefault(); go(false); }}>
         <div><h2 className="text-lg font-semibold">{row.name}</h2><p className="text-[13px] text-fg-2">{fdate(date)}</p></div>
+        {marked && <p className="flex items-start gap-2 rounded-lg bg-warn/10 px-3 py-2 text-[13px] text-fg-2"><Lock className="mt-0.5 h-4 w-4 shrink-0 text-warn" /><span>This day is already marked <b>{cur!.status}</b> and is locked. Enter the attendance edit password to change or clear it.</span></p>}
         <Field label="Status"><Segmented value={status} onChange={setStatus} options={STAFF_STATUSES.map((s) => ({ value: s, label: s }))} /></Field>
         <Field label="Note (optional)"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={500} /></Field>
+        {marked && <Field label="Attendance edit password" required><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="off" autoFocus /></Field>}
         {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
         <div className="flex items-center justify-between gap-2">
-          <div>{cur && <Button type="button" variant="danger" onClick={() => { setErr(''); save.mutate(true); }} disabled={save.isPending}>Clear mark</Button>}</div>
-          <div className="flex gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>Save</Button></div>
+          <div>{marked && <Button type="button" variant="danger" onClick={() => go(true)} disabled={save.isPending}>Clear mark</Button>}</div>
+          <div className="flex gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>{marked ? 'Unlock and save' : 'Save'}</Button></div>
         </div>
+      </form>
+    </Modal>
+  );
+}
+
+function PasswordDialog({ changing, onClose, onSaved }: { changing: boolean; onClose: () => void; onSaved: () => void }) {
+  const { ws } = useWs(); const toast = useToast();
+  const [pw, setPw] = useState(''); const [again, setAgain] = useState(''); const [err, setErr] = useState('');
+  const save = useMutation({
+    mutationFn: () => api(wsPath(ws.id, '/staff-attendance/edit-password'), { method: 'PUT', body: { password: pw } }),
+    onSuccess: () => { toast('ok', changing ? 'Edit password changed' : 'Edit password set'); onSaved(); },
+    onError: (e) => setErr(errText(e)),
+  });
+  return (
+    <Modal open onClose={onClose} label="Attendance edit password" className="w-[min(440px,96vw)]">
+      <form className="space-y-3.5 p-5" onSubmit={(e) => { e.preventDefault(); setErr(''); if (pw.length < 8) { setErr('Use at least 8 characters'); return; } if (pw !== again) { setErr('The two passwords are not the same'); return; } save.mutate(); }}>
+        <div><h2 className="text-lg font-semibold">{changing ? 'Change edit password' : 'Set edit password'}</h2><p className="text-[13px] text-fg-2">Once a day is marked it is locked. This password is needed to change or clear a mark. Only you and the people you tell will know it. It is stored only as a hash, never as text.</p></div>
+        <Field label="New password" required hint="At least 8 characters"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" autoFocus /></Field>
+        <Field label="Type it again" required><Input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></Field>
+        {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
+        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>{changing ? 'Change password' : 'Set password'}</Button></div>
       </form>
     </Modal>
   );
