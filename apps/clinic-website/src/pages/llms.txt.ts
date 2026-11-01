@@ -17,7 +17,8 @@ export const GET: APIRoute = ({ site }) => {
     '## Clinic details',
     `- Name: ${clinic.name}`,
     `- Address: ${address.street}, ${address.area}, ${address.city}, ${address.region} ${address.postalCode}, India`,
-    `- Phone / WhatsApp: ${clinic.phone.display}`,
+    `- Phone: ${clinic.phone.display}`,
+    `- WhatsApp: ${clinic.phone.whatsappDisplay}`,
     `- Hours: ${hours.days}, ${hours.sessions.join(' and ')}. ${hours.closed}.`,
     `- Google rating: ${clinic.rating.value} from ${clinic.rating.count} reviews`,
     `- Patients treated (clinic-reported): ${stats.patients.count}${stats.patients.suffix}`,
@@ -37,7 +38,7 @@ export const GET: APIRoute = ({ site }) => {
     '## Frequently asked questions',
     ...faqs.filter((f) => f.confirmed).flatMap((f) => [`### ${f.q}`, f.a, '']),
     '## Contact',
-    `Message the clinic on WhatsApp (https://wa.me/${clinic.phone.whatsapp}) or call ${clinic.phone.display}.`,
+    `Message the clinic on WhatsApp ${clinic.phone.whatsappDisplay} (https://wa.me/${clinic.phone.whatsapp}) or call ${clinic.phone.display}.`,
     '',
   ];
 

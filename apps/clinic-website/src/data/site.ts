@@ -24,7 +24,9 @@ export const clinic = {
   phone: {
     display: '+91 98386 81421',
     tel: '+919838681421',
-    whatsapp: '919838681421',
+    // WhatsApp has its own number (owner-provided, 2 Nov 2026); calls still use `tel` above.
+    whatsapp: '919196194273',
+    whatsappDisplay: '+91 91961 94273',
   },
   rating: { value: '5.0', count: '467+' },
   /** Year the clinic opened (owner-provided, 1 Nov 2026). */
