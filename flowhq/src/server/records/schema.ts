@@ -17,13 +17,16 @@ export const RECORD_COLUMNS: Record<(typeof RT)[keyof typeof RT], Array<[string,
   Audit_Log: [['At', 'DateTime'], ['User', 'Text'], ['Action', 'Text'], ['Record', 'Text'], ['Summary', 'Text']],
 };
 export const RECORD_TABLE_NAMES = Object.values(RT);
-// OPTIONAL table: it is NOT in RT / RECORD_TABLE_NAMES on purpose, because the clinical pages appear only when every table in that list exists.
-// A clinic that has not provisioned Staff_Attendance keeps all its clinical pages; only the "Staff attendance" page stays hidden.
+// OPTIONAL tables: they are NOT in RT / RECORD_TABLE_NAMES on purpose, because the clinical pages appear only when every table in that list exists.
+// A clinic that has not provisioned them keeps all its clinical pages; only the "Staff attendance" page stays hidden (it needs BOTH).
 export const STAFF_ATT = 'Staff_Attendance';
-export const STAFF_COLUMNS: Record<typeof STAFF_ATT, Array<[string, ColType]>> = {
-  [STAFF_ATT]: [['Staff_Key', 'Text'], ['Staff_Name', 'Text'], ['Att_Date', 'Date'], ['Status', ['Present', 'Absent', 'Half day', 'Leave']], ['Check_In', 'Text'], ['Check_Out', 'Text'], ['Notes', 'Text'], ['Recorded_By', 'Text'], ['Created_At', 'DateTime'], ['Updated_At', 'DateTime']],
+export const STAFF_MEMBERS = 'Staff_Members';
+export const STAFF_TABLE_NAMES = [STAFF_ATT, STAFF_MEMBERS] as const;
+export const STAFF_COLUMNS: Record<(typeof STAFF_TABLE_NAMES)[number], Array<[string, ColType]>> = {
+  [STAFF_ATT]: [['Staff_Key', 'Text'], ['Staff_Name', 'Text'], ['Att_Date', 'Date'], ['Status', ['Present', 'Absent', 'Half day', 'Leave']], ['Notes', 'Text'], ['Recorded_By', 'Text'], ['Created_At', 'DateTime'], ['Updated_At', 'DateTime']],
+  [STAFF_MEMBERS]: [['Staff_Key', 'Text'], ['Name', 'Text'], ['Active', 'Bool'], ['Created_At', 'DateTime'], ['Created_By', 'Text']],
 };
-// what npm run provision-records creates: the required tables plus the optional one
+// what npm run provision-records creates: the required tables plus the optional ones
 export const ALL_RECORD_COLUMNS: Record<string, Array<[string, ColType]>> = { ...RECORD_COLUMNS, ...STAFF_COLUMNS };
 export const colNames = (t: keyof typeof RECORD_COLUMNS) => RECORD_COLUMNS[t].map(([n]) => n);
 // Grist column definition for the provisioning tool

@@ -115,9 +115,10 @@ function clinicRecords(nowMs: number, staff: string[]): Record<string, GristReco
   });
   // staff attendance for the two demo logins (admin@flowhq.demo, staff@flowhq.demo): the last few days, so the page has something to show
   const staffAtt: GristRecord[] = []; let sid = 0;
-  const mark = (key: string, name: string, off: number, st: string, inn = '', out = '') => staffAtt.push({ id: ++sid, fields: { Staff_Key: key, Staff_Name: name, Att_Date: day(off), Status: st, Check_In: inn, Check_Out: out, Notes: '', Recorded_By: key, Created_At: day(off) + 33000, Updated_At: day(off) + 33000 } });
-  for (const off of [-4, -3, -2, -1]) { mark('admin@flowhq.demo', 'Alex (admin)', off, 'Present', '09:05', '17:30'); mark('staff@flowhq.demo', 'Sam', off, off === -3 ? 'Leave' : off === -2 ? 'Half day' : 'Present', off === -3 ? '' : '09:20', off === -3 ? '' : off === -2 ? '13:10' : '17:45'); }
-  return { Patients: patients, Visits: visits, Prescriptions: prescriptions, Rx_Images: [], Invoices: invoices, Invoice_Lines: lines, Payments: payments, Audit_Log: [], Staff_Attendance: staffAtt };
+  const mark = (key: string, name: string, off: number, st: string) => staffAtt.push({ id: ++sid, fields: { Staff_Key: key, Staff_Name: name, Att_Date: day(off), Status: st, Notes: '', Recorded_By: key, Created_At: day(off) + 33000, Updated_At: day(off) + 33000 } });
+  for (const off of [-4, -3, -2, -1]) { mark('admin@flowhq.demo', 'Alex (admin)', off, 'Present'); mark('staff@flowhq.demo', 'Sam', off, off === -3 ? 'Leave' : off === -2 ? 'Half day' : 'Present'); mark('staff:000001', 'Priya (receptionist)', off, off === -1 ? 'Absent' : 'Present'); }
+  const staffMembers: GristRecord[] = [{ id: 1, fields: { Staff_Key: 'staff:000001', Name: 'Priya (receptionist)', Active: true, Created_At: day(-30) + 33000, Created_By: 'admin@flowhq.demo' } }];
+  return { Patients: patients, Visits: visits, Prescriptions: prescriptions, Rx_Images: [], Invoices: invoices, Invoice_Lines: lines, Payments: payments, Audit_Log: [], Staff_Attendance: staffAtt, Staff_Members: staffMembers };
 }
 
 export function demoDocs(nowMs: number) {

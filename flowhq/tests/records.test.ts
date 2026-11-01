@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { GristClient, memoryGrist, type GristRecord } from '../src/server/grist';
 import { RecordsService, sniffImage, type Actor, type ClinicConfig } from '../src/server/records/service';
-import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, colNames } from '../src/server/records/schema';
+import { ALL_RECORD_COLUMNS, RECORD_COLUMNS, RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, STAFF_MEMBERS, STAFF_TABLE_NAMES, colNames } from '../src/server/records/schema';
 import type { InvoiceInput, PrescriptionInput } from '../src/core/clinical';
 
 const NOW = Date.UTC(2026, 9, 7, 6, 30);          // 2026-10-07 12:00 IST (a Wednesday)
@@ -14,8 +14,8 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]);
 
 function setup(opts: { tax?: ClinicConfig['tax']; failOn?: (m: string, t: string) => boolean; now?: () => number } = {}) {
-  const docs: Record<string, Record<string, GristRecord[]>> = { D: Object.fromEntries([...RECORD_TABLE_NAMES, STAFF_ATT].map((t) => [t, [] as GristRecord[]])) };
-  const columns = { ...Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)])), [STAFF_ATT]: STAFF_COLUMNS[STAFF_ATT].map(([n]) => n) };
+  const docs: Record<string, Record<string, GristRecord[]>> = { D: Object.fromEntries([...RECORD_TABLE_NAMES, ...STAFF_TABLE_NAMES].map((t) => [t, [] as GristRecord[]])) };
+  const columns = { ...Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)])), ...Object.fromEntries(STAFF_TABLE_NAMES.map((t) => [t, STAFF_COLUMNS[t].map(([n]) => n)])) };
   const mem = memoryGrist(docs, { columns, failOn: opts.failOn });
   const svc = new RecordsService(new GristClient('http://memory', '', mem), 'D', { tz: 'Asia/Kolkata', clinic: () => ({ ...CLINIC, tax: opts.tax ?? null }), now: opts.now || (() => NOW) });
   return { svc, docs, mem };
@@ -35,12 +35,16 @@ describe('schema doc and code agree', () => {
     }
     expect(Object.keys(RECORD_COLUMNS).sort()).toEqual([...RECORD_TABLE_NAMES].sort());
   });
-  it('the OPTIONAL Staff_Attendance table is documented too, and is deliberately not one of the required tables', () => {
-    const section = md.split(/^## /m).find((x) => x.startsWith(STAFF_ATT + '\n'));
-    expect(section, 'Staff_Attendance in the doc').toBeTruthy();
-    for (const [c] of STAFF_COLUMNS[STAFF_ATT]) expect(section!, `${STAFF_ATT}.${c}`).toMatch(new RegExp(`\\b${c}\\b`));
-    expect((RECORD_TABLE_NAMES as string[]).includes(STAFF_ATT)).toBe(false);   // otherwise every clinical page would vanish in a clinic that has not created it
-    expect(Object.keys(ALL_RECORD_COLUMNS).sort()).toEqual([...RECORD_TABLE_NAMES, STAFF_ATT].sort());
+  it('the OPTIONAL staff tables are documented too, and are deliberately not among the required tables', () => {
+    for (const t of STAFF_TABLE_NAMES) {
+      const section = md.split(/^## /m).find((x) => x.startsWith(t + '\n'));
+      expect(section, `${t} in the doc`).toBeTruthy();
+      for (const [c] of STAFF_COLUMNS[t]) expect(section!, `${t}.${c}`).toMatch(new RegExp(`\\b${c}\\b`));
+      expect((RECORD_TABLE_NAMES as string[]).includes(t)).toBe(false);   // otherwise every clinical page would vanish in a clinic that has not created it
+    }
+    expect(Object.keys(ALL_RECORD_COLUMNS).sort()).toEqual([...RECORD_TABLE_NAMES, ...STAFF_TABLE_NAMES].sort());
+    // the clock times were removed: nothing in code or doc asks for them any more
+    expect(STAFF_COLUMNS[STAFF_ATT].map(([n]) => n)).not.toContain('Check_In');
   });
 });
 
@@ -290,17 +294,18 @@ describe('staff attendance', () => {
 
   it('saves a mark, updates the same day in place, clears it without deleting, and shows a Monday-Sunday week', async () => {
     const { svc, docs } = setup();
-    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', checkIn: '09:10', checkOut: '17:30', notes: 'on time' }, TEAM, ADMIN);   // Monday
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', notes: 'on time' }, TEAM, ADMIN);   // Monday
     await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Absent' }, TEAM, ADMIN);
-    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Half day', checkIn: '09:00', checkOut: '13:00' }, TEAM, ADMIN);   // same day: updated, not duplicated
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: 'Half day' }, TEAM, ADMIN);   // same day: updated, not duplicated
     expect(rowsOf(docs)).toHaveLength(2);
-    expect(rowsOf(docs)[0]!.fields).toMatchObject({ Staff_Key: 'sam@test', Staff_Name: 'Sam', Status: 'Present', Check_In: '09:10', Check_Out: '17:30', Notes: 'on time', Recorded_By: 'admin@test' });
+    expect(rowsOf(docs)[0]!.fields).toMatchObject({ Staff_Key: 'sam@test', Staff_Name: 'Sam', Status: 'Present', Notes: 'on time', Recorded_By: 'admin@test' });
+    expect(Object.keys(rowsOf(docs)[0]!.fields).sort()).toEqual(['Att_Date', 'Created_At', 'Notes', 'Recorded_By', 'Staff_Key', 'Staff_Name', 'Status', 'Updated_At']);   // no clock-time columns
     const w = await svc.staffWeek('2026-10-07', TEAM, 'admin@test');
-    expect([w.weekStart, w.days.length, w.days[6], w.today, w.now, w.canMarkOthers]).toEqual(['2026-10-05', 7, '2026-10-11', '2026-10-07', '12:00', true]);
+    expect([w.weekStart, w.days.length, w.days[6], w.today, w.canMarkOthers, w.canManageTeam]).toEqual(['2026-10-05', 7, '2026-10-11', '2026-10-07', true, true]);
     expect(w.rows.map((r) => r.name)).toEqual(['Alex', 'Sam', 'Dr Test']);
     const sam = w.rows.find((r) => r.key === 'sam@test')!;
-    expect(sam.cells['2026-10-05']).toEqual({ status: 'Present', checkIn: '09:10', checkOut: '17:30', notes: 'on time' });
-    expect(sam.cells['2026-10-06']).toMatchObject({ status: 'Half day', checkIn: '09:00', checkOut: '13:00' }); expect(sam.cells['2026-10-07']).toBeNull();
+    expect(sam.cells['2026-10-05']).toEqual({ status: 'Present', notes: 'on time' });
+    expect(sam.cells['2026-10-06']).toEqual({ status: 'Half day', notes: '' }); expect(sam.cells['2026-10-07']).toBeNull();
     expect(w.rows.find((r) => r.key === 'admin@test')!.isMe).toBe(true);
     // clearing empties the status but the row (and its history in the audit log) stays
     expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-06', status: null }, TEAM, ADMIN)).toBeNull();
@@ -311,12 +316,19 @@ describe('staff attendance', () => {
     expect((await svc.staffWeek('2026-09-29', TEAM, 'x')).rows.find((r) => r.key === 'sam@test')!.cells['2026-09-29']!.status).toBe('Leave');
   });
 
+  it('a note is kept when a later change leaves it out, and replaced when sent', async () => {
+    const { svc } = setup();
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Absent', notes: 'called in sick' }, TEAM, ADMIN);
+    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Leave' }, TEAM, ADMIN)).toEqual({ status: 'Leave', notes: 'called in sick' });
+    expect(await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Leave', notes: '' }, TEAM, ADMIN)).toEqual({ status: 'Leave', notes: '' });
+  });
+
   it('keeps someone who left the team list visible in the weeks they have marks, but not in other weeks', async () => {
     const { svc } = setup();
     await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
     const left = TEAM.filter((p) => p.key !== 'sam@test');
     const w = await svc.staffWeek('2026-10-05', left, 'x'); const sam = w.rows.find((r) => r.key === 'sam@test')!;
-    expect([sam.former, sam.name, sam.cells['2026-10-05']!.status]).toEqual([true, 'Sam', 'Present']);
+    expect([sam.former, sam.removable, sam.name, sam.cells['2026-10-05']!.status]).toEqual([true, false, 'Sam', 'Present']);
     expect((await svc.staffWeek('2026-10-12', left, 'x')).rows.some((r) => r.key === 'sam@test')).toBe(false);
   });
 
@@ -326,82 +338,96 @@ describe('staff attendance', () => {
     expect(await set({ date: '2026-10-08' })).toBe('future_date');
     expect(await set({ date: '2026-02-30' })).toBe('invalid_date');
     expect(await set({ staffKey: 'nobody@test' })).toBe('unknown_staff');
-    expect(await set({ checkIn: '9:5' })).toBe('invalid_time');
-    expect(await set({ checkIn: '25:00' })).toBe('invalid_time');
-    expect(await set({ checkOut: '17:00' })).toBe('checkin_missing');
-    expect(await set({ checkIn: '17:00', checkOut: '09:00' })).toBe('checkout_before_checkin');
-    expect(await set({ checkIn: '09:00', checkOut: '09:00' })).toBe('checkout_before_checkin');
-    expect(await set({ status: 'Absent', checkIn: '09:00' })).toBe('times_need_present');
-    expect(await set({ status: 'Leave', checkIn: '09:00', checkOut: '10:00' })).toBe('times_need_present');
     expect(rowsOf(docs)).toHaveLength(0); expect(auditOf(docs)).toHaveLength(0);
   });
 
-  it('check in / check out stamp the real clinic time, once, and in order', async () => {
-    let t = Date.UTC(2026, 9, 7, 3, 45);   // 09:15 IST
-    const { svc, docs } = setup({ now: () => t });
-    expect(await code(svc.clockStaff('sam@test', 'out', TEAM, ADMIN))).toBe('not_checked_in');
-    const a = await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
-    expect([a.duplicate, a.mark.status, a.mark.checkIn]).toEqual([false, 'Present', '09:15']);
-    t = Date.UTC(2026, 9, 7, 4, 30);       // 10:00 IST: pressing check-in again changes nothing
-    const again = await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
-    expect([again.duplicate, again.mark.checkIn]).toEqual([true, '09:15']);
-    expect(rowsOf(docs)).toHaveLength(1);
-    t = Date.UTC(2026, 9, 7, 12, 10);      // 17:40 IST
-    const out = await svc.clockStaff('sam@test', 'out', TEAM, ADMIN);
-    expect([out.mark.checkIn, out.mark.checkOut]).toEqual(['09:15', '17:40']);
-    expect(await code(svc.clockStaff('sam@test', 'out', TEAM, ADMIN))).toBe('already_checked_out');
-    expect(rowsOf(docs)[0]!.fields).toMatchObject({ Check_In: '09:15', Check_Out: '17:40', Status: 'Present' });
-    expect(auditOf(docs).map((a) => a.Action)).toEqual(['staffatt.checkin', 'staffatt.checkout']);
-    expect(await code(svc.clockStaff('nobody@test', 'in', TEAM, ADMIN))).toBe('unknown_staff');
+  it('adds a person by name: stable key, trimmed name, listed from then on, usable for marks, audited', async () => {
+    const { svc, docs } = setup();
+    const a = await svc.addStaffMember('  Priya   Sharma ', TEAM.map((p) => p.name), ADMIN);
+    expect([a.member.key, a.member.name, a.reactivated]).toEqual(['staff:000001', 'Priya Sharma', false]);
+    const b = await svc.addStaffMember('Ravi', TEAM.map((p) => p.name), ADMIN);
+    expect(b.member.key).toBe('staff:000002');
+    expect(docs.D![STAFF_MEMBERS]![0]!.fields).toMatchObject({ Staff_Key: 'staff:000001', Name: 'Priya Sharma', Active: true, Created_By: 'admin@test' });
+    const team = [...TEAM, ...(await svc.activeStaffMembers())];
+    expect(team.map((p) => p.name)).toEqual(['Alex', 'Sam', 'Dr Test', 'Priya Sharma', 'Ravi']);
+    await svc.setStaffMark({ staffKey: 'staff:000001', date: '2026-10-05', status: 'Present' }, team, ADMIN);
+    const w = await svc.staffWeek('2026-10-05', team, 'x'); const p = w.rows.find((r) => r.key === 'staff:000001')!;
+    expect([p.removable, p.former, p.cells['2026-10-05']!.status]).toEqual([true, false, 'Present']);
+    expect(w.rows.find((r) => r.key === 'sam@test')!.removable).toBe(false);          // logins and doctors cannot be removed from here
+    expect(auditOf(docs).filter((x) => x.Action === 'staff.add').map((x) => x.Record)).toEqual(['staff:000001', 'staff:000002']);
   });
 
-  it('checking in over a day marked Absent turns it into Present, and keeps the note', async () => {
-    const { svc, docs } = setup({ now: () => Date.UTC(2026, 9, 7, 3, 45) });
-    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-07', status: 'Absent', notes: 'called in sick' }, TEAM, ADMIN);
-    const r = await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
-    expect([r.mark.status, r.mark.checkIn, r.mark.notes]).toEqual(['Present', '09:15', 'called in sick']);
-    expect(rowsOf(docs)).toHaveLength(1);
+  it('refuses an empty name, a too-long name, and a name that is already listed (login, doctor, or added) ignoring capitals and spaces', async () => {
+    const { svc, docs } = setup();
+    const listed = TEAM.map((p) => p.name);
+    expect(await code(svc.addStaffMember('   ', listed, ADMIN))).toBe('invalid');
+    expect(await code(svc.addStaffMember('x'.repeat(81), listed, ADMIN))).toBe('invalid');
+    expect(await code(svc.addStaffMember('  sam ', listed, ADMIN))).toBe('duplicate_staff');          // a login's name
+    expect(await code(svc.addStaffMember('DR   test', listed, ADMIN))).toBe('duplicate_staff');       // a doctor
+    await svc.addStaffMember('Priya', listed, ADMIN);
+    expect(await code(svc.addStaffMember('priya', listed, ADMIN))).toBe('duplicate_staff');           // already added
+    expect(docs.D![STAFF_MEMBERS]).toHaveLength(1);
   });
 
-  it('a check-out in the same minute as the check-in is refused', async () => {
-    const { svc } = setup({ now: () => Date.UTC(2026, 9, 7, 3, 45) });
-    await svc.clockStaff('sam@test', 'in', TEAM, ADMIN);
-    expect(await code(svc.clockStaff('sam@test', 'out', TEAM, ADMIN))).toBe('checkout_too_soon');
+  it('removing hides the person but keeps every past mark; adding the same name again brings them back with the same key', async () => {
+    const { svc, docs } = setup();
+    const listed = TEAM.map((p) => p.name);
+    await svc.addStaffMember('Priya', listed, ADMIN);
+    let team = [...TEAM, ...(await svc.activeStaffMembers())];
+    await svc.setStaffMark({ staffKey: 'staff:000001', date: '2026-10-05', status: 'Present' }, team, ADMIN);
+    await svc.removeStaffMember('staff:000001', ADMIN);
+    expect(await svc.activeStaffMembers()).toEqual([]);
+    expect(docs.D![STAFF_MEMBERS]).toHaveLength(1); expect(docs.D![STAFF_MEMBERS]![0]!.fields.Active).toBe(false);   // not deleted
+    expect(rowsOf(docs)).toHaveLength(1);                                                                                // marks kept
+    team = [...TEAM, ...(await svc.activeStaffMembers())];
+    const w = await svc.staffWeek('2026-10-05', team, 'x'); const p = w.rows.find((r) => r.key === 'staff:000001')!;
+    expect([p.former, p.removable, p.name, p.cells['2026-10-05']!.status]).toEqual([true, false, 'Priya', 'Present']);   // still shown for the week it has a mark
+    expect((await svc.staffWeek('2026-10-12', team, 'x')).rows.some((r) => r.key === 'staff:000001')).toBe(false);
+    const back = await svc.addStaffMember('PRIYA', listed, ADMIN);
+    expect([back.member.key, back.reactivated]).toEqual(['staff:000001', true]); expect(docs.D![STAFF_MEMBERS]).toHaveLength(1);
+    expect((await svc.activeStaffMembers()).map((x) => x.key)).toEqual(['staff:000001']);
+    expect(auditOf(docs).map((x) => x.Action)).toEqual(['staff.add', 'staffatt.set', 'staff.remove', 'staff.add']);
+    expect(await code(svc.removeStaffMember('sam@test', ADMIN))).toBe('unknown_staff');                                  // only people added on the page
   });
 
-  it('month summary counts days by status and adds up hours only for complete in/out pairs', async () => {
+  it('keys are never reused, even after removals', async () => {
+    const { svc } = setup(); const listed = TEAM.map((p) => p.name);
+    await svc.addStaffMember('A One', listed, ADMIN); await svc.addStaffMember('B Two', listed, ADMIN); await svc.removeStaffMember('staff:000002', ADMIN);
+    expect((await svc.addStaffMember('C Three', listed, ADMIN)).member.key).toBe('staff:000003');
+  });
+
+  it('month summary counts days by status; an invalid month falls back to the current one', async () => {
     const { svc } = setup();
-    const m = (date: string, status: 'Present' | 'Absent' | 'Half day' | 'Leave', checkIn = '', checkOut = '') => svc.setStaffMark({ staffKey: 'sam@test', date, status, checkIn, checkOut }, TEAM, ADMIN);
-    await m('2026-10-01', 'Present', '09:00', '17:00');   // 8h
-    await m('2026-10-02', 'Present', '09:00');             // no check-out: counted as present, no hours
-    await m('2026-10-03', 'Half day', '09:00', '13:30');  // 4h30
+    const m = (date: string, status: 'Present' | 'Absent' | 'Half day' | 'Leave') => svc.setStaffMark({ staffKey: 'sam@test', date, status }, TEAM, ADMIN);
+    await m('2026-10-01', 'Present'); await m('2026-10-02', 'Present'); await m('2026-10-03', 'Half day');
     await m('2026-10-05', 'Absent'); await m('2026-10-06', 'Leave'); await m('2026-10-07', 'Leave');
-    await m('2026-09-30', 'Present', '09:00', '10:00');   // other month: not counted
+    await m('2026-09-30', 'Present');   // other month: not counted
     const s = await svc.staffMonth('2026-10', TEAM); const sam = s.rows.find((r) => r.key === 'sam@test')!;
-    expect(s.month).toBe('2026-10');
-    expect(sam).toMatchObject({ present: 2, halfDay: 1, absent: 1, leave: 2, workedMinutes: 8 * 60 + 4 * 60 + 30 });
-    expect(s.rows.find((r) => r.key === 'admin@test')).toMatchObject({ present: 0, workedMinutes: 0 });
-    expect((await svc.staffMonth('garbage', TEAM)).month).toBe('2026-10');   // an invalid month falls back to the current one
+    expect(s.month).toBe('2026-10'); expect(sam).toEqual({ key: 'sam@test', name: 'Sam', present: 2, halfDay: 1, absent: 1, leave: 2 });
+    expect(s.rows.find((r) => r.key === 'admin@test')).toMatchObject({ present: 0, halfDay: 0, absent: 0, leave: 0 });
+    expect((await svc.staffMonth('garbage', TEAM)).month).toBe('2026-10');
     expect((await svc.staffMonth('2026-09', TEAM)).rows.find((r) => r.key === 'sam@test')!.present).toBe(1);
   });
 
-  it('onlyKey limits both views to one person', async () => {
+  it('onlyKey limits both views to one person, who cannot manage the team', async () => {
     const { svc } = setup();
     await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
     await svc.setStaffMark({ staffKey: 'admin@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
     const w = await svc.staffWeek('2026-10-05', TEAM, 'sam@test', 'sam@test');
-    expect([w.rows.map((r) => r.key), w.canMarkOthers]).toEqual([['sam@test'], false]);
+    expect([w.rows.map((r) => r.key), w.canMarkOthers, w.canManageTeam]).toEqual([['sam@test'], false, false]);
     expect((await svc.staffMonth('2026-10', TEAM, 'sam@test')).rows.map((r) => r.key)).toEqual(['sam@test']);
   });
 
   it('every change is audited without the free-text note, and a missing audit write does not lose the saved mark', async () => {
     const { svc, docs } = setup();
-    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', checkIn: '09:00', notes: 'PRIVATE-NOTE-TEXT' }, TEAM, ADMIN);
+    await svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present', notes: 'PRIVATE-NOTE-TEXT' }, TEAM, ADMIN);
     const a = auditOf(docs)[0]!;
-    expect([a.Action, a.User, a.Record]).toEqual(['staffatt.set', 'admin@test', 'sam@test']); expect(JSON.stringify(auditOf(docs))).not.toContain('PRIVATE-NOTE-TEXT');
+    expect([a.Action, a.User, a.Record, a.Summary]).toEqual(['staffatt.set', 'admin@test', 'sam@test', '2026-10-05 Present']); expect(JSON.stringify(auditOf(docs))).not.toContain('PRIVATE-NOTE-TEXT');
     const f = setup({ failOn: (m, t) => m === 'POST' && t === 'Audit_Log' });
     await f.svc.setStaffMark({ staffKey: 'sam@test', date: '2026-10-05', status: 'Present' }, TEAM, ADMIN);
     expect(f.docs.D![STAFF_ATT]).toHaveLength(1);
+    await f.svc.addStaffMember('Priya', TEAM.map((p) => p.name), ADMIN);
+    expect(f.docs.D![STAFF_MEMBERS]).toHaveLength(1);
   });
 });
 

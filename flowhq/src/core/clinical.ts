@@ -39,17 +39,20 @@ export interface VisitWeek { weekStart: string; days: string[]; rows: Array<{ pa
 // ---- staff attendance (the clinic's own people, not patients). Stored in the optional Staff_Attendance table.
 export const STAFF_STATUSES = ['Present', 'Absent', 'Half day', 'Leave'] as const;
 export type StaffStatus = (typeof STAFF_STATUSES)[number];
-export interface StaffMark { status: StaffStatus; checkIn: string; checkOut: string; notes: string }   // times are "HH:MM", clinic-local, "" when not recorded
+export interface StaffMark { status: StaffStatus; notes: string }   // no clock times: a day is only Present, Absent, Half day or Leave
 export interface StaffWeek {
-  weekStart: string; days: string[]; today: string; now: string;   // now: the clinic-local "HH:MM" right now
+  weekStart: string; days: string[]; today: string;
   canMarkOthers: boolean;                                          // false for a doctor's own login: it sees and marks only itself
-  rows: Array<{ key: string; name: string; isMe: boolean; former: boolean; cells: Record<string, StaffMark | null> }>;   // former: no longer on the team list, kept because they have marks in this week
+  canManageTeam: boolean;                                          // add / remove people by name (admin and front desk)
+  // former: no longer on the team list, kept because they have marks in this week. removable: someone added by name on the page (logins and doctors are not)
+  rows: Array<{ key: string; name: string; isMe: boolean; former: boolean; removable: boolean; cells: Record<string, StaffMark | null> }>;
 }
 export interface StaffMonth {
   month: string;   // YYYY-MM
-  rows: Array<{ key: string; name: string; present: number; halfDay: number; absent: number; leave: number; workedMinutes: number }>;
+  rows: Array<{ key: string; name: string; present: number; halfDay: number; absent: number; leave: number }>;
 }
-export interface StaffMarkInput { staffKey: string; date: string; status: StaffStatus | null; checkIn?: string; checkOut?: string; notes?: string }
+export interface StaffMarkInput { staffKey: string; date: string; status: StaffStatus | null; notes?: string }
+export interface StaffMember { key: string; name: string }
 
 export interface PatientProfile { patient: PatientRow; prescriptions: Prescription[]; invoices: Invoice[]; payments: Payment[]; visits: Visit[] }
 

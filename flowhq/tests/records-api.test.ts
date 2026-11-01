@@ -6,7 +6,7 @@ import { memoryGrist } from '../src/server/grist';
 import { ProfileStore } from '../src/server/profiles';
 import { createAutopilotAdapter } from '../src/server/adapters/autopilot';
 import { demoDocs } from '../src/server/demo/fixtures';
-import { RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, colNames } from '../src/server/records/schema';
+import { RECORD_TABLE_NAMES, STAFF_ATT, STAFF_COLUMNS, STAFF_TABLE_NAMES, colNames } from '../src/server/records/schema';
 import { loadClinicConfig } from '../src/server/clinic';
 
 const NOW = Date.UTC(2026, 9, 7, 6, 30);
@@ -14,17 +14,18 @@ const PW = 'correct horse 42';
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xff, 0xd9]);
 const J = { 'content-type': 'application/json', 'x-flowhq-csrf': '1' };
 let app: ReturnType<typeof createApp>; let admin = ''; let staff = ''; let doctor = '';
-const STAFF_COLS = STAFF_COLUMNS[STAFF_ATT].map(([n]) => n);
+const STAFF_COLS = Object.fromEntries(STAFF_TABLE_NAMES.map((t) => [t, STAFF_COLUMNS[t].map(([n]) => n)]));
 
 // withStaffTable=false is a clinic that has the required records tables but has not created the optional Staff_Attendance one yet
-function build(withStaffTable: boolean) {
+function build(withStaffTable: boolean | 'half') {   // 'half': only Staff_Attendance exists, Staff_Members is missing
   const d = demoDocs(NOW);
   const physioDoc = (d.docs.REGISTRY!.Clinics!.find((r) => r.fields.Clinic_Slug === 'demo-physio')!.fields.Grist_Doc_ID) as string;
   for (const t of RECORD_TABLE_NAMES) d.docs[physioDoc]![t] = [];            // only the physio clinic has the records tables
-  delete d.docs[physioDoc]![STAFF_ATT];
-  if (withStaffTable) d.docs[physioDoc]![STAFF_ATT] = [];
+  for (const t of STAFF_TABLE_NAMES) delete d.docs[physioDoc]![t];
+  const have = withStaffTable === 'half' ? [STAFF_ATT] : withStaffTable ? [...STAFF_TABLE_NAMES] : [];
+  for (const t of have) d.docs[physioDoc]![t] = [];
   const clinic = loadClinicConfig('config/clinic.json');
-  const mem = memoryGrist(d.docs, { columns: { ...Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)])), ...(withStaffTable ? { [STAFF_ATT]: STAFF_COLS } : {}) } });
+  const mem = memoryGrist(d.docs, { columns: { ...Object.fromEntries(RECORD_TABLE_NAMES.map((t) => [t, colNames(t)])), ...Object.fromEntries(have.map((t) => [t, STAFF_COLS[t]])) } });
   const adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: 'k', registryDocId: 'REGISTRY', timezone: 'Asia/Kolkata', locale: 'en-IN', currency: 'INR', fetchImpl: mem, clinic, cacheMs: 0, now: () => NOW });
   const h = hashPassword(PW);
   // doc@test is Dr. Mahesh Tiwari's own login (a doctor in config/clinic.json): it may only see and mark itself
@@ -73,6 +74,11 @@ describe('staff attendance over HTTP', () => {
     expect(w.modules).toEqual(expect.arrayContaining(['patients', 'prescriptions', 'invoices', 'visits'])); expect(w.modules).not.toContain('staff_attendance');
     expect((await b.app.request('/api/w/demo-physio/staff-attendance', { headers: { cookie: a } })).status).toBe(404);
     expect((await b.app.request('/api/w/demo-physio/patients', { headers: { cookie: a } })).status).toBe(200);
+    // only ONE of the two tables (provisioning stopped half way): the page stays hidden, everything else is unaffected
+    const h = build('half'); const hc = await h.login('admin@test');
+    const hw = await (await h.app.request('/api/w/demo-physio/workspace', { headers: { cookie: hc } })).json() as { modules: string[] };
+    expect(hw.modules).toEqual(expect.arrayContaining(['patients', 'visits'])); expect(hw.modules).not.toContain('staff_attendance');
+    expect((await h.app.request('/api/w/demo-physio/staff-attendance', { headers: { cookie: hc } })).status).toBe(404);
     const salon = await (await app.request('/api/w/demo-salon/workspace', { headers: { cookie: admin } })).json() as { modules: string[] };
     expect(salon.modules).not.toContain('staff_attendance');
   });
@@ -87,18 +93,39 @@ describe('staff attendance over HTTP', () => {
     expect([r.json.weekStart, r.json.canMarkOthers, r.json.rows.find((x: { key: string }) => x.key === 'staff@test').isMe]).toEqual(['2026-10-05', true, true]);
   });
 
-  it('front desk and admin mark anyone; the mark is saved and shows up; clock in/out works for oneself', async () => {
-    const put = await call(staff, '/staff-attendance', 'PUT', { staffKey: 'admin@test', date: '2026-10-06', status: 'Present', checkIn: '09:00', checkOut: '17:00', notes: 'ok' });
-    expect([put.status, put.json.mark.status]).toEqual([200, 'Present']);
+  it('front desk and admin mark anyone; the mark is saved and shows up; there are no clock times', async () => {
+    const put = await call(staff, '/staff-attendance', 'PUT', { staffKey: 'admin@test', date: '2026-10-06', status: 'Present', notes: 'ok' });
+    expect([put.status, put.json.mark]).toEqual([200, { status: 'Present', notes: 'ok' }]);
     const row = (await call(admin, '/staff-attendance?week=2026-10-05')).json.rows.find((x: { key: string }) => x.key === 'admin@test');
-    expect(row.cells['2026-10-06']).toEqual({ status: 'Present', checkIn: '09:00', checkOut: '17:00', notes: 'ok' });
-    const inn = await call(staff, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'in' });
-    expect([inn.status, inn.json.duplicate, inn.json.mark.checkIn]).toEqual([200, false, '12:00']);
-    expect((await call(staff, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'in' })).json.duplicate).toBe(true);
-    const out = await call(staff, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'out' });
-    expect([out.status, out.json.error.code]).toEqual([409, 'checkout_too_soon']);   // the test clock does not move
+    expect(row.cells['2026-10-06']).toEqual({ status: 'Present', notes: 'ok' });
+    expect((await call(staff, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'in' })).status).toBe(404);   // the clock endpoint is gone
     const month = await call(admin, '/staff-attendance/month?month=2026-10');
-    expect([month.status, month.json.rows.find((x: { key: string }) => x.key === 'admin@test').present]).toEqual([200, 1]);
+    expect([month.status, month.json.rows.find((x: { key: string }) => x.key === 'admin@test')]).toEqual([200, expect.objectContaining({ present: 1, halfDay: 0, absent: 0, leave: 0 })]);
+    expect(month.json.rows[0]).not.toHaveProperty('workedMinutes');
+  });
+
+  it('staff can be added by name and removed; the new person is listed, can be marked, and removal keeps their marks', async () => {
+    expect((await call(staff, '/staff-attendance?week=2026-10-05')).json.canManageTeam).toBe(true);
+    const add = await call(staff, '/staff-attendance/members', 'POST', { name: '  Priya   Sharma ' });
+    expect([add.status, add.json.member, add.json.reactivated]).toEqual([201, { key: 'staff:000001', name: 'Priya Sharma' }, false]);
+    const listed = (await call(admin, '/staff-attendance?week=2026-10-05')).json.rows as Array<{ key: string; name: string; removable: boolean }>;
+    expect(listed.find((x) => x.key === 'staff:000001')).toMatchObject({ name: 'Priya Sharma', removable: true });
+    expect(listed.find((x) => x.key === 'staff@test')!.removable).toBe(false);
+    expect((await call(staff, '/staff-attendance', 'PUT', { staffKey: 'staff:000001', date: '2026-10-06', status: 'Leave' })).status).toBe(200);
+    // refused: empty, duplicate of a login (capitals ignored), duplicate of an added person, duplicate of a doctor without a login
+    expect((await call(staff, '/staff-attendance/members', 'POST', { name: '   ' })).json.error.code).toBe('invalid');
+    expect((await call(staff, '/staff-attendance/members', 'POST', { name: 'SAM' })).json.error.code).toBe('duplicate_staff');
+    expect((await call(staff, '/staff-attendance/members', 'POST', { name: 'priya sharma' })).status).toBe(409);
+    expect((await call(staff, '/staff-attendance/members', 'POST', { name: 'Dr. Sandeep Tiwari' })).json.error.code).toBe('duplicate_staff');
+    // remove: gone from the list, past mark kept (shown for its week), same name brings them back
+    expect((await call(staff, `/staff-attendance/members/${encodeURIComponent('staff:000001')}`, 'DELETE')).status).toBe(200);
+    const after = (await call(admin, '/staff-attendance?week=2026-10-05')).json.rows as Array<{ key: string; former: boolean; cells: Record<string, { status: string } | null> }>;
+    expect(after.find((x) => x.key === 'staff:000001')).toMatchObject({ former: true }); expect(after.find((x) => x.key === 'staff:000001')!.cells['2026-10-06']!.status).toBe('Leave');
+    expect((await call(admin, '/staff-attendance?week=2026-10-19')).json.rows.some((x: { key: string }) => x.key === 'staff:000001')).toBe(false);
+    const back = await call(staff, '/staff-attendance/members', 'POST', { name: 'Priya Sharma' });
+    expect([back.status, back.json.member.key, back.json.reactivated]).toEqual([200, 'staff:000001', true]);
+    expect((await call(staff, `/staff-attendance/members/${encodeURIComponent('sam@test')}`, 'DELETE')).status).toBe(404);   // a login cannot be removed here
+    expect((await call(staff, `/staff-attendance/members/${encodeURIComponent('staff:000001')}`, 'DELETE')).status).toBe(200); // leave the list tidy for the other tests
   });
 
   it('rejects bad input with a clear error', async () => {
@@ -106,7 +133,8 @@ describe('staff attendance over HTTP', () => {
     expect((await call(staff, '/staff-attendance', 'PUT', { ...body, status: 'Sleeping' })).status).toBe(400);
     expect((await call(staff, '/staff-attendance', 'PUT', { ...body, date: '2026-10-09' })).json.error.code).toBe('future_date');
     expect((await call(staff, '/staff-attendance', 'PUT', { ...body, staffKey: 'ghost@test' })).status).toBe(404);
-    expect((await call(staff, '/staff-attendance', 'PUT', { ...body, checkIn: '17:00', checkOut: '09:00' })).json.error.code).toBe('checkout_before_checkin');
+    expect((await call(staff, '/staff-attendance/members', 'POST', {})).status).toBe(400);
+    expect((await app.request('/api/w/demo-physio/staff-attendance/members', { method: 'POST', headers: { cookie: staff, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'No Csrf' }) })).status).toBe(403);   // no CSRF header
     expect((await app.request('/api/w/demo-physio/staff-attendance', { method: 'PUT', headers: { cookie: staff, 'content-type': 'application/json' }, body: JSON.stringify(body) })).status).toBe(403);   // no CSRF header
     expect((await app.request('/api/w/demo-physio/staff-attendance')).status).toBe(401);
   });
@@ -117,7 +145,10 @@ describe('staff attendance over HTTP', () => {
     expect((await call(doctor, '/staff-attendance', 'PUT', { staffKey: 'doc@test', date: '2026-10-07', status: 'Present' })).status).toBe(200);
     const other = await call(doctor, '/staff-attendance', 'PUT', { staffKey: 'staff@test', date: '2026-10-07', status: 'Absent' });
     expect([other.status, other.json.error.code]).toEqual([403, 'forbidden']);
-    expect((await call(doctor, '/staff-attendance/clock', 'POST', { staffKey: 'staff@test', kind: 'in' })).status).toBe(403);
+    expect(r.json.canManageTeam).toBe(false);
+    const add = await call(doctor, '/staff-attendance/members', 'POST', { name: 'Doctor Added' });
+    expect([add.status, add.json.error.code]).toEqual([403, 'forbidden']);                                                            // cannot add ...
+    expect((await call(doctor, `/staff-attendance/members/${encodeURIComponent('staff:000001')}`, 'DELETE')).status).toBe(403);        // ... or remove anyone
     expect((await call(doctor, '/staff-attendance/month?month=2026-10')).json.rows.map((x: { key: string }) => x.key)).toEqual(['doc@test']);
   });
 });

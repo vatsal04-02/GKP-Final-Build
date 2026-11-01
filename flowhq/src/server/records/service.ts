@@ -3,17 +3,15 @@
 // invoices are final (void + re-issue), duplicate-submission keys, every write audited. Nothing here sends anything to a patient.
 import { computeTotals, MAX_PAISE, paymentStatus } from '../../core/money';
 import type { DoctorSummary } from '../../core/clinical';
-import { PAYMENT_METHODS, PATIENT_STATUSES, SEXES, STAFF_STATUSES, VISIT_STATUSES, type ClinicProfile, type Invoice, type InvoiceInput, type Patient, type PatientList, type PatientProfile, type PatientRow, type Payment, type Prescription, type PrescriptionInput, type RxImage, type StaffMark, type StaffMarkInput, type StaffMonth, type StaffStatus, type StaffWeek, type Visit, type VisitWeek, type VisitStatus } from '../../core/clinical';
+import { PAYMENT_METHODS, PATIENT_STATUSES, SEXES, STAFF_STATUSES, VISIT_STATUSES, type ClinicProfile, type Invoice, type InvoiceInput, type Patient, type PatientList, type PatientProfile, type PatientRow, type Payment, type Prescription, type PrescriptionInput, type RxImage, type StaffMark, type StaffMarkInput, type StaffMember, type StaffMonth, type StaffStatus, type StaffWeek, type Visit, type VisitWeek, type VisitStatus } from '../../core/clinical';
 import { BackendError, type GristClient, type GristRecord } from '../grist';
-import { dayKey, localParts } from '../time';
+import { dayKey } from '../time';
 import { normalizePhone } from '../adapters/autopilot/shared';
 import { addDays, bad, dateIn, dateOut, mondayOf, Mutex, maxSeq, pad, validDate } from './ids';
-import { RT, STAFF_ATT } from './schema';
+import { RT, STAFF_ATT, STAFF_MEMBERS } from './schema';
 
 // A person on the clinic's team list (built by the route from the FLOW HQ logins and config/clinic.json). The key is stable; the name is display only.
 export interface StaffPerson { key: string; name: string }
-const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
-const minutesOf = (hm: string) => (HM.test(hm) ? Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3)) : null);
 
 export interface ClinicConfig extends ClinicProfile { idPrefix: string }
 export interface RecordsOptions { tz: string; clinic: () => ClinicConfig; now?: () => number }
@@ -512,28 +510,62 @@ export class RecordsService {
     });
   }
 
-  // ------------------------------------------------------------------ staff attendance (the clinic's own people; optional table Staff_Attendance)
+  // ------------------------------------------------------------------ staff attendance (the clinic's own people; optional tables Staff_Attendance + Staff_Members)
   private toStaff(r: GristRecord): { rowId: number; key: string; name: string; date: string; mark: StaffMark } | null {
     const f = r.fields; const d = dateOut(f.Att_Date); const st = s(f.Status);
-    return d && s(f.Staff_Key) && (STAFF_STATUSES as readonly string[]).includes(st) ? { rowId: r.id, key: s(f.Staff_Key), name: s(f.Staff_Name), date: d, mark: { status: st as StaffStatus, checkIn: s(f.Check_In), checkOut: s(f.Check_Out), notes: s(f.Notes) } } : null;
+    return d && s(f.Staff_Key) && (STAFF_STATUSES as readonly string[]).includes(st) ? { rowId: r.id, key: s(f.Staff_Key), name: s(f.Staff_Name), date: d, mark: { status: st as StaffStatus, notes: s(f.Notes) } } : null;
   }
-  private clockNow() { const p = localParts(this.now(), this.o.tz); return `${pad(p.h, 2)}:${pad(p.mi, 2)}`; }
+
+  // People added by name on the page (staff with no login). Removed ones (Active off) are not listed, but their past marks stay.
+  async activeStaffMembers(): Promise<StaffPerson[]> {
+    return (await this.rows(STAFF_MEMBERS)).filter((r) => r.fields.Active === true && s(r.fields.Staff_Key) && s(r.fields.Name)).map((r) => ({ key: s(r.fields.Staff_Key), name: s(r.fields.Name) }));
+  }
+  // `listed`: the names already on the team list from logins and clinic.json, so the same person cannot be added twice.
+  addStaffMember(rawName: string, listed: string[], a: Actor): Promise<{ member: StaffMember; reactivated: boolean }> {
+    return this.lock.run(async () => {
+      const name = rawName.replace(/\s+/g, ' ').trim();
+      if (!name) throw bad('invalid', 'Enter the staff member\'s name');
+      if (name.length > 80) throw bad('invalid', 'The name is too long (80 characters at most)');
+      const key = nameKey(name);
+      if (listed.some((x) => nameKey(x) === key)) throw bad('duplicate_staff', `${name} is already on the list`, 409);
+      const rows = await this.rows(STAFF_MEMBERS);
+      const same = rows.find((r) => nameKey(s(r.fields.Name)) === key);
+      if (same) {
+        if (same.fields.Active === true) throw bad('duplicate_staff', `${name} is already on the list`, 409);
+        await this.patch(STAFF_MEMBERS, same.id, { Active: true });   // removed earlier: switch them back on, keeping the same key and all past marks
+        await this.audit(a, 'staff.add', s(same.fields.Staff_Key), 'added again');
+        return { member: { key: s(same.fields.Staff_Key), name: s(same.fields.Name) }, reactivated: true };
+      }
+      const staffKey = `staff:${pad(maxSeq(rows.map((r) => r.fields.Staff_Key), 'staff:') + 1)}`;
+      await this.add(STAFF_MEMBERS, [{ Staff_Key: staffKey, Name: name, Active: true, Created_At: this.ts(), Created_By: a.email }]);
+      await this.audit(a, 'staff.add', staffKey, 'added');
+      return { member: { key: staffKey, name }, reactivated: false };
+    });
+  }
+  // "Remove" hides the person from the list; nothing is deleted. Only people added by name can be removed (logins and doctors come from elsewhere).
+  removeStaffMember(staffKey: string, a: Actor): Promise<void> {
+    return this.lock.run(async () => {
+      const row = (await this.rows(STAFF_MEMBERS)).find((r) => s(r.fields.Staff_Key) === staffKey);
+      if (!row) throw bad('unknown_staff', 'That person was not added on this page', 404);
+      if (row.fields.Active === true) { await this.patch(STAFF_MEMBERS, row.id, { Active: false }); await this.audit(a, 'staff.remove', staffKey, 'removed'); }
+    });
+  }
 
   // The week, Monday to Sunday: everyone on the team list, plus anyone who has a mark that week but has since left the list.
-  // onlyKey: a doctor's own login sees and marks only itself.
+  // onlyKey: a doctor's own login sees and marks only itself (and cannot manage the team).
   async staffWeek(weekStart: string, team: StaffPerson[], meKey: string, onlyKey?: string): Promise<StaffWeek> {
     const w0 = mondayOf(validDate(weekStart) ? weekStart : this.today()); const days = Array.from({ length: 7 }, (_, i) => addDays(w0, i));
     const all = (await this.rows(STAFF_ATT)).map((r) => this.toStaff(r)).filter((x): x is NonNullable<typeof x> => !!x && x.date >= w0 && x.date <= days[6]!);
     const people = new Map<string, { name: string; former: boolean }>(team.map((p) => [p.key, { name: p.name, former: false }]));
     for (const x of all) if (!people.has(x.key)) people.set(x.key, { name: x.name || x.key, former: true });
     const rows = [...people.entries()].filter(([k]) => !onlyKey || k === onlyKey).map(([key, p]) => ({
-      key, name: p.name, isMe: key === meKey, former: p.former,
+      key, name: p.name, isMe: key === meKey, former: p.former, removable: !p.former && key.startsWith('staff:'),
       cells: Object.fromEntries(days.map((d) => [d, all.find((x) => x.key === key && x.date === d)?.mark || null])) as Record<string, StaffMark | null>,
     }));
-    return { weekStart: w0, days, today: this.today(), now: this.clockNow(), canMarkOthers: !onlyKey, rows };
+    return { weekStart: w0, days, today: this.today(), canMarkOthers: !onlyKey, canManageTeam: !onlyKey, rows };
   }
 
-  // Totals for one calendar month (YYYY-MM). Hours count only days with both a valid check-in and a later check-out.
+  // Days per status for one calendar month (YYYY-MM).
   async staffMonth(month: string, team: StaffPerson[], onlyKey?: string): Promise<StaffMonth> {
     const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : this.today().slice(0, 7);
     const last = new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5)), 0)).getUTCDate();
@@ -543,14 +575,13 @@ export class RecordsService {
     for (const x of all) if (!people.has(x.key)) people.set(x.key, x.name || x.key);
     const rows = [...people.entries()].filter(([k]) => !onlyKey || k === onlyKey).map(([key, name]) => {
       const mine = all.filter((x) => x.key === key);
-      const worked = mine.filter((x) => x.mark.status === 'Present' || x.mark.status === 'Half day').reduce((t, x) => { const i = minutesOf(x.mark.checkIn); const o = minutesOf(x.mark.checkOut); return i !== null && o !== null && o > i ? t + (o - i) : t; }, 0);
       const count = (st: StaffStatus) => mine.filter((x) => x.mark.status === st).length;
-      return { key, name, present: count('Present'), halfDay: count('Half day'), absent: count('Absent'), leave: count('Leave'), workedMinutes: worked };
+      return { key, name, present: count('Present'), halfDay: count('Half day'), absent: count('Absent'), leave: count('Leave') };
     });
     return { month: m, rows };
   }
 
-  // Set (or clear, with status null) one person's mark for one day. Fields left out keep their saved value.
+  // Set (or clear, with status null) one person's mark for one day. A note left out keeps its saved value.
   setStaffMark(i: StaffMarkInput, team: StaffPerson[], a: Actor): Promise<StaffMark | null> {
     return this.lock.run(async () => {
       if (!validDate(i.date)) throw bad('invalid_date', 'Enter a valid date');
@@ -561,47 +592,14 @@ export class RecordsService {
       if (!person && !row) throw bad('unknown_staff', 'That person is not on the team list', 404);
       const prev = row ? this.toStaff(row)?.mark : undefined;
       const status = i.status;
-      const checkIn = status ? (i.checkIn ?? prev?.checkIn ?? '') : ''; const checkOut = status ? (i.checkOut ?? prev?.checkOut ?? '') : '';
       const notes = i.notes !== undefined ? i.notes.trim().slice(0, 500) : (prev?.notes ?? '');
-      if (status) {
-        if ((checkIn && !HM.test(checkIn)) || (checkOut && !HM.test(checkOut))) throw bad('invalid_time', 'Enter times as HH:MM, for example 09:30');
-        if ((checkIn || checkOut) && status !== 'Present' && status !== 'Half day') throw bad('times_need_present', `Times can only be recorded for Present or Half day, not ${status}`);
-        if (checkOut && !checkIn) throw bad('checkin_missing', 'Enter the check-in time before the check-out time');
-        if (checkIn && checkOut && minutesOf(checkOut)! <= minutesOf(checkIn)!) throw bad('checkout_before_checkin', 'Check-out must be later than check-in');
-      }
       const name = person?.name || (row ? s(row.fields.Staff_Name) : '') || i.staffKey;
-      const fields = { Staff_Name: name, Status: status ?? '', Check_In: checkIn, Check_Out: checkOut, Notes: notes, Recorded_By: a.email, Updated_At: this.ts() };
+      const fields = { Staff_Name: name, Status: status ?? '', Notes: status ? notes : '', Recorded_By: a.email, Updated_At: this.ts() };
       if (row) await this.patch(STAFF_ATT, row.id, fields);
       else if (status) await this.add(STAFF_ATT, [{ Staff_Key: i.staffKey, Att_Date: dateIn(i.date), Created_At: this.ts(), ...fields }]);
       else return null;
-      await this.audit(a, 'staffatt.set', i.staffKey, `${i.date} ${status ?? 'cleared'}${checkIn ? ` ${checkIn}` : ''}${checkOut ? `-${checkOut}` : ''}`);
-      return status ? { status, checkIn, checkOut, notes } : null;
-    });
-  }
-
-  // "Check in now" / "Check out now": stamps the real clinic-local time for TODAY. Pressing check-in twice changes nothing.
-  clockStaff(staffKey: string, kind: 'in' | 'out', team: StaffPerson[], a: Actor): Promise<{ mark: StaffMark; duplicate: boolean }> {
-    return this.lock.run(async () => {
-      const person = team.find((p) => p.key === staffKey);
-      if (!person) throw bad('unknown_staff', 'That person is not on the team list', 404);
-      const today = this.today(); const t = this.clockNow();
-      const row = (await this.rows(STAFF_ATT)).find((r) => s(r.fields.Staff_Key) === staffKey && dateOut(r.fields.Att_Date) === today);
-      const prev = row ? this.toStaff(row)?.mark : undefined;
-      if (kind === 'in') {
-        if (prev?.checkIn) return { mark: prev, duplicate: true };
-        const status: StaffStatus = prev?.status === 'Half day' ? 'Half day' : 'Present';
-        const fields = { Staff_Name: person.name, Status: status, Check_In: t, Check_Out: '', Recorded_By: a.email, Updated_At: this.ts() };
-        if (row) await this.patch(STAFF_ATT, row.id, { ...fields, ...(prev ? {} : { Notes: '' }) });
-        else await this.add(STAFF_ATT, [{ Staff_Key: staffKey, Att_Date: dateIn(today), Notes: '', Created_At: this.ts(), ...fields }]);
-        await this.audit(a, 'staffatt.checkin', staffKey, `${today} in ${t}`);
-        return { mark: { status, checkIn: t, checkOut: '', notes: prev?.notes ?? '' }, duplicate: false };
-      }
-      if (!row || !prev || !prev.checkIn) throw bad('not_checked_in', 'Check in first, then check out', 409);
-      if (prev.checkOut) throw bad('already_checked_out', `Already checked out at ${prev.checkOut}`, 409);
-      if (minutesOf(t)! <= minutesOf(prev.checkIn)!) throw bad('checkout_too_soon', 'Check-out must be later than check-in', 409);
-      await this.patch(STAFF_ATT, row.id, { Check_Out: t, Recorded_By: a.email, Updated_At: this.ts() });
-      await this.audit(a, 'staffatt.checkout', staffKey, `${today} out ${t}`);
-      return { mark: { ...prev, checkOut: t }, duplicate: false };
+      await this.audit(a, 'staffatt.set', i.staffKey, `${i.date} ${status ?? 'cleared'}`);
+      return status ? { status, notes } : null;
     });
   }
 }

@@ -119,18 +119,25 @@ One row per patient per day (marking the same day again updates it). Feeds the M
 | Created_At | DateTime | |
 
 ## Staff_Attendance
-**Optional table** (the clinical pages work without it; the "Staff attendance" page appears only once it exists). One row per staff member per day: marking the same day again updates the row, and every change is also written to `Audit_Log` (`staffatt.set`, `staffatt.checkin`, `staffatt.checkout`), so the history of who changed what is kept. Rows are never deleted: clearing a mark empties `Status`.
+**Optional table** (the clinical pages work without it; the "Staff attendance" page appears only once this table AND `Staff_Members` exist). One row per staff member per day: marking the same day again updates the row, and every change is also written to `Audit_Log` (`staffatt.set`), so the history of who changed what is kept. Rows are never deleted: clearing a mark empties `Status`. There are no clock times: a day is only Present, Absent, Half day or Leave. (A table created by the first version of this page may carry two extra empty columns, `Check_In` and `Check_Out`; they are ignored and never written.)
 | Column | Type | Notes |
 |---|---|---|
-| Staff_Key | Text | stable key of the person: the FLOW HQ login's email (lower case), or `doctor:<name>` for a doctor in `config/clinic.json` who has no login |
+| Staff_Key | Text | stable key of the person: the FLOW HQ login's email (lower case), `doctor:<name>` for a doctor in `config/clinic.json` who has no login, or `staff:000001` for someone added on the page (see `Staff_Members`) |
 | Staff_Name | Text | the name as shown when the mark was made |
 | Att_Date | Date | clinic-local day; never in the future |
 | Status | Choice | Present, Absent, Half day, Leave (empty = cleared) |
-| Check_In | Text | `HH:MM` 24-hour clinic-local time, only with Present / Half day |
-| Check_Out | Text | `HH:MM`, later than `Check_In` |
 | Notes | Text | up to 500 characters |
 | Recorded_By | Text | login email of who made the last change |
 | Created_At, Updated_At | DateTime | |
+
+## Staff_Members
+**Optional table**, the second half of the staff attendance page: people added by name on the page, for staff who have no FLOW HQ login (a receptionist, a helper). Logins and the doctors in `config/clinic.json` are listed automatically and are not stored here. Rows are never deleted: "Remove" sets `Active` off, the person's past marks stay, and adding the same name again switches them back on. Changes are written to `Audit_Log` (`staff.add`, `staff.remove`).
+| Column | Type | Notes |
+|---|---|---|
+| Staff_Key | Text | `staff:000001`, set by FLOW HQ, unique, never reused |
+| Name | Text | 1 to 80 characters, unique ignoring capitals and extra spaces |
+| Active | Toggle | off = removed from the list |
+| Created_At, Created_By | DateTime, Text | |
 
 ## Audit_Log
 Who did what, when. Never contains clinical text or image data.

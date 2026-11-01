@@ -106,26 +106,35 @@ export function recordsRoutes(opts: RecordsRouteOptions = {}) {
   const staffSvc = (c: Context<E>): RecordsService => { const s = svc(c); if (!c.get('backend').supported.modules.includes('staff_attendance')) throw bad('staff_attendance_unavailable', 'Staff attendance is not set up for this workspace yet', 404); return s; };
   const meKey = (c: Context<E>) => c.get('ctx').viewer.email.trim().toLowerCase();
   const onlyMe = (c: Context<E>) => (c.get('ctx').viewer.clinician ? meKey(c) : undefined);
-  const team = (c: Context<E>): StaffPerson[] => {
+  // logins + doctors in config/clinic.json without a login (always listed) ...
+  const baseTeam = (c: Context<E>): StaffPerson[] => {
     const logins = opts.logins?.(c.get('backend').info.id) || [];
     const out: StaffPerson[] = logins.map((l) => ({ key: l.email.trim().toLowerCase(), name: l.name }));
     const seen = new Set(logins.flatMap((l) => [l.name, l.clinician || ''].map((x) => x.trim().toLowerCase()).filter(Boolean)));
     for (const d of svc(c).clinic().clinicians) { const nm = d.name.trim(); if (nm && !seen.has(nm.toLowerCase())) out.push({ key: `doctor:${nm.toLowerCase()}`, name: nm }); }
     return out;
   };
+  // ... plus the people added by name on the page
+  const team = async (c: Context<E>): Promise<StaffPerson[]> => [...baseTeam(c), ...(await svc(c).activeStaffMembers())];
   const mayMark = (c: Context<E>, key: string) => { const only = onlyMe(c); if (only && key !== only) throw bad('forbidden', 'You can only record your own attendance', 403); };
-  const hhmm = z.string().max(5);
-  r.get('/staff-attendance', async (c) => c.json(await staffSvc(c).staffWeek(c.req.query('week') || '', team(c), meKey(c), onlyMe(c))));
-  r.get('/staff-attendance/month', async (c) => c.json(await staffSvc(c).staffMonth(c.req.query('month') || '', team(c), onlyMe(c))));
+  const mayManage = (c: Context<E>) => { if (onlyMe(c)) throw bad('forbidden', 'Only the front desk or an admin can change the staff list', 403); };
+  r.get('/staff-attendance', async (c) => c.json(await staffSvc(c).staffWeek(c.req.query('week') || '', await team(c), meKey(c), onlyMe(c))));
+  r.get('/staff-attendance/month', async (c) => c.json(await staffSvc(c).staffMonth(c.req.query('month') || '', await team(c), onlyMe(c))));
   r.put('/staff-attendance', async (c) => {
-    const b = z.object({ staffKey: z.string().min(1).max(200), date, status: z.enum(STAFF_STATUSES).nullable(), checkIn: hhmm.optional(), checkOut: hhmm.optional(), notes: text(500).optional() }).parse(await c.req.json());
+    const b = z.object({ staffKey: z.string().min(1).max(200), date, status: z.enum(STAFF_STATUSES).nullable(), notes: text(500).optional() }).parse(await c.req.json());
     const sv = staffSvc(c); mayMark(c, b.staffKey);
-    return c.json({ mark: await sv.setStaffMark(b, team(c), who(c)) });
+    return c.json({ mark: await sv.setStaffMark(b, await team(c), who(c)) });
   });
-  r.post('/staff-attendance/clock', async (c) => {
-    const b = z.object({ staffKey: z.string().min(1).max(200), kind: z.enum(['in', 'out']) }).parse(await c.req.json());
-    const sv = staffSvc(c); mayMark(c, b.staffKey);
-    return c.json(await sv.clockStaff(b.staffKey, b.kind, team(c), who(c)));
+  r.post('/staff-attendance/members', async (c) => {
+    const b = z.object({ name: z.string().max(200) }).parse(await c.req.json());
+    const sv = staffSvc(c); mayManage(c);
+    const out = await sv.addStaffMember(b.name, baseTeam(c).map((p) => p.name), who(c));
+    return c.json(out, out.reactivated ? 200 : 201);
+  });
+  r.delete('/staff-attendance/members/:key', async (c) => {
+    const sv = staffSvc(c); mayManage(c);
+    await sv.removeStaffMember(c.req.param('key'), who(c));
+    return c.json({ ok: true });
   });
   return r;
 }

@@ -14,7 +14,7 @@ import { demoDocs } from './demo/fixtures';
 import { startStaffReplySimulator } from './demo/simulator';
 import { loadClinicConfig } from './clinic';
 import { TokenStore, loadTokens } from './booking/tokens';
-import { RECORD_TABLE_NAMES, STAFF_ATT } from './records/schema';
+import { RECORD_TABLE_NAMES, STAFF_TABLE_NAMES } from './records/schema';
 import { startAuditOutboxes } from './audit-startup';
 
 export function buildServer(env: NodeJS.ProcessEnv = process.env) {
@@ -27,7 +27,7 @@ export function buildServer(env: NodeJS.ProcessEnv = process.env) {
     const { docs, profiles: seed } = demoDocs(Date.now());
     // demo: Clinic Records for the demo PHYSIO clinic only (provisioned per clinic): the fictional patients seeded by demo/fixtures; anything entered lives in memory only
     const physioDoc = String(docs.REGISTRY?.Clinics?.find((r) => r.fields.Clinic_Slug === 'demo-physio')?.fields.Grist_Doc_ID || '');
-    if (docs[physioDoc]) for (const t of [...RECORD_TABLE_NAMES, STAFF_ATT]) docs[physioDoc][t] ||= [];
+    if (docs[physioDoc]) for (const t of [...RECORD_TABLE_NAMES, ...STAFF_TABLE_NAMES]) docs[physioDoc][t] ||= [];
     const mem = memoryGrist(docs);
     adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: '', registryDocId: 'REGISTRY', timezone: cfg.timezone, locale: cfg.locale, currency: cfg.currency, fetchImpl: mem, clinic, cacheMs: 1000 });
     profiles = new ProfileStore(null, cfg.defaultIndustry, seed);

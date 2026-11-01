@@ -21,7 +21,7 @@ import { PAYMENT_TABLES } from '../../payments/schema';
 import { BOOKING_TABLES } from '../../booking/schema';
 import { AuditOutbox, FileStore } from '../../booking/outbox';
 import path from 'node:path';
-import { RECORD_TABLE_NAMES, STAFF_ATT } from '../../records/schema';
+import { RECORD_TABLE_NAMES, STAFF_TABLE_NAMES } from '../../records/schema';
 
 export interface AutopilotConfig {
   gristBaseUrl: string;
@@ -171,9 +171,9 @@ class AutopilotWorkspace implements WorkspaceBackend {
     const noPay: string[] = [];
     await Promise.all(Object.keys(PAYMENT_TABLES).map(async (t) => { try { await this.grist.records(this.docId, t, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noPay.push(t); else unreachable = true; } }));
     const bookingModules: Supported['modules'] = noBooking.length === 0 ? (noPay.length === 0 ? ['schedule', 'payments'] : ['schedule']) : [];
-    // Staff attendance is OPTIONAL: its table is not in RECORD_TABLE_NAMES, so a clinic without it keeps every other clinical page
+    // Staff attendance is OPTIONAL: its tables are not in RECORD_TABLE_NAMES, so a clinic without them keeps every other clinical page (the page needs BOTH)
     let noStaff = false;
-    try { await this.grist.records(this.docId, STAFF_ATT, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noStaff = true; else unreachable = true; }
+    await Promise.all(STAFF_TABLE_NAMES.map(async (t) => { try { await this.grist.records(this.docId, t, { limit: 1 }); } catch (e) { if (e instanceof BackendError && e.status === 404) noStaff = true; else unreachable = true; } }));
     if (unreachable) { this.probedAt = Date.now() - 50000; return; }   // keep the last known state, look again in 10 s
     if (missing.length === 0) {
       this.supported = { ...SUPPORTED, modules: [...SUPPORTED.modules, ...RECORD_MODULES, ...(noStaff ? [] : (['staff_attendance'] as Supported['modules'])), ...bookingModules] };
