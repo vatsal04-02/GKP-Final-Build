@@ -161,7 +161,7 @@ menu?.addEventListener('click', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && menu?.dataset.open === 'true') setMenu(false, true);
 });
-window.matchMedia('(min-width: 1100px)').addEventListener('change', (e) => {
+window.matchMedia('(min-width: 1200px)').addEventListener('change', (e) => {
   if (e.matches) setMenu(false);
 });
 

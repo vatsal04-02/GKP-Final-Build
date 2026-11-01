@@ -104,6 +104,7 @@ export const links = {
 
 export const nav = [
   { label: 'Book', href: '#book' },
+  { label: 'About', href: '#about' },
   { label: 'Conditions', href: '#conditions' },
   { label: 'Doctors', href: '#doctors' },
   { label: 'How It Works', href: '#how-it-works' },

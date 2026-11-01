@@ -282,12 +282,16 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
   .book {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 1.15rem;
+    gap: 1rem;
   }
   .row {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 1.15rem;
+    gap: 1rem;
+  }
+  /* Chips that sit beside a text box match its height, so a row reads as one line */
+  .row .chip > span {
+    min-height: 52px;
   }
 
   .field {
@@ -305,6 +309,11 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
     font-weight: 700;
     letter-spacing: 0.01em;
     color: var(--color-sand);
+  }
+  /* A legend is not a grid item, so the fieldset's gap never reaches it: give it the same space a label gets */
+  .field legend {
+    float: none;
+    margin-bottom: 0.45rem;
   }
   .field input,
   .field select {
@@ -546,8 +555,8 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
     display: flex;
     align-items: flex-start;
     gap: 0.7rem;
-    font-size: 0.875rem;
-    line-height: 1.5;
+    font-size: 0.8125rem;
+    line-height: 1.45;
     color: rgb(250 248 242 / 0.88);
     cursor: pointer;
   }
@@ -584,6 +593,22 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
       margin-inline: -8px;
     }
   }
+  /* One column (phones and tablets): the form comes straight after the intro. The three steps repeat what the note
+     under the button already says, so they only show beside the form on large screens. */
+  @media (max-width: 1023px) {
+    .next {
+      display: none;
+    }
+    .facts {
+      margin-top: 0.4rem;
+    }
+  }
+  /* Large screens: the heading's top aligns with the form's top edge */
+  @media (min-width: 1024px) {
+    .copy {
+      padding-top: 0.2rem;
+    }
+  }
   @media (min-width: 640px) {
     .chips--days {
       grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -602,7 +627,7 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
     }
     .copy {
       grid-column: 1 / span 5;
-      align-self: stretch; /* the intro runs the full height of the form: heading at the top, fact list at the foot */
+      align-self: start; /* heading level with the form's first field; steps and facts follow directly */
     }
     .card {
       grid-column: 6 / span 7;

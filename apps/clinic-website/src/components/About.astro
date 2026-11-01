@@ -1,0 +1,105 @@
+---
+import Icon from './Icon.astro';
+import { clinic, hours, stats } from '../data/site';
+
+// Every line below is a clinic-confirmed fact (see site.ts): opened 2004, 2 Lakh+ patients, two MPT (PT) doctors, neuro + ortho.
+const facts = [
+  { n: String(clinic.since), label: 'Serving Lucknow' },
+  { n: `${stats.patients.count}${stats.patients.suffix}`, label: stats.patients.label },
+  { n: 'Neuro + Ortho', label: 'Two specialists, one centre' },
+] as const;
+---
+
+<section id="about" class="section curve surface-ivory" data-section aria-labelledby="about-title">
+  <div class="container-site grid">
+    <div class="copy reveal">
+      <p class="eyebrow">About the centre</p>
+      <h2 id="about-title" class="h2">Caring for Lucknow’s movement since {clinic.since}.</h2>
+      <p class="lead">
+        Geeta Krishna Physiotherapy is a physiotherapy centre in Viram Khand, Gomti Nagar, Lucknow, providing orthopaedic and neurological care to families from across the city.
+      </p>
+      <p class="more">
+        Two MPT (PT) physiotherapists lead the centre: Dr. Sandeep Tiwari for neuro and Dr. Mahesh Tiwari for ortho. Every patient is assessed first, so your care is built around you.
+      </p>
+      <a class="link-arrow" href="#doctors">
+        Meet the doctors
+        <Icon name="arrow-right" size={18} />
+      </a>
+    </div>
+
+    <dl class="facts reveal" data-reveal="group" style="--i:1">
+      {
+        facts.map((f) => (
+          <div class="fact">
+            <dd class="fact__n">{f.n}</dd>
+            <dt class="fact__l">{f.label}</dt>
+          </div>
+        ))
+      }
+      <div class="fact fact--hours">
+        <dd class="fact__n fact__n--sm">{hours.days}</dd>
+        <dt class="fact__l">{hours.sessions.join(' · ')}</dt>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<style>
+  .grid {
+    display: grid;
+    gap: clamp(28px, 5vw, 56px);
+    align-items: center;
+  }
+  .copy {
+    display: grid;
+    gap: 1rem;
+    justify-items: start;
+    max-width: 38rem;
+  }
+  .more {
+    margin: 0;
+    max-width: 58ch;
+    line-height: 1.7;
+    color: color-mix(in srgb, var(--color-ink) 78%, transparent);
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    border-top: 1px solid rgb(12 59 54 / 0.18);
+  }
+  .fact {
+    display: grid;
+    align-content: center;
+    gap: 0.35rem;
+    padding: 1.1rem 0.9rem 1.1rem 0;
+    border-bottom: 1px solid rgb(12 59 54 / 0.18);
+  }
+  .fact:nth-child(even) {
+    padding-left: 1rem;
+    border-left: 1px solid rgb(12 59 54 / 0.18);
+  }
+  .fact__n {
+    margin: 0;
+    font: 400 clamp(1.5rem, 1.1rem + 1.4vw, 2.25rem) / 1.1 var(--font-serif);
+    letter-spacing: -0.01em;
+    color: var(--color-pine);
+  }
+  .fact__n--sm {
+    font-size: clamp(1.375rem, 1.1rem + 0.9vw, 1.75rem);
+  }
+  .fact__l {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--color-ink) 62%, transparent);
+  }
+
+  @media (min-width: 900px) {
+    .grid {
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    }
+  }
+</style>
