@@ -161,6 +161,8 @@ export const doctors = [
     initials: 'ST',
     qualification: 'MPT (PT)',
     role: 'Neuro Specialist',
+    // Direct number (owner-provided, 2 Nov 2026). Same as the clinic's call number above.
+    phone: { display: '+91 98386 81421', tel: '+919838681421' },
     specialisation: 'Neurological Rehabilitation',
     about: 'MPT (Physiotherapy)',
     bio: 'Specialises in the physiotherapy management of neurological conditions such as stroke, paralysis, Parkinson’s, spinal cord injuries and other neuro-rehabilitation needs.',
@@ -174,6 +176,8 @@ export const doctors = [
     initials: 'MT',
     qualification: 'MPT (PT)',
     role: 'Ortho Specialist',
+    // Direct number (owner-provided, 2 Nov 2026).
+    phone: { display: '+91 99192 82145', tel: '+919919282145' },
     specialisation: 'Orthopaedic Rehabilitation',
     about: 'MPT (Physiotherapy)',
     bio: 'Specialises in the physiotherapy management of orthopaedic and musculoskeletal conditions such as back and neck pain, joint pain, arthritis, post-surgery rehabilitation and sports injuries.',

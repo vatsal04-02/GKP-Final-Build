@@ -96,6 +96,11 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
                 Book with {d.short}
                 <Icon name="arrow-right" size={18} class="icon-arrow" />
               </a>
+              <a class="doc__call" href={`tel:${d.phone.tel}`} aria-label={`Call ${d.name} on ${d.phone.display}`} data-track="phone_click" data-location={`doctor-${i + 1}`}>
+                <Icon name="phone" size={17} />
+                <span>Call {d.short}</span>
+                <strong>{d.phone.display}</strong>
+              </a>
             </div>
           </article>
         ))
@@ -467,6 +472,23 @@ const hasIntroVideo = existsSync(join(process.cwd(), 'public', 'doctor-intro.mp4
   .ask {
     justify-self: start;
     min-height: 48px;
+  }
+  .doc__call {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.5rem;
+    justify-self: start;
+    min-height: 44px;
+    font-size: 0.9375rem;
+    color: var(--color-teal);
+    text-decoration: none;
+  }
+  .doc__call strong {
+    font-weight: 800;
+    color: var(--color-pine);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   /* Four reassurance facts under the cards */

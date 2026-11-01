@@ -112,6 +112,11 @@ const schemaExtra = [
                     <Icon name="message-circle" size={19} />
                     Book with {d.short}
                   </a>
+                  <a class="doc__call" href={`tel:${d.phone.tel}`} aria-label={`Call ${d.name} on ${d.phone.display}`} data-track="phone_click" data-location={`landing-doctor-${d.n}`}>
+                    <Icon name="phone" size={17} />
+                    <span>Call {d.short}</span>
+                    <strong>{d.phone.display}</strong>
+                  </a>
                 </div>
               </article>
             ))
@@ -324,6 +329,21 @@ const schemaExtra = [
   }
   .doc__body p {
     margin: 0;
+  }
+  .doc__call {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.5rem;
+    min-height: 44px;
+    color: var(--color-teal);
+    text-decoration: none;
+  }
+  .doc__call strong {
+    font-weight: 800;
+    color: var(--color-pine);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   .doc__role {
     font-weight: 700;

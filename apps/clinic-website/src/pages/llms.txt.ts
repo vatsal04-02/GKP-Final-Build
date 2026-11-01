@@ -26,7 +26,7 @@ export const GET: APIRoute = ({ site }) => {
     `- Website: ${url}`,
     '',
     '## Doctors',
-    ...doctors.map((d) => `- ${d.name}, ${d.qualification} — ${d.role}. ${d.bio}`),
+    ...doctors.map((d) => `- ${d.name}, ${d.qualification} — ${d.role}. Phone: ${d.phone.display}. ${d.bio}`),
     '',
     '## Conditions treated',
     ...conditions.map((c) => `- ${c.title}`),

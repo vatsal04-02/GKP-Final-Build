@@ -113,6 +113,7 @@ const businessSchema = {
       name: d.name,
       honorificPrefix: 'Dr.',
       jobTitle: `${d.role} Physiotherapist`,
+      telephone: d.phone.tel,
       description: d.bio,
       worksFor: { '@id': ids.clinic },
       knowsAbout: d.knowsAbout,
