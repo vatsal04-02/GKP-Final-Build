@@ -103,3 +103,20 @@ describe('end to end over HTTP', () => {
     for (const path of ['/patients', `/patients/${patientId}`, '/prescriptions', '/invoices', '/clinic', '/visits']) expect((await call(staff, path)).text).not.toMatch(/DEMO_PHYSIO|Grist_Doc_ID|scrypt\$|"k"/);
   });
 });
+
+describe('prescription suggestions: the clinic remembers what it treats', () => {
+  const rx = (pid: string, diagnosis: string, over: Record<string, unknown> = {}) => call(staff, '/prescriptions', 'POST', { patientId: pid, rxDate: '2026-10-07', treatingPhysio: 'Dr Test', bp: '', vitals: '', history: '', examination: '', diagnosis, treatmentPlan: '', exercises: '', advice: '', followUpOn: null, ...over });
+  it('learns conditions from saved prescriptions: most used first, the newest wording and plan as the template, no patient data', async () => {
+    const before = (await call(staff, '/prescriptions/suggestions')).json as Array<{ diagnosis: string }>; expect(before.every((x) => x.diagnosis !== 'frozen shoulder')).toBe(true);   // only what was actually written (an earlier test left 'd2')
+    const pid = (await call(staff, '/patients', 'POST', { name: 'Suggest Patient One', phone: '9876500777', mainComplaint: 'x' })).json.patientId as string;
+    await rx(pid, 'Frozen shoulder', { rxDate: '2026-09-01', treatmentPlan: 'old plan', advice: 'old advice' });
+    await rx(pid, 'frozen  shoulder ', { rxDate: '2026-10-05', treatmentPlan: 'new plan', exercises: 'pendulum', advice: 'new advice' });
+    await rx(pid, 'Low back pain', { rxDate: '2026-10-06', treatmentPlan: 'back plan' });
+    await rx(pid, '', { rxDate: '2026-10-06' });   // no diagnosis: nothing to learn
+    const s = (await call(staff, '/prescriptions/suggestions')).json as Array<{ diagnosis: string; count: number; lastUsed: string; treatmentPlan: string; advice: string }>;
+    const mine = s.filter((x) => /shoulder|back pain/i.test(x.diagnosis)); expect(mine.map((x) => [x.diagnosis, x.count])).toEqual([['frozen shoulder', 2], ['Low back pain', 1]]);
+    expect(mine[0]).toMatchObject({ treatmentPlan: 'new plan\n\npendulum', advice: 'new advice', lastUsed: '2026-10-05' });
+    expect(JSON.stringify(s)).not.toMatch(/Suggest Patient|9876500777|GK-P-|GK-RX/);
+  });
+  it('needs a signed-in user', async () => { expect((await app.request('/api/w/demo-physio/prescriptions/suggestions')).status).toBe(401); });
+});

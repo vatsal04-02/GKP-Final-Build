@@ -203,6 +203,18 @@ export class RecordsService {
     if (t) list = list.filter((x) => x.patientName.toLowerCase().includes(t) || x.rxId.toLowerCase().includes(t) || x.patientId.toLowerCase().includes(t) || x.diagnosis.toLowerCase().includes(t));
     return list.sort((x, y) => ((y.rxDate || '') < (x.rxDate || '') ? -1 : (y.rxDate || '') > (x.rxDate || '') ? 1 : y.rxId < x.rxId ? -1 : 1));
   }
+  /** The conditions this clinic has actually written, most used first, each with the treatment / advice most recently used for it. Learned from saved prescriptions only:
+   *  nothing is invented here and no patient name or id leaves this function. A doctor's login learns from its own prescriptions (same scope as the list). */
+  async prescriptionSuggestions(scope?: Scope): Promise<Array<{ diagnosis: string; count: number; lastUsed: string | null; treatmentPlan: string; advice: string }>> {
+    const byKey = new Map<string, { diagnosis: string; count: number; lastUsed: string | null; treatmentPlan: string; advice: string; at: string }>();
+    for (const x of await this.listPrescriptions({}, scope)) {   // newest first
+      const diagnosis = x.diagnosis.replace(/\s+/g, ' ').trim().slice(0, 160); if (!diagnosis) continue;
+      const key = diagnosis.toLowerCase(); const cur = byKey.get(key);
+      if (cur) { cur.count++; continue; }   // the first one seen is the newest: its wording and plan are the template
+      byKey.set(key, { diagnosis, count: 1, lastUsed: x.rxDate, treatmentPlan: [x.treatmentPlan, x.exercises].filter(Boolean).join('\n\n').slice(0, 4000), advice: x.advice.slice(0, 4000), at: x.rxDate || '' });
+    }
+    return [...byKey.values()].sort((a, b) => b.count - a.count || (b.at < a.at ? -1 : b.at > a.at ? 1 : 0)).slice(0, 60).map(({ at, ...rest }) => { void at; return rest; });
+  }
   async getPrescription(rxId: string, scope?: Scope): Promise<(Prescription & { versions: number[] }) | null> {
     const rx = (await this.latestRx()).find((x) => x.rxId === rxId);
     if (!rx || (scope?.only && !same(rx.treatingPhysio, scope.only))) return null;   // somebody else's prescription is simply not found

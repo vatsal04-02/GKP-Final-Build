@@ -58,6 +58,7 @@ export function recordsRoutes() {
 
   r.get('/prescriptions', async (c) => c.json(await svc(c).listPrescriptions({ patientId: c.req.query('patient') || undefined, q: c.req.query('q') }, scope(c))));
   r.post('/prescriptions', async (c) => c.json(await svc(c).savePrescription(clean(rxBody.parse(await c.req.json())) as never, who(c), doctorScope(c)), 201));
+  r.get('/prescriptions/suggestions', async (c) => c.json(await svc(c).prescriptionSuggestions(scope(c))));   // before :id; no patient data in it
   r.get('/prescriptions/:id', async (c) => c.json(found(await svc(c).getPrescription(c.req.param('id'), scope(c)))));
   r.put('/prescriptions/:id', async (c) => c.json(await svc(c).savePrescription(clean({ ...rxBody.parse(await c.req.json()), rxId: c.req.param('id') }) as never, who(c), doctorScope(c))));
   r.post('/prescriptions/:id/images', async (c) => {

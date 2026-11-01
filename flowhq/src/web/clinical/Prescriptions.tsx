@@ -1,5 +1,6 @@
 // Prescription / treatment sheet: fill, attach photos, save, reopen, print. Everything the clinician writes is stored as typed;
-// nothing here suggests a diagnosis or a treatment.
+// Suggestions (src/web/clinical/conditions.ts and the clinic's own past prescriptions) only SAVE TYPING: the doctor chooses, reviews and edits; nothing is filled over text already written.
+// Nothing here decides a diagnosis or a treatment.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,8 +14,36 @@ import { EmptyState, ErrorState, SkeletonRows, useToast } from '../components/ui
 import { Field, PatientPicker, errText, fdate, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
 import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
 import { PatientForm } from './Register';
+import { COMMON_CONDITIONS } from './conditions';
 
 const MAX_BYTES = 5 * 1024 * 1024;
+
+interface Suggestion { diagnosis: string; count: number; lastUsed: string | null; treatmentPlan: string; advice: string }
+/** Condition shortcuts under the Diagnosis box: the conditions THIS clinic has treated (most used first, remembered from saved prescriptions), then common ones. Choosing a remembered condition also
+ *  offers its last treatment / advice into the boxes that are still EMPTY (never over the doctor's own text). */
+function ConditionSuggestions({ f, set }: { f: Form; set: <K extends keyof Form>(k: K, v: Form[K]) => void }) {
+  const { ws } = useWs(); const toast = useToast();
+  const sugg = useQuery({ queryKey: ['rx-suggestions', ws.id], queryFn: () => api<Suggestion[]>(wsPath(ws.id, '/prescriptions/suggestions')), staleTime: 60000 });
+  const typed = f.diagnosis.trim().toLowerCase(); const fits = (t: string) => !typed || t.toLowerCase().includes(typed);
+  const learned = (sugg.data || []).filter((s) => fits(s.diagnosis) && s.diagnosis.toLowerCase() !== typed).slice(0, 8);
+  const seen = new Set((sugg.data || []).map((s) => s.diagnosis.toLowerCase()));
+  const common = COMMON_CONDITIONS.filter((c) => !seen.has(c.toLowerCase()) && fits(c) && c.toLowerCase() !== typed).slice(0, typed ? 6 : 10);
+  if (!learned.length && !common.length) return null;
+  const setDiagnosis = (d: string) => set('diagnosis', f.diagnosis.trim() && !d.toLowerCase().includes(typed) ? `${f.diagnosis.trim()}; ${d}` : d);
+  const pickLearned = (s: Suggestion) => {
+    setDiagnosis(s.diagnosis); const filled: string[] = [];
+    if (!f.treatmentPlan.trim() && s.treatmentPlan) { set('treatmentPlan', s.treatmentPlan); filled.push('treatment'); }
+    if (!f.advice.trim() && s.advice) { set('advice', s.advice); filled.push('advice'); }
+    if (filled.length) toast('ok', `Filled the ${filled.join(' and ')} from your last prescription for this condition${s.lastUsed ? ` (${fdate(s.lastUsed)})` : ''}. Please review and edit.`);
+  };
+  const chip = 'rounded-full border border-line-2 bg-surface px-2.5 py-1 text-[12.5px] text-fg hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  return (
+    <div className="-mt-1 space-y-2 sm:col-span-2" aria-label="Condition suggestions">
+      {learned.length > 0 && <div><div className="label mb-1">Treated at this clinic (tap to use, with the last treatment)</div><div className="flex flex-wrap gap-1.5">{learned.map((s) => <button key={s.diagnosis} type="button" className={chip} onClick={() => pickLearned(s)} title={s.treatmentPlan ? 'Also fills the empty treatment / advice boxes' : undefined}>{s.diagnosis} <span className="text-fg-2">· {s.count}×</span></button>)}</div></div>}
+      {common.length > 0 && <div><div className="label mb-1">Common conditions</div><div className="flex flex-wrap gap-1.5">{common.map((c) => <button key={c} type="button" className={chip} onClick={() => setDiagnosis(c)}>{c}</button>)}</div></div>}
+    </div>
+  );
+}
 type Form = { patient: { id: string; name: string } | null; rxDate: string; treatingPhysio: string; bp: string; vitals: string; history: string; examination: string; diagnosis: string; treatmentPlan: string; exercises: string; advice: string; followUpOn: string };
 type Pending = { key: string; blob: Blob; name: string; url: string; caption: string; state: 'ready' | 'uploading' | 'failed'; error?: string };
 
@@ -178,7 +207,8 @@ function Editor({ rxId }: { rxId: string }) {
             <Field label="Other vitals"><Input value={f.vitals} onChange={(e) => set('vitals', e.target.value)} maxLength={300} /></Field>
             <Field label="Clinical history" className="sm:col-span-2"><Textarea value={f.history} onChange={(e) => set('history', e.target.value)} rows={3} maxLength={4000} /></Field>
             <Field label="O/E: clinical examination findings" className="sm:col-span-2"><Textarea value={f.examination} onChange={(e) => set('examination', e.target.value)} rows={3} maxLength={4000} /></Field>
-            <Field label="Diagnosis" className="sm:col-span-2" hint="Entered by the clinician"><Textarea value={f.diagnosis} onChange={(e) => set('diagnosis', e.target.value)} rows={2} maxLength={2000} /></Field>
+            <Field label="Diagnosis" className="sm:col-span-2" hint="Entered by the clinician. Tap a suggestion below to save typing; nothing is saved until you save the prescription."><Textarea value={f.diagnosis} onChange={(e) => set('diagnosis', e.target.value)} rows={2} maxLength={2000} /></Field>
+            <ConditionSuggestions f={f} set={set} />
             <Field label="Physiotherapy treatment, exercises & instructions" className="sm:col-span-2"><Textarea value={f.treatmentPlan} onChange={(e) => set('treatmentPlan', e.target.value)} rows={4} maxLength={4000} /></Field>
             <Field label="Advice" className="sm:col-span-2"><Textarea value={f.advice} onChange={(e) => set('advice', e.target.value)} rows={3} maxLength={4000} /></Field>
             <Field label="Follow-up date"><Input type="date" value={f.followUpOn} onChange={(e) => set('followUpOn', e.target.value)} /></Field>
