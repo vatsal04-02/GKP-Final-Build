@@ -9,7 +9,16 @@ const site = process.env.PUBLIC_SITE_URL ?? 'https://geetakrishnaphysiotherapy.c
 
 export default defineConfig({
   site,
-  integrations: [sitemap({ lastmod: new Date() })],
+  integrations: [
+    sitemap({
+      lastmod: new Date(),
+      // Home page first; the landing pages follow. (Google ignores these hints, other engines read them.)
+      serialize(item) {
+        const home = new URL(item.url).pathname === '/';
+        return { ...item, changefreq: home ? 'weekly' : 'monthly', priority: home ? 1.0 : 0.8 };
+      },
+    }),
+  ],
   vite: { plugins: [tailwindcss()] },
   build: { inlineStylesheets: 'auto' },
   devToolbar: { enabled: false },

@@ -7,9 +7,21 @@ import { clinic, conditions, doctors, faqs, links, seo } from '../data/site';
 interface Props {
   title?: string;
   description?: string;
+  /** FAQ shown on this page (becomes FAQPage data). Defaults to the home page FAQ. */
+  faqs?: { q: string; a: string; confirmed?: boolean }[];
+  /** Extra schema.org nodes for this page (Service, BreadcrumbList, …), added to the shared graph. */
+  schemaExtra?: Record<string, unknown>[];
+  /** CSS selectors for the passages a voice assistant may read aloud. */
+  speakable?: string[];
 }
 
-const { title = seo.title, description = seo.description } = Astro.props;
+const {
+  title = seo.title,
+  description = seo.description,
+  faqs: pageFaqs = faqs,
+  schemaExtra = [],
+  speakable = ['.hero__lead', '#doctors-title', '#doctors .lead'],
+} = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
 const ogImage = new URL('og.png', Astro.site).href;
 const gaId = import.meta.env.PUBLIC_GA_ID;
@@ -51,7 +63,7 @@ const businessSchema = {
       about: { '@id': ids.clinic },
       primaryImageOfPage: { '@type': 'ImageObject', url: ogImage, width: 1200, height: 630 },
       // Read-aloud hint for voice assistants: the headline answer and the doctors' intro.
-      speakable: { '@type': 'SpeakableSpecification', cssSelector: ['.hero__lead', '#doctors-title', '#doctors .lead'] },
+      speakable: { '@type': 'SpeakableSpecification', cssSelector: speakable },
     },
     {
       '@type': 'Physiotherapy',
@@ -107,6 +119,7 @@ const businessSchema = {
       hasCredential: { '@type': 'EducationalOccupationalCredential', credentialCategory: 'degree', name: d.about },
       workLocation: { '@id': ids.clinic },
     })),
+    ...schemaExtra,
   ],
 };
 
@@ -114,8 +127,8 @@ const businessSchema = {
 const faqSchema = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
-  mainEntity: faqs
-    .filter((f) => f.confirmed)
+  mainEntity: pageFaqs
+    .filter((f) => f.confirmed !== false)
     .map((f) => ({
       '@type': 'Question',
       name: f.q,

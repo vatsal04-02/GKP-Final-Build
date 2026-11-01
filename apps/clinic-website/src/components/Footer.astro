@@ -1,8 +1,10 @@
 ---
 import Icon from './Icon.astro';
 import { clinic, hours, links, nav } from '../data/site';
+import { landingPages } from '../data/landing';
 
-const footerNav = nav;
+const home = Astro.url.pathname === '/' ? '' : '/';
+const footerNav = nav.map((n) => ({ ...n, href: `${home}${n.href}` }));
 const year = new Date().getFullYear();
 ---
 
@@ -30,6 +32,13 @@ const year = new Date().getFullYear();
         </a>
       </div>
     </div>
+
+    <nav class="services" aria-label="Physiotherapy in Lucknow">
+      <p class="services__title">Physiotherapy in Lucknow</p>
+      <ul>
+        {landingPages.map((p) => <li><a href={`/${p.slug}/`}>{p.navLabel}</a></li>)}
+      </ul>
+    </nav>
 
     <div class="legal">
       <p>{hours.days} {hours.sessions.join(' & ')} · {hours.closed}</p>
@@ -109,6 +118,38 @@ const year = new Date().getFullYear();
   .phone:hover {
     text-decoration: underline;
     text-underline-offset: 4px;
+  }
+  .services {
+    margin-top: 2rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid rgb(250 248 242 / 0.12);
+  }
+  .services__title {
+    margin: 0 0 0.3rem;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgb(250 248 242 / 0.55);
+  }
+  .services ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 1.4rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .services a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: 0.875rem;
+    color: rgb(250 248 242 / 0.72);
+    text-decoration: none;
+  }
+  .services a:hover {
+    color: var(--color-sand);
   }
   .legal {
     display: flex;

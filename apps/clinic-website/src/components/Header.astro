@@ -1,12 +1,15 @@
 ---
 import Icon from './Icon.astro';
 import { clinic, hours, links, nav } from '../data/site';
+
+// On the home page the nav scrolls to a section; on any other page it goes back to that section of the home page.
+const home = Astro.url.pathname === '/' ? '' : '/';
 ---
 
 <header class="site-header" data-header>
   <div class="site-header__inner">
     <div class="bar">
-      <a class="brand" href="#top">
+      <a class="brand" href={`${home}#top`}>
         <img class="brand__logo brand__logo--pine" src="/brand/gkp-mark-pine.webp" alt="" width="90" height="44" decoding="async" />
         <img class="brand__logo brand__logo--cream" src="/brand/gkp-mark-cream.webp" alt="" width="90" height="44" decoding="async" />
         <span class="brand__text">
@@ -20,7 +23,7 @@ import { clinic, hours, links, nav } from '../data/site';
           {
             nav.map((item) => (
               <li>
-                <a href={item.href} data-nav-link>
+                <a href={`${home}${item.href}`} data-nav-link>
                   {item.label}
                 </a>
               </li>
@@ -57,7 +60,7 @@ import { clinic, hours, links, nav } from '../data/site';
           {
             nav.map((item, i) => (
               <li style={`--i:${i}`}>
-                <a href={item.href} data-menu-link>
+                <a href={`${home}${item.href}`} data-menu-link>
                   <span class="num">{String(i + 1).padStart(2, '0')}</span>
                   <span class="label">{item.label}</span>
                   <Icon name="arrow-up-right" size={20} class="go" />

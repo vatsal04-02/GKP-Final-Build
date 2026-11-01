@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { landingPages } from '../data/landing';
 import { aboutSummary, clinic, conditions, doctors, faqs, hours, seo, stats } from '../data/site';
 
 // Plain-text brief for AI assistants and answer engines (https://llmstxt.org). Built from the same data as the
@@ -28,6 +29,10 @@ export const GET: APIRoute = ({ site }) => {
     '',
     '## Conditions treated',
     ...conditions.map((c) => `- ${c.title}`),
+    '',
+    '## Pages',
+    `- [Home](${url})`,
+    ...landingPages.map((p) => `- [${p.h1}](${new URL(`/${p.slug}/`, base).href}): ${p.description}`),
     '',
     '## Frequently asked questions',
     ...faqs.filter((f) => f.confirmed).flatMap((f) => [`### ${f.q}`, f.a, '']),

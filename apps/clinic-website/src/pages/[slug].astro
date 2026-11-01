@@ -1,0 +1,412 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import StickyCta from '../components/StickyCta.astro';
+import ClinicImage from '../components/ClinicImage.astro';
+import Icon from '../components/Icon.astro';
+import { landingBySlug, landingPages } from '../data/landing';
+import { clinic, concernMessage, doctorBookMessage, doctors, hours, links, seo, steps, whatsappLink } from '../data/site';
+
+export function getStaticPaths() {
+  return landingPages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
+}
+
+const { page } = Astro.props;
+const origin = new URL('/', Astro.site).href;
+const url = new URL(`/${page.slug}/`, Astro.site).href;
+const clinicId = `${origin}#clinic`;
+
+const shown = doctors.filter((d) => page.doctors === 'both' || d.slot === `doctor-${page.doctors}`);
+const related = page.related.map((s) => landingBySlug.get(s)).filter((p) => p !== undefined);
+const waHref = whatsappLink(concernMessage(page.serviceName.toLowerCase()));
+
+const schemaExtra = [
+  {
+    '@type': 'BreadcrumbList',
+    '@id': `${url}#breadcrumb`,
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: origin },
+      { '@type': 'ListItem', position: 2, name: page.h1, item: url },
+    ],
+  },
+  {
+    '@type': 'Service',
+    '@id': `${url}#service`,
+    name: page.serviceName,
+    serviceType: 'Physiotherapy',
+    description: page.lead,
+    url,
+    provider: { '@id': clinicId },
+    areaServed: seo.areaServed.map((name) => ({ '@type': 'AdministrativeArea', name })),
+  },
+];
+---
+
+<Base title={page.title} description={page.description} faqs={page.faqs} schemaExtra={schemaExtra} speakable={['.lp__lead', '.lp__h1']}>
+  <Header />
+  <main id="main">
+    <section class="lp-hero surface-pine on-dark" aria-labelledby="lp-title">
+      <div class="container-site">
+       <div class="lp-hero__inner">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="/">Home</a>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">{page.navLabel}</span>
+        </nav>
+        <p class="eyebrow">Physiotherapy • Gomti Nagar, Lucknow</p>
+        <h1 id="lp-title" class="lp__h1">{page.h1}</h1>
+        <p class="lp__lead">{page.lead}</p>
+        <div class="lp-cta" data-hero-cta>
+          <a class="btn btn-primary btn-glow" href={waHref} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location={`landing-${page.slug}`}>
+            <Icon name="message-circle" size={20} />
+            WhatsApp the Clinic
+            <Icon name="arrow-right" size={18} class="icon-arrow" />
+          </a>
+          <a class="btn btn-glass" href={links.tel} data-track="phone_click" data-location={`landing-${page.slug}`}>
+            <Icon name="phone" size={18} />
+            Call {clinic.phone.display}
+          </a>
+        </div>
+        <ul class="chips" aria-label="Clinic at a glance">
+          <li><Icon name="map-pin" size={15} /> Viram Khand, Gomti Nagar</li>
+          <li><Icon name="clock" size={15} /> {hours.days} · {hours.sessions.join(' · ')}</li>
+          <li><Icon name="star" size={15} /> {clinic.rating.value} on Google · {clinic.rating.count} reviews</li>
+        </ul>
+       </div>
+      </div>
+    </section>
+
+    <section class="section surface-ivory" aria-labelledby="about-title">
+      <div class="container-site two">
+        <div class="stack">
+          <h2 id="about-title" class="h2">{page.aboutTitle}</h2>
+          {page.about.map((p) => <p class="lead">{p}</p>)}
+        </div>
+        <div class="card">
+          <h3 class="card__title">{page.listTitle}</h3>
+          <ul class="ticks">
+            {page.list.map((item) => <li>{item}</li>)}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section surface-tint" aria-labelledby="who-title">
+      <div class="container-site stack">
+        <h2 id="who-title" class="h2">{shown.length > 1 ? 'Your physiotherapists' : 'Your physiotherapist'}</h2>
+        <div class="docs">
+          {
+            shown.map((d) => (
+              <article class="doc">
+                <div class="doc__photo">
+                  <ClinicImage photo={d.slot} alt={`${d.name}, ${d.role}, ${d.qualification}`} sizes="(min-width:768px) 220px, 40vw">
+                    <span class="doc__mono" aria-hidden="true">{d.initials}</span>
+                  </ClinicImage>
+                </div>
+                <div class="doc__body">
+                  <h3 class="card__title">{d.name}</h3>
+                  <p class="doc__role">{d.role} · {d.qualification}</p>
+                  <p>{d.bio}</p>
+                  <a class="btn btn-primary" href={whatsappLink(doctorBookMessage(d.name))} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location={`landing-doctor-${d.n}`}>
+                    <Icon name="message-circle" size={19} />
+                    Book with {d.short}
+                  </a>
+                </div>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="section surface-ivory" aria-labelledby="how-title">
+      <div class="container-site stack">
+        <h2 id="how-title" class="h2">How care works</h2>
+        <ol class="steps">
+          {
+            steps.map((s) => (
+              <li>
+                <span class="steps__n">{s.n}</span>
+                <h3 class="card__title">{s.title}</h3>
+                <p>{s.body}</p>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <section class="section surface-tint" aria-labelledby="faq-title">
+      <div class="container-site stack faq">
+        <h2 id="faq-title" class="h2">Questions, answered.</h2>
+        {
+          page.faqs.map((f) => (
+            <details class="faq__item">
+              <summary>{f.q}</summary>
+              <p>{f.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="section surface-ivory" aria-labelledby="visit-title">
+      <div class="container-site two">
+        <div class="stack">
+          <h2 id="visit-title" class="h2">Visit the clinic</h2>
+          <address class="addr">
+            <strong>{clinic.name}</strong><br />
+            {clinic.address.street}, {clinic.address.area}<br />
+            {clinic.address.city}, {clinic.address.region} {clinic.address.postalCode}
+          </address>
+          <p>{hours.days}, {hours.sessions.join(' and ')}. {hours.closed}.</p>
+          <p>
+            <a class="phone" href={links.tel} data-track="phone_click" data-location="landing-visit">{clinic.phone.display}</a>
+          </p>
+          <a class="link-arrow" href={links.directions} target="_blank" rel="noopener noreferrer" data-track="directions_click" data-location="landing-visit">
+            Get directions
+            <Icon name="arrow-up-right" size={18} />
+          </a>
+        </div>
+        <nav class="card" aria-label="Related pages">
+          <h3 class="card__title">More physiotherapy in Lucknow</h3>
+          <ul class="rel">
+            {related.map((p) => <li><a href={`/${p.slug}/`}>{p.navLabel}</a></li>)}
+            <li><a href="/">Geeta Krishna Physiotherapy home page</a></li>
+          </ul>
+        </nav>
+      </div>
+    </section>
+  </main>
+  <Footer />
+  <StickyCta />
+</Base>
+
+<style>
+  .lp-hero {
+    padding: calc(var(--header-h, 80px) + clamp(32px, 6vw, 72px)) 0 clamp(48px, 7vw, 88px);
+  }
+  .lp-hero__inner {
+    display: grid;
+    gap: 1.1rem;
+    justify-items: start;
+    max-width: 62rem;
+  }
+  .crumbs {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: rgb(250 248 242 / 0.7);
+  }
+  .crumbs a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .lp__h1 {
+    margin: 0;
+    font: 400 min(clamp(34px, 8vw, 64px), clamp(2.25rem, 1.3rem + 3vw, 3.75rem)) / 1.08 var(--font-serif);
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    color: var(--color-ivory);
+  }
+  .lp__lead {
+    margin: 0;
+    max-width: 60ch;
+    font-size: var(--lead-fs);
+    line-height: 1.7;
+    color: rgb(250 248 242 / 0.82);
+  }
+  .lp-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.4rem;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.4rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .chips li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid rgb(250 248 242 / 0.2);
+    border-radius: 999px;
+    background: rgb(12 59 54 / 0.62);
+    font-size: 0.8125rem;
+  }
+
+  .stack {
+    display: grid;
+    gap: 1.1rem;
+    align-content: start;
+  }
+  .two {
+    display: grid;
+    gap: clamp(24px, 4vw, 48px);
+    align-items: start;
+  }
+  .card {
+    padding: clamp(20px, 3vw, 32px);
+    border: 1px solid rgb(12 59 54 / 0.14);
+    border-radius: 8px;
+    background: rgb(250 248 242 / 0.7);
+  }
+  .card__title {
+    margin: 0 0 0.6rem;
+    font: 400 1.375rem/1.2 var(--font-serif);
+    color: var(--color-pine);
+  }
+  .ticks {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .ticks li {
+    position: relative;
+    padding-left: 1.5rem;
+  }
+  .ticks li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 0.7rem;
+    height: 2px;
+    background: var(--color-teal);
+  }
+
+  .docs {
+    display: grid;
+    gap: 20px;
+  }
+  .doc {
+    display: grid;
+    grid-template-columns: minmax(110px, 38%) 1fr;
+    gap: clamp(16px, 3vw, 28px);
+    align-items: start;
+    padding: clamp(14px, 2.5vw, 24px);
+    border: 1px solid rgb(12 59 54 / 0.14);
+    border-radius: 8px;
+    background: var(--color-ivory);
+  }
+  .doc__photo {
+    position: relative;
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+    border-radius: 6px;
+    background: var(--color-pine);
+  }
+  .doc__photo :global(.clinic-img) {
+    object-position: 50% 14%;
+  }
+  .doc__mono {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font: 400 2.6rem/1 var(--font-serif);
+    color: var(--color-ivory);
+  }
+  .doc__body {
+    display: grid;
+    gap: 0.6rem;
+    justify-items: start;
+  }
+  .doc__body p {
+    margin: 0;
+  }
+  .doc__role {
+    font-weight: 700;
+    color: var(--color-teal);
+  }
+
+  .steps {
+    display: grid;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .steps li {
+    padding: clamp(18px, 3vw, 28px);
+    border: 1px solid rgb(12 59 54 / 0.14);
+    border-radius: 8px;
+  }
+  .steps li p {
+    margin: 0;
+  }
+  .steps__n {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: var(--color-teal);
+  }
+
+  .faq {
+    max-width: 52rem;
+  }
+  .faq__item {
+    border-bottom: 1px solid rgb(12 59 54 / 0.18);
+    padding-block: 0.2rem;
+  }
+  .faq__item summary {
+    cursor: pointer;
+    padding-block: 0.9rem;
+    font-weight: 700;
+    color: var(--color-pine);
+  }
+  .faq__item p {
+    margin: 0 0 1rem;
+    max-width: 62ch;
+  }
+
+  .addr {
+    font-style: normal;
+    line-height: 1.7;
+  }
+  .stack p {
+    margin: 0;
+  }
+  .phone {
+    font-weight: 800;
+    color: var(--color-pine);
+  }
+  .rel {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rel a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-weight: 600;
+    color: var(--color-teal);
+  }
+
+  @media (min-width: 768px) {
+    .two {
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+    .docs {
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    }
+    .steps {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+</style>
