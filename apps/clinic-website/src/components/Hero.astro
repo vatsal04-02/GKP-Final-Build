@@ -1,7 +1,7 @@
 ---
 import ClinicImage from './ClinicImage.astro';
 import Icon from './Icon.astro';
-import { clinic, hours, links, schedule } from '../data/site';
+import { clinic, hours, links, schedule, stats } from '../data/site';
 // Looping background (5s, audio stripped). Phones get a 4:5 crop of the same shot around the entrance, so they
 // download half the pixels and the people stay in frame. Both load after the page, see scripts/hero-video.ts.
 import loopDesktop from '../assets/video/hero-loop.mp4?url';
@@ -71,6 +71,11 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
           </span>
           <span class="sr-only" data-live-text="Rated {rating} out of 5 stars from {count} Google reviews">Rated {clinic.rating.value} out of 5 stars from {clinic.rating.count} Google reviews</span>
         </div>
+
+        <p class="status status--patients">
+          <Icon name="users" size={15} />
+          <span><strong>{stats.patients.count}{stats.patients.suffix}</strong> {stats.patients.label}</span>
+        </p>
 
         <!-- Live status, computed in the browser against clinic time (IST) -->
         <p class="status" data-open-status data-schedule={JSON.stringify(schedule)}>
@@ -289,6 +294,12 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
   }
   .status {
     font-weight: 600;
+  }
+  .status--patients {
+    padding-left: 0.85rem;
+  }
+  .status--patients strong {
+    font: 400 1.1875rem/1 var(--font-serif);
   }
   .status__dot {
     flex: none;

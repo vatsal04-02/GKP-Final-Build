@@ -29,6 +29,17 @@ export const clinic = {
   rating: { value: '5.0', count: '467+' },
 } as const;
 
+/**
+ * Clinic-reported figures, confirmed by the owner (1 Nov 2026). They are two separate claims:
+ * patient volume and reported outcomes. Outcomes are always shown with `outcomeNote`; never state them as
+ * a promise, a guarantee or an individual's chance of recovery. Delete a key's uses to take it off the site.
+ */
+export const stats = {
+  patients: { count: 2, suffix: ' Lakh+', label: 'Patients Treated', text: '2 Lakh+ Patients Treated' },
+  outcomes: { count: 70, suffix: '–80%+', label: 'Positive Treatment Outcomes', text: '70–80%+ Positive Treatment Outcomes' },
+  outcomeNote: 'Reported outcomes based on clinic records; results vary depending on condition, severity and individual response to treatment.',
+} as const;
+
 export const hours = {
   days: 'Mon–Sat',
   sessions: ['9 AM–1 PM', '4 PM–8 PM'],
@@ -289,6 +300,16 @@ export const faqs: Faq[] = [
     a: 'Yes. Dr. Mahesh Tiwari, MPT (PT), is the ortho specialist at Geeta Krishna Physiotherapy in Gomti Nagar, Lucknow. The clinic provides physiotherapy management of orthopaedic and musculoskeletal conditions such as back and neck pain, joint pain, arthritis, post-surgery rehabilitation and sports injuries.',
     confirmed: true,
   },
+  {
+    q: 'How many patients has Geeta Krishna Physiotherapy treated?',
+    a: 'The clinic reports having treated 2 Lakh+ patients, and is led by two MPT (PT) physiotherapists, Dr. Sandeep Tiwari (neuro) and Dr. Mahesh Tiwari (ortho), in Gomti Nagar, Lucknow.',
+    confirmed: true,
+  },
+  {
+    q: 'What are the treatment outcomes at the clinic?',
+    a: `The clinic reports 70–80%+ positive treatment outcomes. ${stats.outcomeNote} Every patient is assessed individually before care is recommended, and no result is guaranteed.`,
+    confirmed: true,
+  },
   { q: 'Do you offer home visits?', a: TBD, confirmed: false },
   { q: 'How long is a session?', a: TBD, confirmed: false },
 ];
@@ -298,7 +319,7 @@ export const faqs: Faq[] = [
 export const seo = {
   title: 'Physiotherapy in Gomti Nagar, Lucknow | Geeta Krishna Physiotherapy',
   description:
-    'Neuro & ortho physiotherapy in Gomti Nagar, Lucknow by two MPT doctors. Back pain, sciatica, stroke rehab, sports injuries. 5.0 on Google. Book on WhatsApp.',
+    'Neuro & ortho physiotherapy in Gomti Nagar, Lucknow by two MPT doctors. 2 Lakh+ patients treated, 5.0 on Google. Back pain, stroke rehab. Book on WhatsApp.',
   /** Canonical site address — what the sitemap, canonical tags and social previews point at unless PUBLIC_SITE_URL overrides it. */
   siteUrl: 'https://geetakrishnaphysiotherapy.co.in',
   /** Places the clinic is searched from; used for structured data only (no unverified claims about travel or coverage). */
@@ -307,4 +328,4 @@ export const seo = {
 
 /** Short, factual summary for answer engines (served as /llms.txt) — every line is verified clinic data. */
 export const aboutSummary =
-  'Geeta Krishna Physiotherapy is a physiotherapy clinic in Viram Khand, Gomti Nagar, Lucknow, led by two MPT (PT) physiotherapists: Dr. Sandeep Tiwari (neuro specialist) and Dr. Mahesh Tiwari (ortho specialist).';
+  'Geeta Krishna Physiotherapy is a physiotherapy clinic in Viram Khand, Gomti Nagar, Lucknow, offering orthopaedic and neurological physiotherapy. It is led by two MPT (PT) physiotherapists, Dr. Sandeep Tiwari (neuro specialist) and Dr. Mahesh Tiwari (ortho specialist), and reports having treated 2 Lakh+ patients.';

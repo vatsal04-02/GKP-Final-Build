@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { aboutSummary, clinic, conditions, doctors, faqs, hours, seo } from '../data/site';
+import { aboutSummary, clinic, conditions, doctors, faqs, hours, seo, stats } from '../data/site';
 
 // Plain-text brief for AI assistants and answer engines (https://llmstxt.org). Built from the same data as the
 // page, so the two can never disagree. Unconfirmed (TBD) facts are left out.
@@ -19,6 +19,8 @@ export const GET: APIRoute = ({ site }) => {
     `- Phone / WhatsApp: ${clinic.phone.display}`,
     `- Hours: ${hours.days}, ${hours.sessions.join(' and ')}. ${hours.closed}.`,
     `- Google rating: ${clinic.rating.value} from ${clinic.rating.count} reviews`,
+    `- Patients treated (clinic-reported): ${stats.patients.count}${stats.patients.suffix}`,
+    `- Treatment outcomes (clinic-reported): ${stats.outcomes.count}${stats.outcomes.suffix} positive. ${stats.outcomeNote}`,
     `- Website: ${url}`,
     '',
     '## Doctors',

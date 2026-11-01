@@ -1,7 +1,7 @@
 ---
 import DarkFx from './DarkFx.astro';
 import Icon from './Icon.astro';
-import { clinic } from '../data/site';
+import { clinic, stats } from '../data/site';
 ---
 
 <section class="trust curve surface-pine on-dark" data-ambient aria-label="Clinic at a glance">
@@ -9,6 +9,23 @@ import { clinic } from '../data/site';
   <div class="container-site trust__inner">
     <!-- Transition moment: a hairline draws across the container as the strip comes into view -->
     <span class="trust__rule reveal" data-reveal="group" aria-hidden="true"></span>
+    <!-- Clinic-reported figures. The outcomes line always travels with its qualifier, never alone. -->
+    <dl class="trust__grid trust__lead">
+      <div class="stat stat--lead reveal" data-reveal="group" style="--i:0">
+        <dd class="stat__value">
+          <span class="num"><span data-count={stats.patients.count} data-decimals="0">{stats.patients.count}</span>{stats.patients.suffix}</span>
+        </dd>
+        <dt class="stat__label">{stats.patients.label}</dt>
+      </div>
+      <div class="stat stat--lead reveal" data-reveal="group" style="--i:1">
+        <dd class="stat__value">
+          <span class="num"><span data-count={stats.outcomes.count} data-decimals="0">{stats.outcomes.count}</span>{stats.outcomes.suffix}</span>
+        </dd>
+        <dt class="stat__label">{stats.outcomes.label}</dt>
+      </div>
+    </dl>
+    <p class="trust__note reveal" data-reveal="group" style="--i:2">{stats.outcomeNote}</p>
+
     <dl class="trust__grid">
       <div class="stat reveal" data-reveal="group" style="--i:0">
         <dd class="stat__value">
@@ -131,10 +148,47 @@ import { clinic } from '../data/site';
     color: rgb(250 248 242 / 0.66);
   }
 
+  /* Lead row: the two clinic-reported figures, two columns at every width, a touch larger than the rest */
+  .trust__lead {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .trust__lead > .stat:nth-child(n) {
+    border-bottom: 0;
+    padding-block: 1.25rem 0.5rem;
+  }
+  .stat--lead .num {
+    font-size: clamp(2.25rem, 1.7rem + 2vw, 3.25rem);
+  }
+  .stat--lead {
+    justify-content: flex-start;
+  }
+  .stat--lead .stat__label {
+    max-width: 24ch;
+    line-height: 1.4;
+  }
+  .trust__note {
+    margin: 0 auto 0.6rem;
+    max-width: 52ch;
+    padding-bottom: 1.1rem;
+    border-bottom: 1px solid rgb(250 248 242 / 0.12);
+    text-align: center;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: rgb(250 248 242 / 0.62);
+    transition: opacity 700ms ease-out;
+    transition-delay: 300ms;
+  }
+  :global(.js) .trust__note:not(.in-view) {
+    opacity: 0;
+  }
+
   /* Phones: 2 x 2, numerals 28px, labels 11px uppercase */
   @media (max-width: 767px) {
     .num {
       font-size: 28px;
+    }
+    .stat--lead .num {
+      font-size: 34px;
     }
     .num--place {
       font-size: 22px;
@@ -147,6 +201,11 @@ import { clinic } from '../data/site';
   @media (min-width: 768px) {
     .trust__grid {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .trust__lead {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      max-width: 52rem;
+      margin-inline: auto;
     }
     .stat {
       padding-block: 1.25rem;
