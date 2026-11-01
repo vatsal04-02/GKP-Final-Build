@@ -8,7 +8,7 @@ export const PT = { payments: 'Booking_Payments', events: 'Payment_Events', file
 export const PAYMENT_STATUSES = ['PENDING_PAYMENT', 'SCREENSHOT_RECEIVED', 'REVIEW_REQUIRED', 'PAID', 'REJECTED', 'REFUNDED', 'EXPIRED', 'CANCELLED'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export const OPEN_STATUSES: PaymentStatus[] = ['PENDING_PAYMENT', 'SCREENSHOT_RECEIVED', 'REVIEW_REQUIRED', 'REJECTED'];   // the slot is still held
-export const CHANNELS = ['website', 'whatsapp'] as const;
+export const CHANNELS = ['website', 'whatsapp', 'enquiry'] as const;   // enquiry = made automatically from a website enquiry (lead); its WhatsApp message is a TEMPLATE (the patient has not written to us)
 export const METHODS = ['staff_bank_statement', 'provider_webhook'] as const;
 
 const STAMP: Array<[string, ColType]> = [['Created_At', 'DateTime'], ['Updated_At', 'DateTime']];
@@ -21,7 +21,7 @@ export const PAYMENT_TABLES: Record<string, Array<[string, ColType]>> = {
     ['OCR_Amount_Paise', 'Int'], ['OCR_UTR', 'Text'], ['OCR_Txn_At', 'DateTime'], ['OCR_Payee', 'Text'], ['OCR_Payer', 'Text'], ['OCR_Status', 'Text'], ['OCR_Confidence', 'Text'], ['Flags', 'Text'],
     ['Verification_Method', [...METHODS]], ['Received_Paise', 'Int'], ['Reviewed_By', 'Text'], ['Reviewed_At', 'DateTime'], ['Review_Note', 'Text'],
     ['Refunded_At', 'DateTime'], ['Refunded_By', 'Text'], ['Refund_Note', 'Text'],
-    ['Request_Sent', 'Bool'], ['Notified_Status', 'Text'], ['Notify_Attempts', 'Int'], ['Last_Event_At', 'DateTime'], ...STAMP,
+    ['Payee_Key', 'Text'], ['Lead_Ref', 'Text'], ['Request_Sent', 'Bool'], ['Notified_Status', 'Text'], ['Notify_Attempts', 'Int'], ['Last_Event_At', 'DateTime'], ...STAMP,
   ],
   // Append-only history. Nothing in FLOW HQ updates or deletes a row here.
   Payment_Events: [['Event_ID', 'Text'], ['At', 'DateTime'], ['Payment_ID', 'Text'], ['Booking_UID', 'Text'], ['Actor', 'Text'], ['Action', 'Text'], ['From_Status', 'Text'], ['To_Status', 'Text'], ['Outcome', ['ok', 'failed', 'rejected']], ['Detail', 'Text']],

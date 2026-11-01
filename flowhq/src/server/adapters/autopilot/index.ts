@@ -35,7 +35,7 @@ export interface AutopilotConfig {
   cacheMs?: number;
   readLimit?: number;
   now?: () => number;                                               // tests only: a fixed clock for the booking service (production uses the real one)
-  payments?: { filesDir: string; qrFile?: string; webhookSecret?: string };   // protected screenshot folder (persistent volume), the supplied QR image, the signed-provider-event secret
+  payments?: { filesDir: string; qrDir?: string; webhookSecret?: string };   // protected screenshot folder (persistent volume), the folder with each doctor's QR image, the signed-provider-event secret
   auditOutbox?: { dir: string; requireVolume?: boolean; breakGlass?: boolean; staleMs?: number; waitMs?: number };   // the durable audit outbox (one sub-directory per workspace). Omitted = a volatile one (tests, demo)
   allowCreate?: boolean;                                            // real Grist only (not demo mode): lets an admin add a workspace
   clinic?: (slug: string, workspaceName: string) => ClinicConfig;   // letterhead + invoice rules (config/clinic.json)
@@ -148,7 +148,7 @@ class AutopilotWorkspace implements WorkspaceBackend {
   private paymentSvc: PaymentService | null = null;
   /** ONE PaymentService per workspace (its lock only works if every payment write goes through the same instance). */
   payments() {
-    return (this.paymentSvc ||= new PaymentService(this.grist, this.docId, this.booking(), { tz: this.cfg.timezone, ...(this.cfg.now ? { now: this.cfg.now } : {}), filesDir: this.cfg.payments?.filesDir || path.resolve('config/payment-files'), ...(this.cfg.payments?.qrFile ? { qrFile: this.cfg.payments.qrFile } : {}), ...(this.cfg.payments?.webhookSecret ? { webhookSecret: this.cfg.payments.webhookSecret } : {}) }));
+    return (this.paymentSvc ||= new PaymentService(this.grist, this.docId, this.booking(), { tz: this.cfg.timezone, ...(this.cfg.now ? { now: this.cfg.now } : {}), filesDir: this.cfg.payments?.filesDir || path.resolve('config/payment-files'), leadsTable: this.leadsTable, ...(this.cfg.payments?.qrDir ? { qrDir: this.cfg.payments.qrDir } : {}), ...(this.cfg.payments?.webhookSecret ? { webhookSecret: this.cfg.payments.webhookSecret } : {}) }));
   }
   // The clinical modules appear only when ALL Clinic Records tables exist in this clinic's doc (npm run provision-records creates them).
   // Concurrent requests share one probe: a request that arrives while the first probe is still running waits for its answer

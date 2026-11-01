@@ -84,6 +84,9 @@ TARGETS.fourf = { ...TARGETS.foure, file: path.join(__dirname, 'workflows', 'Flo
   ['F-4F-COUNT', /^every copy in the export is the same function/],
 ] };
 
+// Slice 4G: 4F + per-doctor QR and enquiry payment requests (n8n/final/tools/patch-4g-lead-qr.js).
+TARGETS.fourg = { ...TARGETS.fourf, file: path.join(__dirname, 'workflows', 'FlowHQ_Clinic_Automation_production_candidate4g.json'), finalSuites: [...TARGETS.fourf.finalSuites, '4g-lead-qr'], known: [...TARGETS.fourf.known] };
+
 function runTarget(name, t) {
   const file = TARGETS[name] ? t.file : path.resolve(name);
   console.log(`\n=== ${name}: ${path.relative(process.cwd(), file)}`);
@@ -112,7 +115,7 @@ function runTarget(name, t) {
   if (r.status !== 0) { console.log('  FAIL'); process.exit(1); }
 }
 const arg = process.argv[2];
-const names = arg ? [arg] : ['reference', 'authoritative', 'fourc', 'fourd', 'foure', 'fourf'];
+const names = arg ? [arg] : ['reference', 'authoritative', 'fourc', 'fourd', 'foure', 'fourf', 'fourg'];
 let bad = 0;
 for (const n of names) bad += runTarget(n, TARGETS[n] || { file: path.resolve(n), env: {}, known: [] });
 process.exit(bad ? 1 : 0);

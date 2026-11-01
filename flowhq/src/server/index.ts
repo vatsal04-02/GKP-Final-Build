@@ -37,7 +37,7 @@ export function buildServer(env: NodeJS.ProcessEnv = process.env) {
     ];
     startStaffReplySimulator(docs);
   } else {
-    adapter = createAutopilotAdapter({ gristBaseUrl: cfg.grist.baseUrl, gristApiKey: cfg.grist.apiKey, registryDocId: cfg.grist.registryDocId, payments: { filesDir: cfg.paymentFilesDir, qrFile: cfg.paymentQrFile, webhookSecret: cfg.paymentWebhookSecret }, auditOutbox: { dir: cfg.auditOutboxDir, requireVolume: cfg.auditRequireVolume, breakGlass: cfg.auditBreakGlass }, leadsTable: cfg.grist.leadsTable, timezone: cfg.timezone, locale: cfg.locale, currency: cfg.currency, clinic, allowCreate: true });
+    adapter = createAutopilotAdapter({ gristBaseUrl: cfg.grist.baseUrl, gristApiKey: cfg.grist.apiKey, registryDocId: cfg.grist.registryDocId, payments: { filesDir: cfg.paymentFilesDir, qrDir: cfg.paymentQrDir, webhookSecret: cfg.paymentWebhookSecret }, auditOutbox: { dir: cfg.auditOutboxDir, requireVolume: cfg.auditRequireVolume, breakGlass: cfg.auditBreakGlass }, leadsTable: cfg.grist.leadsTable, timezone: cfg.timezone, locale: cfg.locale, currency: cfg.currency, clinic, allowCreate: true });
     profiles = new ProfileStore(cfg.workspacesFile, cfg.defaultIndustry);
     users = loadUsers(cfg.usersFile, cfg.usersJson);
     if (!users.length) throw new Error('No FLOW HQ users: create config/users.json (see README) or set FLOWHQ_USERS');

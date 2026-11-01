@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { pickPayee } from '../../src/server/payments/payees';
 import { REAL_ENABLED, REAL_URL, createStaging, deleteStaging, futureDay, prepareForN8n, slotId, startServer, type Server, type Staging } from './harness';
 
 const req = createRequire(import.meta.url);
@@ -24,7 +25,7 @@ const png = () => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a
 
 function listen(server: http.Server) { return new Promise<number>((res) => server.listen(0, '127.0.0.1', () => res((server.address() as { port: number }).port))); }
 const readRaw = (r: http.IncomingMessage) => new Promise<Buffer>((res) => { const c: Buffer[] = []; r.on('data', (x) => c.push(x)); r.on('end', () => res(Buffer.concat(c))); });
-interface Sent { to: string; type: string; text?: string; imageId?: string; caption?: string; template?: string }
+interface Sent { to: string; type: string; text?: string; imageId?: string; caption?: string; template?: string; components?: any[] }
 /** Meta: messages, media upload, media info and media download. Media endpoints refuse a request without the bearer token, like the real ones. */
 async function startMeta() {
   const sent: Sent[] = []; const uploads: Buffer[] = []; const downloads: Array<{ id: string; authed: boolean }> = []; const files = new Map<string, Buffer>(); let n = 0; let base = '';
@@ -32,7 +33,7 @@ async function startMeta() {
     const url = rq.url || ''; const authed = rq.headers.authorization === `Bearer ${KEYS.wa}`; const raw = await readRaw(rq);
     const json = (code: number, o: unknown) => { rs.writeHead(code, { 'Content-Type': 'application/json' }); rs.end(JSON.stringify(o)); };
     if (rq.method === 'POST' && /\/media$/.test(url)) { if (!authed) return json(401, { error: { code: 190, message: 'bad token' } }); uploads.push(raw); return json(200, { id: QR_MEDIA }); }
-    if (rq.method === 'POST' && /\/messages$/.test(url)) { const b = JSON.parse(raw.toString('utf8') || '{}'); n++; sent.push({ to: b.to, type: b.type, ...(b.text ? { text: b.text.body } : {}), ...(b.image ? { imageId: b.image.id, caption: b.image.caption } : {}), ...(b.template ? { template: b.template.name } : {}) }); return json(200, { messaging_product: 'whatsapp', contacts: [{ input: b.to, wa_id: b.to }], messages: [{ id: `wamid.PAY${n}` }] }); }
+    if (rq.method === 'POST' && /\/messages$/.test(url)) { const b = JSON.parse(raw.toString('utf8') || '{}'); n++; sent.push({ to: b.to, type: b.type, ...(b.text ? { text: b.text.body } : {}), ...(b.image ? { imageId: b.image.id, caption: b.image.caption } : {}), ...(b.template ? { template: b.template.name, components: b.template.components } : {}) }); return json(200, { messaging_product: 'whatsapp', contacts: [{ input: b.to, wa_id: b.to }], messages: [{ id: `wamid.PAY${n}` }] }); }
     if (rq.method === 'GET' && /^\/dl\//.test(url)) { const id = url.slice(4); downloads.push({ id, authed }); if (!authed) return json(401, {}); const f = files.get(id); if (!f) return json(404, {}); rs.writeHead(200, { 'Content-Type': 'image/png' }); return rs.end(f); }
     if (rq.method === 'GET' && /\/\d{6,}$/.test(url)) { if (!authed) return json(401, { error: { code: 190 } }); const id = url.split('/').pop()!; const f = files.get(id); return f ? json(200, { id, url: `${base}/dl/${id}`, mime_type: 'image/png', file_size: f.length }) : json(404, { error: { code: 100 } }); }
     json(404, {});
@@ -85,7 +86,9 @@ d('STAGING PAYMENTS: real n8n (4F) + real Grist + real FLOW HQ (WhatsApp and the
   const metaText = (text: string, id: string) => { const body = { object: 'whatsapp_business_account', entry: [{ id: 'W', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { display_phone_number: '15550000000', phone_number_id: PNID }, contacts: [{ profile: { name: 'Staging Patient' }, wa_id: PATIENT_DIGITS }], messages: [{ from: PATIENT_DIGITS, id, timestamp: String(Math.floor(clockNow() / 1000)), type: 'text', text: { body: text } }] } }] }] }; const raw = JSON.stringify(body); return n8n.request('POST', '/webhook/whatsapp-inbound', { body: raw, headers: { 'content-type': 'application/json', 'x-hub-signature-256': `sha256=${crypto.createHmac('sha256', KEYS.app).update(raw).digest('hex')}` } }); };
   const notify = async () => { const r = await n8n.request('POST', '/webhook/staging-w16n', { body: '{}', headers: { 'content-type': 'application/json' } }); expect(r.status).toBe(200); await sleep(6000); };
   const toPatient = () => meta.sent.filter((m) => m.to === PATIENT_DIGITS);
-  const GOOD = (utr: string, over: Record<string, unknown> = {}) => ({ is_payment_screenshot: true, amount: '500.00', utr, txn_time: new Date().toISOString(), payee: 'VATSAL TRIPATHI', payer: 'Staging Payer', status: 'SUCCESS', confidence: 0.93, looks_edited: false, ...over });
+  const payeeNow = (doctorId: string) => pickPayee(Date.now(), 'Asia/Kolkata', doctorId);   // FLOW HQ chooses the doctor's QR from the real clock when the request is made
+  const qrBytes = (doctorId: string) => fs.readFileSync(path.resolve('assets', payeeNow(doctorId).file));
+  const GOOD = (utr: string, over: Record<string, unknown> = {}, doctorId = 'DR-001') => ({ is_payment_screenshot: true, amount: '500.00', utr, txn_time: new Date().toISOString(), payee: payeeNow(doctorId).name, payer: 'Staging Payer', status: 'SUCCESS', confidence: 0.93, looks_edited: false, ...over });
   const book = (slot: string, phone: string, rid: string) => site({ action: 'book', slot_id: slot, patient_name: 'Staging Website Patient', patient_phone: phone, request_id: rid });
   let siteRef = ''; let siteRef2 = ''; let waRef = '';
 
@@ -99,7 +102,7 @@ d('STAGING PAYMENTS: real n8n (4F) + real Grist + real FLOW HQ (WhatsApp and the
     dir = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'stg-pay-')); const file = path.join(dir, 'workflow.staging.json'); fs.writeFileSync(file, JSON.stringify(wf));
     const env = {
       FLOWHQ_GRIST_URL: REAL_URL, FLOWHQ_REGISTRY_DOC_ID: s.registryDocId, FLOWHQ_DEFAULT_COUNTRY_CODE: '91', FLOWHQ_TEST_PHONE: '+919000000019',
-      FLOWHQ_WA_SEND_MODE: 'allowlist', FLOWHQ_WA_ALLOWLIST: `${PATIENT},+919000000018,+919000000019`, FLOWHQ_WA_GRAPH_VERSION: 'v23.0', FLOWHQ_WA_GRAPH_BASE_URL: meta.url, FLOWHQ_WA_TEMPLATE_LANGUAGE: 'en',
+      FLOWHQ_WA_SEND_MODE: 'allowlist', FLOWHQ_WA_ALLOWLIST: `${PATIENT},+919000000018,+919000000019,+919000020088`, FLOWHQ_WA_GRAPH_VERSION: 'v23.0', FLOWHQ_WA_GRAPH_BASE_URL: meta.url, FLOWHQ_WA_TEMPLATE_LANGUAGE: 'en',
       FLOWHQ_META_APP_SECRET: KEYS.app, FLOWHQ_META_VERIFY_TOKEN: KEYS.verify, FLOWHQ_CAL_WEBHOOK_SECRET: KEYS.cal, FLOWHQ_CAL_MAX_AGE_HOURS: '24', FLOWHQ_ALERT_EMAIL_TO: '', FLOWHQ_EMAIL_FROM: 'noreply@clinic.example',
       FLOWHQ_AI_EXTERNAL_ENABLED: 'true', FLOWHQ_PAYMENT_OCR_WEBSITE: 'true', FLOWHQ_AI_BASE_URL: ai.url, FLOWHQ_AI_MODEL: 'openai/gpt-4o-mini', FLOWHQ_TELEGRAM_CHAT_ID: '', FLOWHQ_BOOKING_API_URL: flow.base, FLOWHQ_AI_MAX_REPLIES_PER_HOUR: '40',
     };
@@ -125,7 +128,7 @@ d('STAGING PAYMENTS: real n8n (4F) + real Grist + real FLOW HQ (WhatsApp and the
     const set = await flow.staff('admin', '/payments/settings', { method: 'PUT', body: { values: { consultation_fee_inr: '500', payee_authorization_note: 'Authorized by the clinic owner (staging, synthetic)', payee_authorized: 'on', payments_enabled: 'on' } } }); expect(set.status, set.text).toBe(200); expect(set.json.open_to_patients).toBe(true);
   }, 240000);
   it('3. website: config, slots, book (a held slot + a payment reference), status, and the QR (only for the booking\'s own phone)', async () => {
-    const c = await site({ action: 'config' }); expect(c.json.payments).toMatchObject({ open: true, fee_inr: '500', payee_name: 'VATSAL TRIPATHI' });
+    const c = await site({ action: 'config' }); expect(c.json.payments).toMatchObject({ open: true, fee_inr: '500' });
     const sl = await site({ action: 'slots', date: DAY }); expect(sl.status).toBe(200); expect(sl.json.slots.length).toBeGreaterThan(5); expect(sl.json.slots[0]).toHaveProperty('doctor_name');
     const b = await book(slotId('DR-001', DAY, '10:00'), SITE_PHONE, 'site-req-0001-abcd'); expect(b.status, b.text).toBe(201); siteRef = b.json.payment_ref;
     expect(b.json).toMatchObject({ ok: true, status: 'awaiting_payment', amount_inr: '500', can_upload: true }); expect(b.json.appointment).toMatchObject({ date: DAY, start_time: '10:00' });
@@ -133,7 +136,7 @@ d('STAGING PAYMENTS: real n8n (4F) + real Grist + real FLOW HQ (WhatsApp and the
     expect((await book(slotId('DR-001', DAY, '10:00'), '9000020066', 'site-req-0002-abcd')).status).toBe(409);   // held: nobody else can take it
     const st = await site({ action: 'status', payment_ref: siteRef, patient_phone: SITE_PHONE }); expect(st.json).toMatchObject({ status: 'awaiting_payment' }); expect(JSON.stringify(st.json)).not.toMatch(/flags|utr|token/i);
     expect((await site({ action: 'status', payment_ref: siteRef, patient_phone: '9000099999' })).status).toBe(404);
-    const q = await site({ action: 'qr', payment_ref: siteRef, patient_phone: SITE_PHONE }); expect(q.status).toBe(200); expect(Buffer.from(q.json.data_base64, 'base64').equals(fs.readFileSync(path.resolve('assets/kotak-upi-qr.jpg')))).toBe(true);
+    const q = await site({ action: 'qr', payment_ref: siteRef, patient_phone: SITE_PHONE }); expect(q.status).toBe(200); expect(Buffer.from(q.json.data_base64, 'base64').equals(qrBytes('DR-001'))).toBe(true);   // the QR of the doctor whose session the real clock is in
     expect((await site({ action: 'qr', payment_ref: siteRef, patient_phone: '9000099999' })).status).toBe(404);
     const a = (await rows('Appointments')).find((r) => r.fields.Booking_UID === siteRef)!.fields; expect(a.Appt_Stage).toBe('Pending confirmation');
   }, 240000);
@@ -172,11 +175,11 @@ d('STAGING PAYMENTS: real n8n (4F) + real Grist + real FLOW HQ (WhatsApp and the
     const before = toPatient().length; await notify();
     const img = await waitFor(() => toPatient().find((m) => m.type === 'image'), 60000, 'the QR image message');
     expect(img.imageId).toBe(QR_MEDIA); expect(img.caption).toContain('₹500'); expect(img.caption).toContain(waRef); expect(img.caption).toMatch(/Never share your UPI PIN, OTP/);
-    expect(meta.uploads.length).toBe(1); expect(meta.uploads[0]!.includes(fs.readFileSync(path.resolve('assets/kotak-upi-qr.jpg')).subarray(0, 4000))).toBe(true);   // the uploaded media is the supplied QR, byte for byte
+    expect(meta.uploads.length).toBe(1); expect(meta.uploads[0]!.includes(qrBytes('DR-002').subarray(0, 4000))).toBe(true);   // the uploaded media is the supplied QR, byte for byte
     expect((await payOf(waRef)).Request_Sent).toBe(true); await notify(); expect(toPatient().filter((m) => m.type === 'image')).toHaveLength(1); expect(toPatient().length).toBe(before + 1);
   }, 240000);
   it('7. WhatsApp: the patient\'s screenshot is downloaded from Meta (with the token), stored, read, and the AI receptionist is NOT started for it', async () => {
-    ai.state.reading = GOOD('512345678901'); meta.files.set(MEDIA_ID, png()); const chatBefore = ai.state.chatCalls; const imgBefore = ai.state.imageCalls.length;
+    ai.state.reading = GOOD('512345678901', {}, 'DR-002'); meta.files.set(MEDIA_ID, png()); const chatBefore = ai.state.chatCalls; const imgBefore = ai.state.imageCalls.length;
     const r = await metaImage(PATIENT_DIGITS, 'wamid.PAYIMG1', MEDIA_ID, 'paid'); expect(r.status).toBe(200);
     const p = await waitFor(async () => { const x = await payOf(waRef); return x.Status === 'REVIEW_REQUIRED' ? x : null; }, 90000, 'the WhatsApp screenshot to be read');
     expect(p).toMatchObject({ Screenshot_Count: 1, OCR_UTR: '512345678901' }); expect(String(p.Flags)).toBe('');
@@ -190,6 +193,24 @@ d('STAGING PAYMENTS: real n8n (4F) + real Grist + real FLOW HQ (WhatsApp and the
     expect(ai.state.imageCalls.length).toBe(imgBefore); expect((await pay()).length).toBe(payBefore); expect((await rows('Payment_Files')).filter((f) => f.fields.Source === 'whatsapp')).toHaveLength(1);   // only the real payment's screenshot
     expect(meta.downloads.filter((x) => x.id === MEDIA_ID2)).toHaveLength(0);
   }, 240000);
+  it('8b. a website ENQUIRY becomes a held time + the QR: sent as the approved TEMPLATE with the QR as its image header (the patient has not written to us), and only once', async () => {
+    const LEAD_PHONE = '919000020088'; const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(`${DAY}T12:00:00Z`).getUTCDay()]!; const dom = Number(DAY.slice(8, 10));
+    const on = await flow.staff('admin', '/payments/settings', { method: 'PUT', body: { values: { lead_payment_requests: 'on' } } }); expect(on.status, on.text).toBe(200);
+    await s.client.add(s.clinicDocId, 'LEADS', [{ Lead_id: 'L-STG-ENQ-0001', Name: 'Enquiry Staging', Phone: `+${LEAD_PHONE}`, Source: 'Website', Status: 'New', Consent_WhatsApp: true, Enquiry: `Concern: Back Pain · Visit: At the clinic · Preferred: ${wd} ${dom}, Morning 9 AM–1 PM`, Created_At: Math.floor(Date.now() / 1000) + 5 }]);
+    const row = await waitFor(async () => (await pay()).find((p) => p.Lead_Ref === 'L-STG-ENQ-0001'), 150000, 'FLOW HQ to turn the enquiry into a payment request');
+    expect(row).toMatchObject({ Status: 'PENDING_PAYMENT', Channel: 'enquiry', Amount_Paise: 50000 }); const ref = String(row.Booking_UID);
+    const ap = (await rows('Appointments')).filter((r) => r.fields.Booking_UID === ref); expect(ap).toHaveLength(1); expect(ap[0]!.fields.Appt_Stage).toBe('Pending confirmation');
+    const doc = String(ap[0]!.fields.Doctor_ID); const uploadsBefore = meta.uploads.length; await notify();
+    const msg = await waitFor(() => meta.sent.find((m) => m.to === LEAD_PHONE), 60000, 'the template message to the enquiry patient');
+    expect(msg.type).toBe('template'); expect(msg.template).toBe('booking_payment_pending');
+    const header = (msg.components || []).find((c) => c.type === 'header'); expect(header.parameters[0]).toMatchObject({ type: 'image', image: { id: QR_MEDIA } });
+    const body = (msg.components || []).find((c) => c.type === 'body').parameters.map((p: { text: string }) => p.text); expect(body).toHaveLength(8); expect(body).toContain(ref); expect(body).toContain('500');
+    expect(meta.uploads.length).toBe(uploadsBefore + 1);
+    const payee = pickPayee(Number(row.Created_At) * 1000, 'Asia/Kolkata', doc); expect(String(row.Payee_Key)).toBe(payee.key);   // the doctor's QR was chosen by the clock at creation time
+    expect(meta.uploads.at(-1)!.includes(fs.readFileSync(path.resolve('assets', payee.file)).subarray(0, 4000))).toBe(true);
+    expect(meta.sent.filter((m) => m.to === LEAD_PHONE && m.type !== 'template')).toHaveLength(0);   // no free text or image to someone who has not written to us
+    await notify(); expect(meta.sent.filter((m) => m.to === LEAD_PHONE)).toHaveLength(1);   // once
+  }, 400000);
   it('9. staff approval is the only way to PAID: the appointment is confirmed, the patient is told once, and the history shows every step', async () => {
     const id = String((await payOf(waRef)).Payment_ID);
     const refused = await flow.staff('desk', `/payments/${id}/approve`, { method: 'POST', body: { received_inr: '300', utr: '512345678901', confirm_receipt: true } }); expect(refused.status).toBe(422);

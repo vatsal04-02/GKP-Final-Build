@@ -1,5 +1,7 @@
 # Payments: OPENED in production on 2 Nov 2026
 
+> **Update (per-doctor QR, 4G):** the owner supplied one QR per doctor and replaced the single Kotak QR. The QR is chosen by the real clock when a request is created (09:00-12:59 Dr. Mahesh Tiwari; 16:00-19:59 Dr. Sandeep Tiwari; otherwise the booked doctor) and stored on the payment. Website enquiries can automatically get a held time + payment request (switch `lead_payment_requests`, OFF until the owner has a real WhatsApp number and an approved `booking_payment_pending` template). Details: `docs/payments.md`. The "Kotak / VATSAL TRIPATHI" statements below describe the state before this change. Status of this change: see the bottom of this file.
+
 The owner confirmed in writing (2 Nov 2026) that the Kotak UPI account showing VATSAL TRIPATHI may receive patient fees, and set the fee at ₹500. Applied through Grist with a `Payment_Events` row per setting (actor `owner-directive 2026-11-02`): `consultation_fee_inr=500`, `payee_authorization_note` (recorded), `payee_authorized=on`, then `payments_enabled=on` last. **Rollback:** FLOW HQ > Schedule > Payments > Payments off (patients see nothing new; held bookings expire normally).
 
 Production checks after opening (synthetic bookings only, both cancelled afterwards; every row kept):

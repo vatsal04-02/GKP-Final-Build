@@ -8,26 +8,36 @@ import path from 'node:path';
 import type { GristClient, GristRecord } from '../grist';
 import { bad, maxSeq, Mutex, pad } from '../records/ids';
 import { normalizePhone } from '../adapters/autopilot/shared';
-import { displayStatus } from '../booking/engine';
+import { displayStatus, parseSlotId } from '../booking/engine';
+import { PAYEES, PAYEE_KEYS, isPayeeKey, pickPayee, type Payee } from './payees';
 import { dayKey, localParts } from '../time';
+import { addDays } from '../records/ids';
 import { can } from '../booking/permissions';
 import type { BookingActor } from '../booking/service';
 import type { StaffBooking } from '../booking/staff-service';
 import { OPEN_STATUSES, PT, type PaymentStatus } from './schema';
 import { MAX_IMAGE_BYTES, PATIENT_STATUS, assess, cleanUtr, editedBySoftware, sha256, sniffImage, toPaise, utrLooksValid, type Extraction } from './assess';
 
-export interface PaymentOptions { now?: () => number; filesDir: string; qrFile?: string; webhookSecret?: string; tz?: string }
-export interface PaymentSettings { enabled: boolean; authorized: boolean; feePaise: number; expiryMin: number; reviewHoldMin: number; payee: string; note: string }
+export interface PaymentOptions { now?: () => number; filesDir: string; qrDir?: string; webhookSecret?: string; tz?: string; leadsTable?: string }   // qrDir: the folder holding each doctor's QR image (src/server/payments/payees.ts)
+export interface PaymentSettings { enabled: boolean; authorized: boolean; feePaise: number; expiryMin: number; reviewHoldMin: number; payee: string; note: string; leadRequests: boolean; leadSince: number }
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : v === null || v === undefined ? '' : String(v).trim());
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const on = (v: unknown) => ['on', 'true', 'yes', '1'].includes(t(v).toLowerCase());
 const SYSTEM: BookingActor = { kind: 'staff', id: 'system:payments', name: 'Payments (automatic)', source: 'Staff', role: 'admin' };
+const LEAD_ACTOR: BookingActor = { kind: 'staff', id: 'system:enquiry', name: 'Website enquiry (automatic)', source: 'Other', role: 'admin' };
 const FILE_RE = /^\d{6}\/[0-9a-f]{32}\.(jpg|png|webp)$/;
 const rupees = (paise: number) => (paise % 100 === 0 ? String(paise / 100) : (paise / 100).toFixed(2));
 export const DEFAULT_PAYEE = 'VATSAL TRIPATHI';
+/** "Concern: Back Pain · Visit: At the clinic · Preferred: Mon 6, Morning 9 AM–1 PM" -> the next clinic date that is a Monday the 6th, and the session. Null when it cannot be read. */
+export function parsePreferred(enquiry: string, nowMs: number, tz: string): { date: string; shift: 'morning' | 'evening' } | null {
+  const m = /Preferred:\s*(Sun|Mon|Tue|Wed|Thu|Fri|Sat)[a-z]*\s+(\d{1,2})\s*,\s*(Morning|Evening)/i.exec(enquiry); if (!m) return null;
+  const wd = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(m[1]!.toLowerCase()); const dom = Number(m[2]); const today = dayKey(nowMs, tz);
+  for (let i = 0; i <= 31; i++) { const d = addDays(today, i); if (Number(d.slice(8, 10)) === dom && new Date(`${d}T12:00:00Z`).getUTCDay() === wd) return { date: d, shift: m[3]!.toLowerCase() as 'morning' | 'evening' }; }
+  return null;
+}
 const hhmm = (ms: number, tz: string) => { const p = localParts(ms, tz); return `${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`; };
 
-export interface PaymentView { payment_ref: string; payment_id: string; status: PaymentStatus; patient_status: string; patient_message: string; amount_inr: string; expires_at: string | null; can_upload: boolean; appointment: { status: string; date: string; start_time: string; doctor_name: string | null } | null }
+export interface PaymentView { payee_name: string; payee_doctor: string; payment_ref: string; payment_id: string; status: PaymentStatus; patient_status: string; patient_message: string; amount_inr: string; expires_at: string | null; can_upload: boolean; appointment: { status: string; date: string; start_time: string; doctor_name: string | null } | null }
 
 export class PaymentService {
   private lock = new Mutex();
@@ -44,38 +54,42 @@ export class PaymentService {
     let rows: GristRecord[] = []; try { rows = await this.rows('Booking_Config'); } catch { /* not provisioned: everything stays closed */ }
     const m = new Map(rows.map((r) => [t(r.fields.Key), t(r.fields.Value)]));
     const int = (k: string, d: number, lo: number, hi: number) => { const v = Number(m.get(k)); return Number.isInteger(v) && v >= lo && v <= hi ? v : d; };
-    return { enabled: on(m.get('payments_enabled')), authorized: on(m.get('payee_authorized')), feePaise: int('consultation_fee_inr', 0, 0, 100000) * 100, expiryMin: int('payment_expiry_minutes', 30, 5, 1440), reviewHoldMin: int('payment_review_hold_minutes', 720, 60, 10080), payee: m.get('payee_name') || DEFAULT_PAYEE, note: m.get('payee_authorization_note') || '' };
+    return { enabled: on(m.get('payments_enabled')), authorized: on(m.get('payee_authorized')), feePaise: int('consultation_fee_inr', 0, 0, 100000) * 100, expiryMin: int('payment_expiry_minutes', 30, 5, 1440), reviewHoldMin: int('payment_review_hold_minutes', 720, 60, 10080), payee: m.get('payee_name') || DEFAULT_PAYEE, note: m.get('payee_authorization_note') || '', leadRequests: on(m.get('lead_payment_requests')), leadSince: int('lead_payment_since', 0, 0, 4102444800) };
   }
-  private async qrAvailable() { if (!this.o.qrFile) return false; try { await fs.access(this.o.qrFile); return true; } catch { return false; } }
+  private tz() { return this.o.tz || 'Asia/Kolkata'; }
+  private async qrAvailable() { if (!this.o.qrDir) return false; try { for (const k of PAYEE_KEYS) await fs.access(path.join(this.o.qrDir, PAYEES[k].file)); return true; } catch { return false; } }
+  /** The account a payment row was issued against. A row from before per-doctor QRs has none: it falls back to the clock at the time it was created. */
+  private payeeOf(r: GristRecord): Payee { const k = t(r.fields.Payee_Key); return isPayeeKey(k) ? PAYEES[k] : pickPayee(n(r.fields.Created_At) * 1000, this.tz()); }
   /** Why patient-facing payment requests are (not) allowed. The QR is only ever returned when this says open. */
   async gate(): Promise<{ open: boolean; reasons: string[]; settings: PaymentSettings }> {
     const s = await this.settings(); const reasons: string[] = [];
     if (!s.enabled) reasons.push('payments_enabled is off');
     if (!s.authorized) reasons.push('the clinic has not authorized collecting payments into the payee account (payee_authorized is off)');
     if (s.feePaise <= 0) reasons.push('the appointment fee (consultation_fee_inr) is not set');
-    if (!(await this.qrAvailable())) reasons.push('the payment QR image is not installed');
+    if (!(await this.qrAvailable())) reasons.push('the doctors\' payment QR images are not installed');
     return { open: reasons.length === 0, reasons, settings: s };
   }
   async config(): Promise<Record<string, unknown>> {
     const g = await this.gate();
-    return { payments: { required: g.open, state: g.open ? 'open' : 'disabled', reasons: g.open ? [] : g.reasons, fee_inr: g.open ? rupees(g.settings.feePaise) : null, expiry_minutes: g.settings.expiryMin, payee_name: g.open ? g.settings.payee : null } };
+    return { payments: { required: g.open, state: g.open ? 'open' : 'disabled', reasons: g.open ? [] : g.reasons, fee_inr: g.open ? rupees(g.settings.feePaise) : null, expiry_minutes: g.settings.expiryMin, payee_name: null, payees: g.open ? PAYEE_KEYS.map((k) => ({ doctor: PAYEES[k].doctorName, name: PAYEES[k].name })) : [] } };
   }
   async settingsView(a: BookingActor) {
     if (!can(a, 'settings:write')) throw bad('forbidden', 'Only an admin can see or change payment settings', 403);
     const g = await this.gate(); const s = g.settings;
-    return { enabled: s.enabled, payee_authorized: s.authorized, payee_authorization_note: s.note, fee_inr: s.feePaise ? rupees(s.feePaise) : '', expiry_minutes: s.expiryMin, review_hold_minutes: s.reviewHoldMin, payee_name: s.payee, open_to_patients: g.open, closed_because: g.reasons, provider_webhook: !!this.o.webhookSecret };
+    return { enabled: s.enabled, payee_authorized: s.authorized, payee_authorization_note: s.note, fee_inr: s.feePaise ? rupees(s.feePaise) : '', expiry_minutes: s.expiryMin, review_hold_minutes: s.reviewHoldMin, lead_payment_requests: s.leadRequests, payee_name: s.payee, payees: PAYEE_KEYS.map((k) => ({ key: k, doctor: PAYEES[k].doctorName, name: PAYEES[k].name, window: k === 'mahesh' ? '09:00-13:00' : '16:00-20:00' })), open_to_patients: g.open, closed_because: g.reasons, provider_webhook: !!this.o.webhookSecret };
   }
   async updateSettings(v: Record<string, string>, a: BookingActor) {
     if (!can(a, 'settings:write')) throw bad('forbidden', 'Only an admin can change payment settings', 403);
-    const keys = Object.keys(v); const allowed = ['payments_enabled', 'payee_authorized', 'consultation_fee_inr', 'payment_expiry_minutes', 'payment_review_hold_minutes', 'payee_name', 'payee_authorization_note'];
+    const keys = Object.keys(v); const allowed = ['payments_enabled', 'payee_authorized', 'consultation_fee_inr', 'payment_expiry_minutes', 'payment_review_hold_minutes', 'payee_name', 'payee_authorization_note', 'lead_payment_requests'];
     for (const k of keys) if (!allowed.includes(k)) throw bad('invalid_setting', `Unknown setting: ${k}`, 400);
     const num = (k: string, lo: number, hi: number) => { const x = Number(v[k]); if (!Number.isInteger(x) || x < lo || x > hi) throw bad('invalid_setting', `${k} must be a whole number from ${lo} to ${hi}`, 400); };
-    for (const k of ['payments_enabled', 'payee_authorized']) if (k in v && !['on', 'off'].includes(v[k]!)) throw bad('invalid_setting', `${k} must be on or off`, 400);
+    for (const k of ['payments_enabled', 'payee_authorized', 'lead_payment_requests']) if (k in v && !['on', 'off'].includes(v[k]!)) throw bad('invalid_setting', `${k} must be on or off`, 400);
     if ('consultation_fee_inr' in v) num('consultation_fee_inr', 1, 100000);
     if ('payment_expiry_minutes' in v) num('payment_expiry_minutes', 5, 1440);
     if ('payment_review_hold_minutes' in v) num('payment_review_hold_minutes', 60, 10080);
     if ('payee_name' in v && (t(v.payee_name).length < 3 || t(v.payee_name).length > 80)) throw bad('invalid_setting', 'payee_name must be 3 to 80 characters', 400);
     const cur = await this.settings();
+    if (v.lead_payment_requests === 'on' && !cur.leadRequests) { v.lead_payment_since = String(this.ts()); keys.push('lead_payment_since'); }   // only enquiries that arrive AFTER it is switched on are ever picked up
     if (v.payee_authorized === 'on' && !(cur.authorized) && t(v.payee_authorization_note ?? cur.note).length < 10) throw bad('authorization_note_required', 'Recording the clinic\'s authorization needs a note (at least 10 characters) saying who at the clinic authorized it and how', 400);
     if (v.payments_enabled === 'on' && !(v.payee_authorized === 'on' || cur.authorized)) { /* allowed: patients still see nothing until the gate is open */ }
     return this.lock.run(async () => {
@@ -123,11 +137,12 @@ export class PaymentService {
   private async apptSummary(ref: string) { try { const d = (await this.booking.detail(ref, SYSTEM)).appointment; return { status: d.status, date: d.date, start_time: d.start_time, doctor_name: d.doctor_name }; } catch { return null; } }
   private async view(r: GristRecord): Promise<PaymentView> {
     const s = t(r.fields.Status) as PaymentStatus; const ps = PATIENT_STATUS[s]!; const exp = n(r.fields.Expires_At);
-    return { payment_ref: t(r.fields.Booking_UID), payment_id: t(r.fields.Payment_ID), status: s, patient_status: ps.code, patient_message: ps.text, amount_inr: rupees(n(r.fields.Amount_Paise)), expires_at: exp ? new Date(exp * 1000).toISOString() : null, can_upload: OPEN_STATUSES.includes(s) && (!exp || exp > this.ts()) && n(r.fields.Screenshot_Count) < 5, appointment: await this.apptSummary(t(r.fields.Booking_UID)) };
+    const pe = this.payeeOf(r);
+    return { payee_name: pe.name, payee_doctor: pe.doctorName, payment_ref: t(r.fields.Booking_UID), payment_id: t(r.fields.Payment_ID), status: s, patient_status: ps.code, patient_message: ps.text, amount_inr: rupees(n(r.fields.Amount_Paise)), expires_at: exp ? new Date(exp * 1000).toISOString() : null, can_upload: OPEN_STATUSES.includes(s) && (!exp || exp > this.ts()) && n(r.fields.Screenshot_Count) < 5, appointment: await this.apptSummary(t(r.fields.Booking_UID)) };
   }
 
   // ---------------------------------------------------------------- 1. a payment request = a held (Pending confirmation) appointment + a payment row
-  async createRequest(i: { slotId: string; patientName: string; patientPhone: string; reason?: string; idempotencyKey: string; channel: 'website' | 'whatsapp' }, a: BookingActor): Promise<{ appointment: unknown; payment: PaymentView; replayed: boolean }> {
+  async createRequest(i: { slotId: string; patientName: string; patientPhone: string; reason?: string; idempotencyKey: string; channel: 'website' | 'whatsapp' | 'enquiry'; leadRef?: string }, a: BookingActor): Promise<{ appointment: unknown; payment: PaymentView; replayed: boolean }> {
     const g = await this.gate(); if (!g.open) throw bad('payments_disabled', 'Payment requests are not open yet', 403, { reasons: g.reasons });
     const res = await this.booking.create({ slotId: i.slotId, patientName: i.patientName, patientPhone: i.patientPhone, ...(i.reason ? { reason: i.reason } : {}), idempotencyKey: i.idempotencyKey, stage: 'Pending confirmation', holdForPayment: true }, a);
     const ref = res.appointment.booking_reference;
@@ -136,9 +151,10 @@ export class PaymentService {
       if (!row) {
         const rows = await this.rows(PT.payments); const id = `PAY-${pad(maxSeq(rows.map((r) => t(r.fields.Payment_ID)), 'PAY-') + 1, 6)}`; const now = this.ts();
         const phone = normalizePhone(i.patientPhone).phone || i.patientPhone;
-        const fields = { Payment_ID: id, Booking_UID: ref, Channel: i.channel, Patient_Name: t(i.patientName).slice(0, 120), Patient_Phone: phone, Amount_Paise: g.settings.feePaise, Currency: 'INR', Status: 'PENDING_PAYMENT', Expires_At: now + g.settings.expiryMin * 60, Idem_Key: i.idempotencyKey, Screenshot_Count: 0, Request_Sent: false, Notify_Attempts: 0, Created_At: now, Updated_At: now, Last_Event_At: now };
+        const payee = pickPayee(this.now(), this.tz(), parseSlotId(i.slotId)?.doctorId);   // the doctor whose session the real clock is in right now
+        const fields = { Payee_Key: payee.key, ...(i.leadRef ? { Lead_Ref: i.leadRef.slice(0, 40) } : {}), Payment_ID: id, Booking_UID: ref, Channel: i.channel, Patient_Name: t(i.patientName).slice(0, 120), Patient_Phone: phone, Amount_Paise: g.settings.feePaise, Currency: 'INR', Status: 'PENDING_PAYMENT', Expires_At: now + g.settings.expiryMin * 60, Idem_Key: i.idempotencyKey, Screenshot_Count: 0, Request_Sent: false, Notify_Attempts: 0, Created_At: now, Updated_At: now, Last_Event_At: now };
         try {
-          await this.ev(id, ref, a, 'created', '', 'PENDING_PAYMENT', 'ok', { amount_paise: g.settings.feePaise, channel: i.channel });
+          await this.ev(id, ref, a, 'created', '', 'PENDING_PAYMENT', 'ok', { amount_paise: g.settings.feePaise, channel: i.channel, payee: payee.key });
           const [rid] = await this.grist.add(this.docId, PT.payments, [fields as never]);
           row = (await this.rows(PT.payments)).find((r) => r.id === rid);
           if (!row) throw new Error('payment row not readable after writing');
@@ -157,8 +173,12 @@ export class PaymentService {
     const mine = (await this.rows(PT.payments)).filter((r) => normalizePhone(t(r.fields.Patient_Phone)).phone === want && OPEN_STATUSES.includes(t(r.fields.Status) as PaymentStatus) && n(r.fields.Expires_At) > this.ts());
     return Promise.all(mine.sort((x, y) => n(y.fields.Created_At) - n(x.fields.Created_At)).slice(0, 5).map((r) => this.view(r)));
   }
-  /** The QR image, only while the gate is open (authorization recorded, fee set, payments on). */
-  async qr(): Promise<Buffer | null> { const g = await this.gate(); if (!g.open || !this.o.qrFile) return null; return fs.readFile(this.o.qrFile); }
+  /** The QR image of the account a payment was issued against (or, without a reference, the account for the real clock right now), only while the gate is open. */
+  async qr(ref?: string): Promise<Buffer | null> {
+    const g = await this.gate(); if (!g.open || !this.o.qrDir) return null;
+    const row = ref ? await this.byRef(ref) : undefined; if (ref && !row) return null;
+    return fs.readFile(path.join(this.o.qrDir, (row ? this.payeeOf(row) : pickPayee(this.now(), this.tz())).file));
+  }
 
   // ---------------------------------------------------------------- 2. screenshot intake: stored, hashed, de-duplicated. The status becomes SCREENSHOT_RECEIVED, never PAID.
   async receiveScreenshot(ref: string, phone: string | undefined, i: { data: Buffer; utr?: string; source: 'website' | 'whatsapp'; mediaId?: string }, a: BookingActor) {
@@ -199,7 +219,7 @@ export class PaymentService {
       const patientUtr = cleanUtr(row.fields.UTR); const probeUtr = cleanUtr(i.extraction?.utr) || patientUtr;
       const usedElsewhere = !!probeUtr && pay.some((r) => r.id !== row.id && (cleanUtr(r.fields.UTR) === probeUtr || cleanUtr(r.fields.OCR_UTR) === probeUtr));
       const prior = new Set(t(row.fields.Flags).split(',').filter(Boolean));
-      const r = assess({ extraction: i.extraction, feePaise: n(row.fields.Amount_Paise) || g.feePaise, payeeName: g.payee, createdAtSec: n(row.fields.Created_At), nowSec: this.ts(), patientUtr, utrUsedElsewhere: usedElsewhere, imageDuplicate: prior.has('duplicate_image') || files.some((f) => t(f.fields.SHA256) === t(row.fields.Screenshot_Hash) && t(f.fields.Payment_ID) !== id), edited: prior.has('edited_by_software'), ...(i.ocrError ? { ocrError: i.ocrError } : {}) });
+      const r = assess({ extraction: i.extraction, feePaise: n(row.fields.Amount_Paise) || g.feePaise, payeeName: this.payeeOf(row).name, createdAtSec: n(row.fields.Created_At), nowSec: this.ts(), patientUtr, utrUsedElsewhere: usedElsewhere, imageDuplicate: prior.has('duplicate_image') || files.some((f) => t(f.fields.SHA256) === t(row.fields.Screenshot_Hash) && t(f.fields.Payment_ID) !== id), edited: prior.has('edited_by_software'), ...(i.ocrError ? { ocrError: i.ocrError } : {}) });
       return { payment: await this.view(await this.move(row, 'REVIEW_REQUIRED', { Flags: r.flags.join(','), OCR_Amount_Paise: r.amountPaise ?? 0, OCR_UTR: cleanUtr(i.extraction?.utr), OCR_Txn_At: r.txnAtSec ?? 0, OCR_Payee: r.payee, OCR_Payer: r.payer, OCR_Status: r.status, OCR_Confidence: r.confidence === null ? '' : String(r.confidence), ...(r.utr && !patientUtr ? { UTR: r.utr, UTR_Source: r.utrSource } : {}) }, a, 'extraction', { flags: r.flags, consistent: r.consistent, advisory: 'a screenshot is not proof of payment' })), replayed: false };
     });
   }
@@ -220,7 +240,7 @@ export class PaymentService {
   private staffRow(r: GristRecord, appts: GristRecord[], shots: Map<string, number> = new Map()) {
     const f = r.fields; const ap = appts.find((x) => t(x.fields.Booking_UID) === t(f.Booking_UID)); const as = ap ? displayStatus(t(ap.fields.Status), t(ap.fields.Appt_Stage)) : null;
     const ts = (v: unknown) => (n(v) ? new Date(n(v) * 1000).toISOString() : null);
-    return { id: t(f.Payment_ID), booking_reference: t(f.Booking_UID), channel: t(f.Channel), status: t(f.Status), appointment_status: as, patient: { name: t(f.Patient_Name), phone: t(f.Patient_Phone) }, amount_inr: rupees(n(f.Amount_Paise)), utr: t(f.UTR), utr_source: t(f.UTR_Source),
+    return { id: t(f.Payment_ID), booking_reference: t(f.Booking_UID), channel: t(f.Channel), payee_name: this.payeeOf(r).name, payee_doctor: this.payeeOf(r).doctorName, status: t(f.Status), appointment_status: as, patient: { name: t(f.Patient_Name), phone: t(f.Patient_Phone) }, amount_inr: rupees(n(f.Amount_Paise)), utr: t(f.UTR), utr_source: t(f.UTR_Source),
       screenshots: n(f.Screenshot_Count), flags: t(f.Flags).split(',').filter(Boolean), extracted: { amount_inr: n(f.OCR_Amount_Paise) ? rupees(n(f.OCR_Amount_Paise)) : null, utr: t(f.OCR_UTR), txn_at: ts(f.OCR_Txn_At), payee: t(f.OCR_Payee), payer: t(f.OCR_Payer), status: t(f.OCR_Status), confidence: t(f.OCR_Confidence) },
       verification_method: t(f.Verification_Method), received_inr: n(f.Received_Paise) ? rupees(n(f.Received_Paise)) : null, reviewed_by: t(f.Reviewed_By), reviewed_at: ts(f.Reviewed_At), review_note: t(f.Review_Note), refunded_at: ts(f.Refunded_At), refunded_by: t(f.Refunded_By),
       appointment: ap && n(ap.fields.Start) ? { date: dayKey(n(ap.fields.Start) * 1000, this.o.tz || 'Asia/Kolkata'), start_time: hhmm(n(ap.fields.Start) * 1000, this.o.tz || 'Asia/Kolkata') } : null,
@@ -323,23 +343,62 @@ export class PaymentService {
         }
       }).catch((e) => console.error(`FLOW HQ payments: ${t(r0.fields.Payment_ID)} housekeeping failed (${(e as Error).message})`));
     }
+    await this.scanEnquiries().catch((e) => console.error(`FLOW HQ payments: enquiry scan failed (${(e as Error).message})`));
     return out;
   }
 
+  // ---------------------------------------------------------------- 6b. website enquiries -> a held time + a payment request (owner switch `lead_payment_requests`, default OFF)
+  /** A website enquiry names a day and a session ("Preferred: Mon 6, Morning 9 AM–1 PM"). With the switch on, an enquiry that arrived AFTER it was switched on, ticked the WhatsApp box and
+   *  has a valid mobile gets the first free time of that session held (Pending confirmation) and a payment request; n8n then messages the patient. Idempotent by the lead id; an enquiry that
+   *  cannot be placed (no free time, unreadable day) is logged once for staff and left alone. Nothing is invented: the patient's own day and session choice is used. */
+  async scanEnquiries(): Promise<number> {
+    const g = await this.gate(); const s = g.settings; if (!g.open || !s.leadRequests || !s.leadSince) return 0;
+    let leads: GristRecord[]; try { leads = await this.rows(this.o.leadsTable || 'LEADS'); } catch { return 0; }
+    const pays = await this.rows(PT.payments); const evs = await this.rows(PT.events); let made = 0; const nowSec = this.ts();
+    for (const l of leads) {
+      const f = l.fields; const created = n(f.Created_At);
+      if (created < s.leadSince || created < nowSec - 48 * 3600 || t(f.Source) !== 'Website' || f.Consent_WhatsApp !== true || f.Opted_Out === true) continue;
+      const leadId = t(f.Lead_id) || t(f.Lead_ID) || `row${l.id}`; const key = `lead-${leadId}`.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 64);
+      if (pays.some((p) => t(p.fields.Idem_Key) === key)) continue;
+      const mine = evs.filter((e) => ['lead_no_slot', 'lead_request_failed'].includes(t(e.fields.Action)) && t(e.fields.Detail).includes(`"lead":"${leadId}"`));
+      if (mine.some((e) => t(e.fields.Action) === 'lead_no_slot') || mine.length >= 3) continue;
+      const ph = normalizePhone(t(f.Phone)); if (!ph.valid || !ph.phone) continue;
+      const note = async (action: string, why: string) => { await this.ev('', '', LEAD_ACTOR, action, '', '', action === 'lead_no_slot' ? 'rejected' : 'failed', { lead: leadId, why }).catch(() => undefined); };
+      const want = parsePreferred(t(f.Enquiry), this.now(), this.tz()); if (!want) { await note('lead_no_slot', 'the enquiry has no readable preferred day and session'); continue; }
+      let day; try { day = await this.booking.dayView(want.date, { shift: want.shift }, LEAD_ACTOR); } catch (e) { await note('lead_request_failed', `availability: ${(e as Error).message.slice(0, 80)}`); continue; }
+      const open = ((day as { slots?: Array<{ slot_id: string; state: string; shift: string }> }).slots || []).filter((x) => x.state === 'open' && x.shift === want.shift);
+      if (!open.length) { await note('lead_no_slot', `no free ${want.shift} time on ${want.date}`); continue; }
+      let done = false;
+      for (const slot of open.slice(0, 3)) {   // a time taken a moment ago: try the next free one
+        try { await this.createRequest({ slotId: slot.slot_id, patientName: t(f.Name) || 'Website enquiry', patientPhone: ph.phone, reason: `Website enquiry ${leadId}`, idempotencyKey: key, channel: 'enquiry', leadRef: leadId }, LEAD_ACTOR); done = true; made++; break; }
+        catch (e) { if ((e as { code?: string }).code === 'slot_unavailable') continue; await note('lead_request_failed', (e as Error).message.slice(0, 80)); break; }
+      }
+      if (!done && !mine.length) await note('lead_no_slot', 'every free time was taken while placing it');
+    }
+    return made;
+  }
+
   // ---------------------------------------------------------------- 7. what n8n should tell WhatsApp patients (website patients see their status on the page)
-  async outbox(): Promise<Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string; last_inbound_at: number }>> {
-    const out: Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string; last_inbound_at: number }> = [];
+  async outbox(): Promise<Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string; last_inbound_at: number; needs_template: boolean; template_params: Record<string, string> | null; payee_name: string }>> {
+    const out: Array<{ payment_ref: string; kind: 'payment_request' | 'status'; status: string; phone: string; text: string; amount_inr: string; last_inbound_at: number; needs_template: boolean; template_params: Record<string, string> | null; payee_name: string }> = [];
     const g = await this.settings(); const files = await this.rows(PT.files);
-    for (const r of (await this.rows(PT.payments)).filter((x) => t(x.fields.Channel) === 'whatsapp' && n(x.fields.Notify_Attempts) < 5)) {
+    for (const r of (await this.rows(PT.payments)).filter((x) => ['whatsapp', 'enquiry'].includes(t(x.fields.Channel)) && n(x.fields.Notify_Attempts) < 5)) {
       const s = t(r.fields.Status) as PaymentStatus; const ref = t(r.fields.Booking_UID); const phone = t(r.fields.Patient_Phone); const amt = rupees(n(r.fields.Amount_Paise));
-      // WhatsApp's 24-hour reply window starts when the patient last wrote: the booking chat (request) or the screenshot (everything after)
-      const win = Math.max(n(r.fields.Created_At), ...files.filter((f) => t(f.fields.Payment_ID) === t(r.fields.Payment_ID) && t(f.fields.Source) === 'whatsapp').map((f) => n(f.fields.At)));
+      const enquiry = t(r.fields.Channel) === 'enquiry'; const pe = this.payeeOf(r);
+      // WhatsApp's 24-hour reply window starts when the patient last WROTE to us. A WhatsApp booking chat: when the payment was requested (they were just talking to us); then each screenshot.
+      // An enquiry-made request has no patient message yet: its first message is an approved TEMPLATE (with the QR as its image); free text only becomes possible after they reply.
+      const shots = files.filter((f) => t(f.fields.Payment_ID) === t(r.fields.Payment_ID) && t(f.fields.Source) === 'whatsapp').map((f) => n(f.fields.At));
+      const win = Math.max(enquiry ? 0 : n(r.fields.Created_At), ...shots);
       if (s === 'PENDING_PAYMENT' && !on(r.fields.Request_Sent)) {
-        const ap = await this.apptSummary(ref); const mins = Math.max(1, Math.round((n(r.fields.Expires_At) - this.ts()) / 60));
-        out.push({ payment_ref: ref, kind: 'payment_request', status: s, phone, amount_inr: amt, last_inbound_at: win, text: `Your appointment time${ap ? ` (${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''})` : ''} is held for you. To confirm it, pay ₹${amt} to the QR code shown above (any UPI app), then send the payment screenshot here. Booking reference: ${ref}. Please pay within ${Math.min(mins, g.expiryMin)} minutes. Never share your UPI PIN, OTP or bank password with anyone, including us.` });
+        const ap = await this.apptSummary(ref); const mins = Math.min(Math.max(1, Math.round((n(r.fields.Expires_At) - this.ts()) / 60)), g.expiryMin);
+        const text = `Your appointment time${ap ? ` (${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''})` : ''} is held for you and is PENDING CONFIRMATION. To confirm it, pay ₹${amt} to the QR code shown above (${pe.doctorName}'s UPI account, any UPI app), then send the payment screenshot here. Booking reference: ${ref}. Please pay within ${mins} minutes. Never share your UPI PIN, OTP or bank password with anyone, including us.`;
+        const first = t(r.fields.Patient_Name).split(' ')[0] || 'there';
+        out.push({ payment_ref: ref, kind: 'payment_request', status: s, phone, amount_inr: amt, last_inbound_at: win, text, needs_template: enquiry, payee_name: pe.name,
+          template_params: enquiry ? { name: first, date: ap?.date || '-', time: ap?.start_time || '-', doctor: ap?.doctor_name || pe.doctorName, amount: amt, ref, minutes: String(mins) } : null });
       } else if (['SCREENSHOT_RECEIVED', 'REVIEW_REQUIRED', 'PAID', 'REJECTED', 'EXPIRED', 'REFUNDED'].includes(s) && t(r.fields.Notified_Status) !== s && (s !== 'REVIEW_REQUIRED' || t(r.fields.Notified_Status) !== 'SCREENSHOT_RECEIVED')) {
         const ap = s === 'PAID' ? await this.apptSummary(ref) : null;
-        out.push({ payment_ref: ref, kind: 'status', status: s, phone, amount_inr: amt, last_inbound_at: win, text: `${PATIENT_STATUS[s]!.text}${ap ? ` ${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''}.` : ''} Reference: ${ref}.` });
+        if (enquiry && !win) continue;   // the patient has not written yet: free text cannot be delivered, the status is on the website page and goes out once they reply
+        out.push({ payment_ref: ref, kind: 'status', status: s, phone, amount_inr: amt, last_inbound_at: win, needs_template: false, template_params: null, payee_name: pe.name, text: `${PATIENT_STATUS[s]!.text}${ap ? ` ${ap.date}, ${ap.start_time}${ap.doctor_name ? `, ${ap.doctor_name}` : ''}.` : ''} Reference: ${ref}.` });
       }
     }
     return out;

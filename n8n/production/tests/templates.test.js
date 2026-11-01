@@ -7,6 +7,8 @@ const wf = H.loadWf();
 const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'whatsapp-templates.json'), 'utf8'));
 // W15's template (n8n/final/tools/patch-w15-followup.js) is documented here; an export without the W15 section (the earlier reference build) does not carry it
 if (!wf.nodes.some((n) => /^W15 – /.test(n.name))) doc.templates = doc.templates.filter((t) => t.sent_by !== 'W15');
+// the payment-pending template (4G, n8n/final/tools/patch-4g-lead-qr.js) is documented here; an export without 4G does not carry it
+if (!wf.nodes.some((n) => n.name === 'W16N – Plan' && String(n.parameters.jsCode).includes("'booking_payment_pending'"))) doc.templates = doc.templates.filter((t) => t.name !== 'booking_payment_pending');
 const code = wf.nodes.find((n) => n.name === 'W12 – Prepare request').parameters.jsCode;
 const lit = code.slice(code.indexOf('const WA_TEMPLATES = {'), code.indexOf('};', code.indexOf('const WA_TEMPLATES = {')) + 2);
 const WA = new Function(`${lit}\nreturn WA_TEMPLATES;`)();

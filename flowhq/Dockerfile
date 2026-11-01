@@ -17,7 +17,7 @@ ENV NODE_ENV=production \
     FLOWHQ_AUDIT_OUTBOX_DIR=/app/flowhq/config/audit-outbox \
     FLOWHQ_AUDIT_REQUIRE_VOLUME=true \
     FLOWHQ_PAYMENT_FILES_DIR=/app/flowhq/config/payment-files \
-    FLOWHQ_PAYMENT_QR_FILE=/app/flowhq/assets/kotak-upi-qr.jpg
+    FLOWHQ_PAYMENT_QR_DIR=/app/flowhq/assets
 WORKDIR /app/flowhq
 COPY flowhq/package.json flowhq/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force && mkdir -p config && chown node:node config

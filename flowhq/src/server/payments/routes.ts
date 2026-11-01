@@ -19,7 +19,7 @@ export interface TokenHelpers { need: (c: Context<any>, scope: 'payments:read' |
 export function registerTokenPaymentRoutes(r: Hono<any>, h: TokenHelpers) {
   r.get('/payments/config', async (c) => { h.need(c, 'payments:read'); return c.json(await (await h.payments(c)).config()); });
   r.get('/payments/qr', async (c) => {
-    h.need(c, 'payments:read'); const img = await (await h.payments(c)).qr();
+    h.need(c, 'payments:read'); const ref = c.req.query('payment_ref'); const img = await (await h.payments(c)).qr(ref ? String(ref).slice(0, 40) : undefined);
     if (!img) throw bad('payments_disabled', 'The payment QR is not available yet', 403);
     return c.body(img as unknown as ArrayBuffer, 200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store' });
   });

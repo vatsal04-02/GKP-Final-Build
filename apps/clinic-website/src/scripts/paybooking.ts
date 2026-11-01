@@ -4,7 +4,7 @@
  */
 type Schedule = { timeZone: string; days: number[]; sessions: [string, string][] };
 type Slot = { slot_id: string; start_time: string; end_time: string; doctor_name: string; shift: string };
-type Pay = { payment_ref: string; status: string; message: string; amount_inr: string; expires_at: string | null; can_upload: boolean; appointment: { date: string; start_time: string; doctor_name: string | null } | null };
+type Pay = { payee_name?: string; payee_doctor?: string; payment_ref: string; status: string; message: string; amount_inr: string; expires_at: string | null; can_upload: boolean; appointment: { date: string; start_time: string; doctor_name: string | null } | null };
 const KEY = 'gkp-pay-booking';
 const TERMINAL = ['confirmed', 'expired', 'refunded', 'cancelled'];
 const TONE: Record<string, 'ok' | 'warn' | 'bad'> = { confirmed: 'ok', received: 'warn', under_review: 'warn', awaiting_payment: 'warn', not_verified: 'bad', expired: 'bad', refunded: 'warn', cancelled: 'bad' };
@@ -87,7 +87,7 @@ export async function initPayBooking(): Promise<void> {
     const st = q<HTMLElement>('[data-pay-status]'); st.textContent = p.message + (p.status === 'awaiting_payment' && p.expires_at ? ` Pay before ${new Date(p.expires_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.` : ''); st.dataset.tone = TONE[p.status] || 'warn';
     const showPay = p.status === 'awaiting_payment' || p.status === 'not_verified';
     q('[data-pay-howto]').hidden = !showPay; q('[data-pay-upload]').hidden = !p.can_upload;
-    q('[data-pay-payee]').textContent = open!.payee_name ? `Pay to: ${open!.payee_name}` : '';
+    q('[data-pay-payee]').textContent = p.payee_name ? `Pay to: ${p.payee_doctor ? `${p.payee_doctor} (${p.payee_name})` : p.payee_name}` : '';
     if (showPay && !q<HTMLImageElement>('[data-pay-qr]').src) void post({ action: 'qr', payment_ref: p.payment_ref, patient_phone: phoneDigits }).then((r) => { if (r.json?.ok) q<HTMLImageElement>('[data-pay-qr]').src = `data:${r.json.mime};base64,${r.json.data_base64}`; });
     window.clearTimeout(timer);
     if (!TERMINAL.includes(p.status)) timer = window.setTimeout(() => void refresh(p.payment_ref, phoneDigits), 8000);

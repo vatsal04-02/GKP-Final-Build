@@ -9,13 +9,14 @@ import { resetTokenFailures } from '../src/server/booking/tokens';
 import { BT } from '../src/server/booking/schema';
 import { M09, M0930, M10, E16, NOW, buildFixture, clock, type Fixture } from './booking-fixture';
 import { assess, payeeMatches, sniffImage, toPaise } from '../src/server/payments/assess';
+import { parsePreferred } from '../src/server/payments/service';
 
 let fx: Fixture; let dir: string; let n = 0;
 const key = () => `pay-key-${++n}-abcdefgh`;
 const P1 = '9876543210'; const P2 = '9123456780'; const P3 = '9000000001';
 const png = () => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), randomBytes(200)]);
 const b64 = (b: Buffer) => b.toString('base64');
-const good = (over: Record<string, unknown> = {}) => ({ amount: '500.00', utr: '412345678901', txn_time: new Date(NOW + 5 * 60000).toISOString(), payee: 'VATSAL TRIPATHI', payer: 'Zed Payer', status: 'SUCCESS', confidence: 0.95, ...over });
+const good = (over: Record<string, unknown> = {}) => ({ amount: '500.00', utr: '412345678901', txn_time: new Date(NOW + 5 * 60000).toISOString(), payee: 'Mahesh Tiwari', payer: 'Zed Payer', status: 'SUCCESS', confidence: 0.95, ...over });
 const open = async (settings: Record<string, string> = {}) => {
   const r = await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { consultation_fee_inr: '500', payee_authorization_note: 'Authorized by the clinic owner in writing on 1 Nov 2026 (synthetic test)', payee_authorized: 'on', payments_enabled: 'on', ...settings } } });
   expect(r.status, r.text).toBe(200); return r.json;
@@ -40,9 +41,9 @@ describe('pure rules', () => {
     expect(sniffImage(png())?.mime).toBe('image/png'); expect(sniffImage(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]))?.mime).toBe('image/jpeg'); expect(sniffImage(Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP')]))?.mime).toBe('image/webp');
     for (const bad of ['<svg xmlns="http://www.w3.org/2000/svg"></svg>', '%PDF-1.7', 'GIF89a', '<html><script>', 'just text']) expect(sniffImage(Buffer.from(bad))).toBeNull();
   });
-  it('the payee must contain every part of the configured name', () => { expect(payeeMatches('Vatsal Tripathi', 'VATSAL TRIPATHI')).toBe(true); expect(payeeMatches('VATSAL T', 'VATSAL TRIPATHI')).toBe(false); expect(payeeMatches('', 'VATSAL TRIPATHI')).toBe(false); expect(payeeMatches('Someone Else', 'VATSAL TRIPATHI')).toBe(false); });
+  it('the payee must contain every part of the configured name', () => { expect(payeeMatches('Vatsal Tripathi', 'VATSAL TRIPATHI')).toBe(true); expect(payeeMatches('Sandeep Kumar', 'Sandeep Kumar')).toBe(true); expect(payeeMatches('VATSAL T', 'VATSAL TRIPATHI')).toBe(false); expect(payeeMatches('', 'VATSAL TRIPATHI')).toBe(false); expect(payeeMatches('Someone Else', 'VATSAL TRIPATHI')).toBe(false); });
   it('assess() can flag but can never produce a paid result', () => {
-    const base = { feePaise: 50000, payeeName: 'VATSAL TRIPATHI', createdAtSec: NOW / 1000, nowSec: NOW / 1000 + 600, utrUsedElsewhere: false, imageDuplicate: false, edited: false };
+    const base = { feePaise: 50000, payeeName: 'Mahesh Tiwari', createdAtSec: NOW / 1000, nowSec: NOW / 1000 + 600, utrUsedElsewhere: false, imageDuplicate: false, edited: false };
     expect(assess({ ...base, extraction: good() }).consistent).toBe(true);
     const r = assess({ ...base, extraction: good({ amount: '5.00', status: 'FAILED', payee: 'Other', utr: '12' }), utrUsedElsewhere: true, imageDuplicate: true, edited: true });
     expect(r.flags).toEqual(expect.arrayContaining(['amount_mismatch', 'status_not_success', 'payee_mismatch', 'utr_format', 'utr_already_used', 'duplicate_image', 'edited_by_software'])); expect(r.consistent).toBe(false);
@@ -54,7 +55,7 @@ describe('pure rules', () => {
 describe('the gate: nothing reaches a patient until an admin has authorized the payee, set the fee and switched payments on', () => {
   it('closed by default: no QR, no payment request, and AI booking behaves exactly as before', async () => {
     expect((await fx.api('/payments/qr')).status).toBe(403); const r = await request(); expect(r.status).toBe(403); expect(r.json.error.code).toBe('payments_disabled'); expect(r.json.reasons.length).toBe(3);
-    expect((await fx.api('/config')).json.payments).toMatchObject({ required: false, state: 'disabled', fee_inr: null, payee_name: null });
+    expect((await fx.api('/config')).json.payments).toMatchObject({ required: false, state: 'disabled', fee_inr: null, payee_name: null, payees: [] });
     const ai = await fx.api('/appointments', { method: 'POST', headers: { 'idempotency-key': key() }, body: { slot_id: M09, patient: { name: 'Zed AI', phone: P2 } } });
     expect(ai.status).toBe(201); expect(ai.json.appointment.status).toBe('Confirmed'); expect(ai.json.payment).toBeUndefined(); expect(payRows()).toHaveLength(0);
   });
@@ -64,13 +65,13 @@ describe('the gate: nothing reaches a patient until an admin has authorized the 
     expect((await set({ consultation_fee_inr: '500' })).json.closed_because).toEqual(['the clinic has not authorized collecting payments into the payee account (payee_authorized is off)']);
     const no = await set({ payee_authorized: 'on' }); expect(no.status).toBe(400); expect(no.json.error.code).toBe('authorization_note_required');
     expect((await fx.api('/payments/qr')).status).toBe(403);
-    const ok = await set({ payee_authorized: 'on', payee_authorization_note: 'Authorized by the clinic owner (synthetic test)' }); expect(ok.json).toMatchObject({ open_to_patients: true, closed_because: [], fee_inr: '500', payee_name: 'VATSAL TRIPATHI' });
+    const ok = await set({ payee_authorized: 'on', payee_authorization_note: 'Authorized by the clinic owner (synthetic test)' }); expect(ok.json).toMatchObject({ open_to_patients: true, closed_because: [], fee_inr: '500' }); expect(ok.json.payees.map((p: { name: string }) => p.name)).toEqual(['Mahesh Tiwari', 'Sandeep Kumar']);
     const q = await fx.api('/payments/qr'); expect(q.status).toBe(200);
-    expect((await fx.api('/config')).json.payments).toMatchObject({ required: true, fee_inr: '500', payee_name: 'VATSAL TRIPATHI' });
+    expect((await fx.api('/config')).json.payments).toMatchObject({ required: true, fee_inr: '500' });
     await set({ payee_authorized: 'off' }); expect((await fx.api('/payments/qr')).status).toBe(403);   // withdrawing the authorization closes it again at once
   });
-  it('the QR served is the supplied file, byte for byte', async () => { await open(); const res = await fx.app.request('/api/booking/payments/qr', { headers: { authorization: `Bearer ${fx.token}` } }); expect(res.headers.get('content-type')).toBe('image/jpeg'); expect(Buffer.from(await res.arrayBuffer()).equals(readFileSync('assets/kotak-upi-qr.jpg'))).toBe(true); });
-  it('a missing QR file keeps it closed', async () => { fx = await buildFixture({ bookingOn: true, payments: { dir, noQr: true } }); await open(); expect((await fx.api('/config')).json.payments.reasons).toEqual(['the QR image is not installed'].map(() => 'the payment QR image is not installed')); });
+  it('the QR served is the supplied file of the doctor whose session the clock is in, byte for byte', async () => { await open(); const res = await fx.app.request('/api/booking/payments/qr', { headers: { authorization: `Bearer ${fx.token}` } }); expect(res.headers.get('content-type')).toBe('image/jpeg'); expect(Buffer.from(await res.arrayBuffer()).equals(readFileSync('assets/qr-dr-mahesh-tiwari.jpg'))).toBe(true); });
+  it('a missing QR file keeps it closed', async () => { fx = await buildFixture({ bookingOn: true, payments: { dir, noQr: true } }); await open(); expect((await fx.api('/config')).json.payments.reasons).toEqual(['the doctors\' payment QR images are not installed']); });
   it('settings are admin only; the fee, expiry and name are validated; every change is recorded', async () => {
     expect((await fx.s('desk', '/payments/settings')).status).toBe(403); expect((await fx.s('desk', '/payments/settings', { method: 'PUT', body: { values: { payments_enabled: 'on' } } })).status).toBe(403);
     for (const v of [{ consultation_fee_inr: '0' }, { consultation_fee_inr: '12.5' }, { payment_expiry_minutes: '1' }, { payee_name: 'X' }, { nonsense: 'x' }]) expect((await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: v } })).status, JSON.stringify(v)).toBe(400);
@@ -311,4 +312,75 @@ describe('Payment Management page: the data it needs and who sees it', () => {
     const { id } = await reviewed(); await approve(id); const d = (await fx.s('desk', `/payments/${id}`)).json; const a = d.events.find((e: { action: string }) => e.action === 'approved'); expect(a.actor).toBe('desk@test'); expect(new Date(a.at).getTime()).toBeGreaterThan(0);
     expect((await fx.s('mahesh', '/payments')).status).toBe(403); expect((await fx.s('none', '/payments')).status).toBe(401);
   });
+});
+describe('each doctor has their own QR, chosen by the real clock when the request is made', () => {
+  beforeEach(async () => { await open(); });
+  const qrOf = async (ref: string) => { const r = await fx.app.request(`/api/booking/payments/qr?payment_ref=${ref}`, { headers: { authorization: `Bearer ${fx.token}` } }); expect(r.status).toBe(200); return Buffer.from(await r.arrayBuffer()); };
+  const MAH = readFileSync('assets/qr-dr-mahesh-tiwari.jpg'); const SAN = readFileSync('assets/qr-dr-sandeep-tiwari.jpg');
+  const at = (hh: number, mm = 0) => { clock.t = NOW + ((hh - 12) * 60 + mm) * 60000; };   // NOW is 12:00 IST
+  it('the two supplied files are installed and are different accounts', () => { expect(MAH.equals(SAN)).toBe(false); expect(sniffImage(MAH)?.mime).toBe('image/jpeg'); expect(sniffImage(SAN)?.mime).toBe('image/jpeg'); });
+  it('09:00-12:59 -> Dr. Mahesh Tiwari\'s QR; 16:00-19:59 -> Dr. Sandeep Tiwari\'s QR (even for the other doctor\'s slot): decided at request time and then fixed', async () => {
+    at(9, 0); const a = await request(M09, P1); expect(a.json.payment).toMatchObject({ payee_name: 'Mahesh Tiwari', payee_doctor: 'Dr. Mahesh Tiwari' }); expect((await qrOf(a.json.payment.payment_ref)).equals(MAH)).toBe(true); expect(payRows()[0]!.Payee_Key).toBe('mahesh');
+    at(12, 59); const b = await request(E16, P2); expect(b.json.payment.payee_name).toBe('Mahesh Tiwari'); expect((await qrOf(b.json.payment.payment_ref)).equals(MAH)).toBe(true);   // an evening slot booked in the morning still pays the morning doctor's account
+    at(16, 0); const c = await request(M0930, P3); expect(c.json.payment.payee_name).toBe('Sandeep Kumar'); expect((await qrOf(c.json.payment.payment_ref)).equals(SAN)).toBe(true);
+    at(19, 59); const d = await request(M10, '9000000002'); expect(d.json.payment.payee_doctor).toBe('Dr. Sandeep Tiwari');
+    at(18, 0); expect((await qrOf(a.json.payment.payment_ref)).equals(MAH)).toBe(true);   // the clock moved on, the QR of an existing request does not change
+  });
+  it('outside both windows (lunch break, night) the booked doctor\'s QR is used, so there is always exactly one', async () => {
+    at(14, 0); const a = await request(M09, P1); expect(a.json.payment.payee_name).toBe('Mahesh Tiwari');   // DR-001 slot
+    at(22, 0); const b = await request(E16, P2); expect(b.json.payment.payee_name).toBe('Sandeep Kumar');   // DR-002 slot
+  });
+  it('a screenshot is compared with the receiver name of THAT account: the other doctor\'s name is a flag', async () => {
+    at(10, 0); const a = await request(M09, P1); const ref = a.json.payment.payment_ref; await shot(ref); await extract(ref, good({ payee: 'Sandeep Kumar' }));
+    expect(String(payRows()[0]!.Flags)).toContain('payee_mismatch');
+    at(17, 0); const b = await request(E16, P2); const ref2 = b.json.payment.payment_ref; await shot(ref2, P2); await extract(ref2, good({ payee: 'SANDEEP KUMAR', utr: '777777777777', txn_time: new Date(clock.t + 60000).toISOString() }), P2); expect(String(payRows()[1]!.Flags)).toBe('');
+  });
+  it('the QR of an unknown reference is refused; with the gate closed there is no QR at all', async () => { expect((await fx.api('/payments/qr?payment_ref=GKA-424242')).status).toBe(403); await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { payments_enabled: 'off' } } }); expect((await fx.api('/payments/qr')).status).toBe(403); });
+  it('the staff list says which doctor\'s QR each payment was issued against', async () => { at(17, 0); await request(M09, P1); expect((await fx.s('desk', '/payments')).json.rows[0]).toMatchObject({ payee_name: 'Sandeep Kumar', payee_doctor: 'Dr. Sandeep Tiwari' }); });
+});
+
+describe('website enquiries become a held time + a payment request (owner switch, default OFF)', () => {
+  const lead = (over: Record<string, unknown> = {}) => ({ Lead_id: 'L-20261007-0001', Created_At: NOW / 1000 + 60, Name: 'Enquiry Test Patient', Phone: '+919000060001', Source: 'Website', Status: 'New', Consent_WhatsApp: true, Enquiry: 'Concern: Back Pain · Visit: At the clinic · Preferred: Thu 8, Morning 9 AM–1 PM', ...over });
+  const leads = () => fx.doc.LEADS!;
+  const addLead = (over: Record<string, unknown> = {}) => { leads().push({ id: leads().length + 100, fields: lead(over) as never }); };
+  const run = async () => (await fx.payments()).scanEnquiries();
+  const tick = async () => { await (await fx.payments()).tick(); };
+  beforeEach(async () => { await open(); });
+  it('parses the website\'s own wording: weekday + day of month + session -> the next such date', () => {
+    expect(parsePreferred('Concern: x · Preferred: Thu 8, Morning 9 AM–1 PM', NOW, 'Asia/Kolkata')).toEqual({ date: '2026-10-08', shift: 'morning' });
+    expect(parsePreferred('Preferred: Mon 2, Evening 4–8 PM', NOW, 'Asia/Kolkata')).toEqual({ date: '2026-11-02', shift: 'evening' });
+    expect(parsePreferred('Preferred: Fri 31, Morning', NOW, 'Asia/Kolkata')).toBeNull();   // no such Friday the 31st soon
+    expect(parsePreferred('no preference given', NOW, 'Asia/Kolkata')).toBeNull();
+  });
+  it('OFF by default: nothing is held and no payment is made, whatever arrives', async () => { addLead(); expect(await run()).toBe(0); await tick(); expect(payRows()).toHaveLength(0); expect(appts()).toHaveLength(0); });
+  it('ON: the first free time of the chosen session is held for the doctor of that session, a payment request exists, and it is made only once', async () => {
+    await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { lead_payment_requests: 'on' } } }); addLead();
+    expect(await run()).toBe(1); expect(payRows()).toHaveLength(1); expect(payRows()[0]).toMatchObject({ Channel: 'enquiry', Status: 'PENDING_PAYMENT', Lead_Ref: 'L-20261007-0001', Amount_Paise: 50000 });
+    const ap = appts()[0]!.fields; expect(ap).toMatchObject({ Appt_Stage: 'Pending confirmation', Doctor_ID: 'DR-001', Shift: 'Morning', Created_By: 'system:enquiry' }); expect(String(ap.Slot_Key)).toBe('DR-001|2026-10-08|09:00');
+    expect(await run()).toBe(0); await tick(); expect(payRows()).toHaveLength(1); expect(appts()).toHaveLength(1);
+  });
+  it('an evening request gets the evening doctor; a taken time goes to the next free one', async () => {
+    await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { lead_payment_requests: 'on' } } });
+    await fx.s('desk', '/appointments', { method: 'POST', body: { slot_id: E16, idempotency_key: key(), patient: { name: 'Walk In', phone: P3 } } });
+    addLead({ Enquiry: 'Preferred: Thu 8, Evening 4–8 PM' }); expect(await run()).toBe(1);
+    expect(String(appts().find((a) => a.fields.Created_By === 'system:enquiry')!.fields.Slot_Key)).toBe('DR-002|2026-10-08|16:30');
+  });
+  it('only enquiries that arrived AFTER the switch was turned on, with the WhatsApp box ticked, a valid mobile and a website source', async () => {
+    addLead({ Lead_id: 'L-OLD-1', Created_At: NOW / 1000 - 3600 }); await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { lead_payment_requests: 'on' } } });
+    addLead({ Lead_id: 'L-NO-CONSENT', Consent_WhatsApp: false }); addLead({ Lead_id: 'L-WA', Source: 'WhatsApp' }); addLead({ Lead_id: 'L-OPTED', Opted_Out: true }); addLead({ Lead_id: 'L-BADPHONE', Phone: '12345' });
+    expect(await run()).toBe(0); expect(payRows()).toHaveLength(0);
+  });
+  it('an enquiry that cannot be placed is logged ONCE for staff and left alone (no free time, unreadable day)', async () => {
+    await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { lead_payment_requests: 'on' } } }); addLead({ Lead_id: 'L-NODAY', Enquiry: 'call me please' }); addLead({ Lead_id: 'L-SUN', Enquiry: 'Preferred: Sun 11, Morning 9 AM–1 PM' });
+    expect(await run()).toBe(0); expect(await run()).toBe(0); const ev = fx.doc.Payment_Events!.filter((e) => e.fields.Action === 'lead_no_slot'); expect(ev).toHaveLength(2); expect(payRows()).toHaveLength(0);
+  });
+  it('the notifier gets a TEMPLATE item for it (the patient has not written to us), with the facts for the template and no free-text status until they reply', async () => {
+    await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { lead_payment_requests: 'on' } } }); addLead(); await run();
+    const items = (await fx.api('/payments/outbox')).json.items; expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'payment_request', needs_template: true, last_inbound_at: 0, payee_name: 'Mahesh Tiwari', template_params: { name: 'Enquiry', date: '2026-10-08', time: '09:00', doctor: 'Dr. Mahesh Tiwari', amount: '500' } });
+    expect(items[0].text).toMatch(/PENDING CONFIRMATION/); expect(items[0].text).toMatch(/Never share your UPI PIN, OTP/); expect(items[0].template_params.ref).toBe(payRows()[0]!.Booking_UID);
+    await fx.api(`/payments/${payRows()[0]!.Booking_UID}/notified`, { method: 'POST', body: { kind: 'payment_request', ok: true } });
+    await shot(payRows()[0]!.Booking_UID as string, '+919000060001', png(), { source: 'whatsapp' }); const after = (await fx.api('/payments/outbox')).json.items; expect(after[0]).toMatchObject({ kind: 'status', needs_template: false }); expect(after[0].last_inbound_at).toBeGreaterThan(0);
+  });
+  it('a lead payment that is not paid expires like any other and frees the time', async () => { await fx.s('admin', '/payments/settings', { method: 'PUT', body: { values: { lead_payment_requests: 'on' } } }); addLead(); await run(); clock.t = NOW + 31 * 60000; await tick(); expect(payRows()[0]!.Status).toBe('EXPIRED'); expect(appts()[0]!.fields.Status).toBe('Cancelled'); });
 });

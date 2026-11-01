@@ -48,7 +48,7 @@ export async function buildFixture(o: { bookingOn?: boolean; noBookingTables?: b
   doc[BT.appointments] = [];   // a clean appointments table for the assertions
   const fail: Fixture['fail'] = { audit: false, grist: null };
   const mem = memoryGrist(docs, { failOn: (m, t) => (fail.audit && m === 'POST' && t === BT.audit) || !!fail.grist?.(m, t) });
-  const adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: 'k', registryDocId: 'REGISTRY', timezone: 'Asia/Kolkata', locale: 'en-IN', currency: 'INR', fetchImpl: mem, clinic: loadClinicConfig('config/clinic.json'), cacheMs: 0, now: () => clock.t, ...(o.payments ? { payments: { filesDir: o.payments.dir, qrFile: o.payments.noQr ? path.join(o.payments.dir, 'missing.jpg') : path.resolve('assets/kotak-upi-qr.jpg'), webhookSecret: o.payments.webhookSecret ?? 'whsec_test_0123456789abcdef' } } : {}), ...(o.outboxDir ? { auditOutbox: { dir: o.outboxDir, staleMs: 200, waitMs: 1500 } } : {}) });
+  const adapter = createAutopilotAdapter({ gristBaseUrl: 'http://memory', gristApiKey: 'k', registryDocId: 'REGISTRY', timezone: 'Asia/Kolkata', locale: 'en-IN', currency: 'INR', fetchImpl: mem, clinic: loadClinicConfig('config/clinic.json'), cacheMs: 0, now: () => clock.t, ...(o.payments ? { payments: { filesDir: o.payments.dir, qrDir: o.payments.noQr ? path.join(o.payments.dir, 'no-qr') : path.resolve('assets'), webhookSecret: o.payments.webhookSecret ?? 'whsec_test_0123456789abcdef' } } : {}), ...(o.outboxDir ? { auditOutbox: { dir: o.outboxDir, staleMs: 200, waitMs: 1500 } } : {}) });
   const full = newToken('n8n-test', 'demo-physio'); const records = o.tokens || [full.record];
   const h = hashPassword(PW);
   const users: UserRecord[] = [
