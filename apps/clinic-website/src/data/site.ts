@@ -27,6 +27,8 @@ export const clinic = {
     whatsapp: '919838681421',
   },
   rating: { value: '5.0', count: '467+' },
+  /** Year the clinic opened (owner-provided, 1 Nov 2026). */
+  since: 2004,
 } as const;
 
 /**

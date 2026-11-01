@@ -62,6 +62,8 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
       </div>
 
       <div class="badges rise" style="--d:480ms">
+        <p class="status status--since">Since <strong>{clinic.since}</strong></p>
+
         <div class="rating">
           <span class="stars" aria-hidden="true">
             {Array.from({ length: 5 }).map(() => <Icon name="star" size={15} class="star" />)}
@@ -294,6 +296,15 @@ const fallback = `${hours.days} · ${hours.sessions.join(' · ')}`;
   }
   .status {
     font-weight: 600;
+  }
+  .status--since {
+    padding-inline: 0.95rem;
+    border-color: rgb(233 223 201 / 0.5);
+    letter-spacing: 0.04em;
+  }
+  .status--since strong {
+    font: 400 1.1875rem/1 var(--font-serif);
+    color: var(--color-sand);
   }
   .status--patients {
     padding-left: 0.85rem;

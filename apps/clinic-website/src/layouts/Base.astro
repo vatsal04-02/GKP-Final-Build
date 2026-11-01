@@ -57,6 +57,7 @@ const businessSchema = {
       '@type': 'Physiotherapy',
       '@id': ids.clinic,
       name: clinic.name,
+      foundingDate: String(clinic.since),
       alternateName: [`${clinic.shortName} Physio`, `${clinic.name} Lucknow`],
       url: origin,
       telephone: clinic.phone.tel,
