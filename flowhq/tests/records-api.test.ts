@@ -151,6 +151,14 @@ describe('staff attendance over HTTP', () => {
     expect((await put(staff, { status: null, editPassword: 'owner-secret-1' })).json.mark).toBeNull();
     expect((await put(staff, { status: 'Leave' })).status).toBe(200);                                                                  // cleared = unmarked: free again
     expect((await put(staff, { status: 'Leave' })).status).toBe(200);                                                                  // same status again: no change, no password
+    // CHANGING the password needs the current one (the first set did not)
+    const change = (body: Record<string, unknown>) => call(admin, '/staff-attendance/edit-password', 'PUT', { password: 'owner-secret-2', ...body });
+    expect((await change({})).json.error.code).toBe('current_password_required');
+    expect((await change({ currentPassword: 'not-the-current' })).json.error.code).toBe('current_password_wrong');
+    expect((await put(staff, { status: 'Absent', editPassword: 'owner-secret-2' })).json.error.code).toBe('edit_password_wrong');       // the new one is not active yet
+    expect((await change({ currentPassword: 'owner-secret-1' })).status).toBe(200);
+    expect((await put(staff, { status: 'Absent', editPassword: 'owner-secret-1' })).json.error.code).toBe('edit_password_wrong');       // the old one stopped working
+    expect((await put(staff, { status: 'Absent', editPassword: 'owner-secret-2' })).json.mark.status).toBe('Absent');
   });
 
   it('rejects bad input with a clear error', async () => {

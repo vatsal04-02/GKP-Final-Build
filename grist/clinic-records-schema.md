@@ -140,7 +140,7 @@ One row per patient per day (marking the same day again updates it). Feeds the M
 | Created_At, Created_By | DateTime, Text | |
 
 ## Staff_Settings
-**Optional table**, the third part of the staff attendance page: settings for the page. Today it holds one row, `Key = edit_password_hash`: a salted scrypt hash of the **attendance edit password** that an admin sets on the page (the password itself is never stored or logged). Until that row exists, marked days are locked for everybody. Changing the password updates the row; nothing is deleted.
+**Optional table**, the third part of the staff attendance page: settings for the page. Today it holds one row, `Key = edit_password_hash`: a salted scrypt hash of the **attendance edit password** that an admin sets on the page (the password itself is never stored or logged). Until that row exists, marked days are locked for everybody. Changing the password needs the current one and updates the row; nothing is deleted. Forgotten password (owner recovery in Grist): empty the `Value` cell; the page then treats the password as not set, and an admin sets a new one.
 | Column | Type | Notes |
 |---|---|---|
 | Key | Text | `edit_password_hash` |

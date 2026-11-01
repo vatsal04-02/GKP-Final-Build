@@ -161,17 +161,18 @@ function MarkDialog({ target, lockSet, canSetPassword, onSetPassword, onClose, o
 
 function PasswordDialog({ changing, onClose, onSaved }: { changing: boolean; onClose: () => void; onSaved: () => void }) {
   const { ws } = useWs(); const toast = useToast();
-  const [pw, setPw] = useState(''); const [again, setAgain] = useState(''); const [err, setErr] = useState('');
+  const [cur, setCur] = useState(''); const [pw, setPw] = useState(''); const [again, setAgain] = useState(''); const [err, setErr] = useState('');
   const save = useMutation({
-    mutationFn: () => api(wsPath(ws.id, '/staff-attendance/edit-password'), { method: 'PUT', body: { password: pw } }),
+    mutationFn: () => api(wsPath(ws.id, '/staff-attendance/edit-password'), { method: 'PUT', body: { password: pw, ...(changing ? { currentPassword: cur } : {}) } }),
     onSuccess: () => { toast('ok', changing ? 'Edit password changed' : 'Edit password set'); onSaved(); },
     onError: (e) => setErr(errText(e)),
   });
   return (
     <Modal open onClose={onClose} label="Attendance edit password" className="w-[min(440px,96vw)]">
-      <form className="space-y-3.5 p-5" onSubmit={(e) => { e.preventDefault(); setErr(''); if (pw.length < 8) { setErr('Use at least 8 characters'); return; } if (pw !== again) { setErr('The two passwords are not the same'); return; } save.mutate(); }}>
+      <form className="space-y-3.5 p-5" onSubmit={(e) => { e.preventDefault(); setErr(''); if (changing && !cur) { setErr('Enter the current edit password'); return; } if (pw.length < 8) { setErr('Use at least 8 characters'); return; } if (pw !== again) { setErr('The two passwords are not the same'); return; } save.mutate(); }}>
         <div><h2 className="text-lg font-semibold">{changing ? 'Change edit password' : 'Set edit password'}</h2><p className="text-[13px] text-fg-2">Once a day is marked it is locked. This password is needed to change or clear a mark. Only you and the people you tell will know it. It is stored only as a hash, never as text.</p></div>
-        <Field label="New password" required hint="At least 8 characters"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" autoFocus /></Field>
+        {changing && <Field label="Current edit password" required><Input type="password" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="off" autoFocus /></Field>}
+        <Field label="New password" required hint="At least 8 characters"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" autoFocus={!changing} /></Field>
         <Field label="Type it again" required><Input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></Field>
         {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
         <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>{changing ? 'Change password' : 'Set password'}</Button></div>

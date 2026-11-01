@@ -480,10 +480,49 @@ describe('staff attendance', () => {
       expect(await code(svc.setEditPassword('x'.repeat(201), ADMIN))).toBe('weak_password');
       expect(stored(docs)).toHaveLength(0);
       await svc.setEditPassword(PWD, ADMIN); await mark(svc, { status: 'Absent' });
-      await svc.setEditPassword('a-brand-new-password', ADMIN);
+      await svc.setEditPassword('a-brand-new-password', ADMIN, PWD);                                                             // changing needs the CURRENT password
       expect(stored(docs)).toHaveLength(1);                                                                                      // updated in place, not duplicated
       expect(await code(mark(svc, { status: 'Present', editPassword: PWD }))).toBe('edit_password_wrong');
       expect((await mark(svc, { status: 'Present', editPassword: 'a-brand-new-password' }))!.status).toBe('Present');
+    });
+
+    it('CHANGING the password needs the current one: missing or wrong is refused, nothing changes, wrong tries are audited and counted; the first set needs none', async () => {
+      const { svc, docs } = setup();
+      await svc.setEditPassword(PWD, ADMIN);                                                                                     // first time: no current password exists, none needed
+      const before = String(stored(docs)[0]!.Value);
+      expect(await code(svc.setEditPassword('another-new-pass-1', ADMIN))).toBe('current_password_required');
+      expect(await code(svc.setEditPassword('another-new-pass-1', ADMIN, ''))).toBe('current_password_required');
+      expect(await code(svc.setEditPassword('another-new-pass-1', ADMIN, 'not-the-current'))).toBe('current_password_wrong');
+      expect(String(stored(docs)[0]!.Value)).toBe(before);                                                                       // still the old hash
+      await mark(svc, { status: 'Absent' });
+      expect(await code(mark(svc, { status: 'Present', editPassword: 'another-new-pass-1' }))).toBe('edit_password_wrong');       // the new one was NOT accepted
+      expect((await mark(svc, { status: 'Present', editPassword: PWD }))!.status).toBe('Present');                                // the old one still works
+      // a bad new password is still refused even with the right current one, and nothing is written
+      expect(await code(svc.setEditPassword('short', ADMIN, PWD))).toBe('weak_password'); expect(String(stored(docs)[0]!.Value)).toBe(before);
+      // the right current password changes it; the old stops working, the new works; audited as "changed", never with the passwords
+      await svc.setEditPassword('another-new-pass-1', ADMIN, PWD);
+      expect(await code(mark(svc, { status: 'Absent', editPassword: PWD }))).toBe('edit_password_wrong');
+      expect((await mark(svc, { status: 'Absent', editPassword: 'another-new-pass-1' }))!.status).toBe('Absent');
+      const log = auditOf(docs).filter((a) => String(a.Action).startsWith('staffatt.password') || (a.Action === 'staffatt.edit_denied' && a.Record === 'edit_password_hash')).map((a) => [a.Action, a.User, a.Summary]);
+      expect(log).toEqual([['staffatt.password_set', 'admin@test', 'edit password set'], ['staffatt.edit_denied', 'admin@test', 'password change: wrong password'], ['staffatt.password_set', 'admin@test', 'edit password changed']]);
+      expect(JSON.stringify([auditOf(docs), stored(docs)])).not.toContain('another-new-pass-1'); expect(JSON.stringify(auditOf(docs))).not.toContain('not-the-current');
+    });
+
+    it('owner recovery for a forgotten password: emptying the hash cell in Grist makes it "not set"; an admin then sets a new one without the old, in the same row', async () => {
+      const { svc, docs } = setup(); await svc.setEditPassword(PWD, ADMIN); await mark(svc, { status: 'Absent' });
+      docs.D![STAFF_SETTINGS]![0]!.fields.Value = '';                                                                            // what the owner does in Grist
+      expect((await svc.staffWeek('2026-10-05', TEAM, 'x')).lockPasswordSet).toBe(false);
+      expect(await code(mark(svc, { status: 'Present', editPassword: PWD }))).toBe('lock_not_set');                              // the old password no longer works either
+      await svc.setEditPassword('recovered-password-1', ADMIN);                                                                  // no current password needed now
+      expect(stored(docs)).toHaveLength(1); expect((await svc.staffWeek('2026-10-05', TEAM, 'x')).lockPasswordSet).toBe(true);
+      expect((await mark(svc, { status: 'Present', editPassword: 'recovered-password-1' }))!.status).toBe('Present');
+    });
+
+    it('wrong current passwords count towards the same 5-tries limit as wrong edit passwords, and only an admin may try', async () => {
+      const { svc } = setup(); await svc.setEditPassword(PWD, ADMIN);
+      for (let i = 0; i < 5; i++) expect(await code(svc.setEditPassword('another-new-pass-1', ADMIN, `wrong-${i}`))).toBe('current_password_wrong');
+      expect(await code(svc.setEditPassword('another-new-pass-1', ADMIN, PWD))).toBe('too_many_attempts');                          // blocked, even with the right current password
+      expect(await code(svc.setEditPassword('another-new-pass-1', STAFF_USER, PWD))).toBe('forbidden');                            // not an admin: refused before the password is even looked at
     });
 
     it('5 wrong passwords block that person for 10 minutes (even the right password); other people and later times are unaffected', async () => {

@@ -52,6 +52,14 @@ d('staff attendance on a real Grist', () => {
     const audit = (await s.client.records(s.clinicDocId, 'Audit_Log')).map((r) => `${r.fields.Action}|${r.fields.Summary}`);
     expect(audit).toEqual(expect.arrayContaining(['staffatt.password_set|edit password set', 'staffatt.edit_denied|2026-10-01 wrong password', 'staffatt.override|2026-10-01 Absent -> Present']));
     expect(JSON.stringify(audit)).not.toContain(LOCK_PW);
+    // changing the password on a real Grist needs the current one; the stored hash really changes; the new one then works
+    const hash0 = String((await s.client.records(s.clinicDocId, STAFF_SETTINGS))[0]!.fields.Value);
+    expect(await code(svc().setEditPassword('a-new-lock-password-2', ADMIN))).toBe('current_password_required');
+    expect(await code(svc().setEditPassword('a-new-lock-password-2', ADMIN, 'not-current'))).toBe('current_password_wrong');
+    expect(String((await s.client.records(s.clinicDocId, STAFF_SETTINGS))[0]!.fields.Value)).toBe(hash0);
+    await svc().setEditPassword(LOCK_PW, ADMIN, LOCK_PW);                                                                   // "change" to the same value: allowed, proves the current-password path; restores the test's known password
+    expect((await s.client.records(s.clinicDocId, STAFF_SETTINGS))).toHaveLength(1);
+    expect(String((await s.client.records(s.clinicDocId, STAFF_SETTINGS))[0]!.fields.Value)).not.toBe(hash0);               // a fresh salt: the stored hash was rewritten
   }, 90000);
 
   it('names are added and removed with real Bool / DateTime columns; marks keep their real Date type; nothing is lost across new service instances; all audited', async () => {

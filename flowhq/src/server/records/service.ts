@@ -559,29 +559,33 @@ export class RecordsService {
   private wrong = new Map<string, { n: number; first: number }>();
   private async lockRow() { return (await this.rows(STAFF_SETTINGS)).find((r) => s(r.fields.Key) === LOCK_KEY && s(r.fields.Value)); }
   async lockPasswordSet(): Promise<boolean> { return !!(await this.lockRow()); }
-  setEditPassword(password: string, a: Actor): Promise<void> {
+  // FIRST time: an admin just sets it. CHANGING it: the admin must also give the CURRENT edit password (so a logged-in admin session alone cannot replace the lock).
+  // Wrong current passwords count towards the same 5-tries limit and are audited.
+  setEditPassword(password: string, a: Actor, currentPassword?: string): Promise<void> {
     return this.lock.run(async () => {
       if (a.role !== 'admin') throw bad('forbidden', 'Only an admin can set the attendance edit password', 403);
       if (typeof password !== 'string' || password.length < 8) throw bad('weak_password', 'Use at least 8 characters', 400);
       if (password.length > 200) throw bad('weak_password', 'That password is too long', 400);
+      const existing = await this.lockRow();
+      if (existing) await this.unlock(currentPassword, a, LOCK_KEY, 'password change:', 'change');   // throws unless the current password is right: nothing is written
       const fields = { Value: hashPassword(password), Updated_At: this.ts(), Updated_By: a.email };
       const row = (await this.rows(STAFF_SETTINGS)).find((r) => s(r.fields.Key) === LOCK_KEY);
       if (row) await this.patch(STAFF_SETTINGS, row.id, fields); else await this.add(STAFF_SETTINGS, [{ Key: LOCK_KEY, ...fields }]);
       this.wrong.delete(a.email.toLowerCase());
-      await this.audit(a, 'staffatt.password_set', LOCK_KEY, 'edit password set');   // never the password
+      await this.audit(a, 'staffatt.password_set', LOCK_KEY, existing ? 'edit password changed' : 'edit password set');   // never the password
     });
   }
-  // Throws unless `password` is the edit password. Wrong guesses are counted per person and audited.
-  private async unlock(password: string | undefined, a: Actor, staffKey: string, date: string) {
+  // Throws unless `password` is the edit password. Wrong guesses are counted per person and audited. purpose: unlocking a marked day, or changing the password itself.
+  private async unlock(password: string | undefined, a: Actor, record: string, what: string, purpose: 'edit' | 'change' = 'edit') {
     const who = a.email.toLowerCase(); const t = this.now(); const w = this.wrong.get(who);
     if (w && t - w.first <= WRONG_WINDOW_MS && w.n >= MAX_WRONG) throw bad('too_many_attempts', 'Too many wrong passwords. Wait 10 minutes and try again.', 429);
     const row = await this.lockRow();
     if (!row) throw bad('lock_not_set', 'This day is already marked and locked. Ask the admin to set the attendance edit password first.', 403);
-    if (!password) throw bad('edit_password_required', 'This day is already marked. Enter the attendance edit password to change it.', 403);
+    if (!password) throw bad(purpose === 'change' ? 'current_password_required' : 'edit_password_required', purpose === 'change' ? 'Enter the current edit password to change it.' : 'This day is already marked. Enter the attendance edit password to change it.', 403);
     if (!verifyPassword(password, s(row.fields.Value))) {
       this.wrong.set(who, w && t - w.first <= WRONG_WINDOW_MS ? { n: w.n + 1, first: w.first } : { n: 1, first: t });
-      await this.audit(a, 'staffatt.edit_denied', staffKey, `${date} wrong password`);
-      throw bad('edit_password_wrong', 'That password is not right', 403);
+      await this.audit(a, 'staffatt.edit_denied', record, `${what} wrong password`);
+      throw bad(purpose === 'change' ? 'current_password_wrong' : 'edit_password_wrong', purpose === 'change' ? 'The current edit password is not right' : 'That password is not right', 403);
     }
     this.wrong.delete(who);
   }
@@ -631,7 +635,7 @@ export class RecordsService {
       const notes = i.notes !== undefined ? i.notes.trim().slice(0, 500) : (prev?.notes ?? '');
       if (prev && status === prev.status && notes === prev.notes) return prev;          // nothing would change
       if (!prev && !status) return null;                                                // clearing a day that is not marked
-      if (prev) await this.unlock(i.editPassword, a, i.staffKey, i.date);              // a marked day: needs the edit password (throws otherwise, nothing is written)
+      if (prev) await this.unlock(i.editPassword, a, i.staffKey, i.date);        // a marked day: needs the edit password (throws otherwise, nothing is written)
       const name = person?.name || (row ? s(row.fields.Staff_Name) : '') || i.staffKey;
       const fields = { Staff_Name: name, Status: status ?? '', Notes: status ? notes : '', Recorded_By: a.email, Updated_At: this.ts() };
       if (row) await this.patch(STAFF_ATT, row.id, fields);

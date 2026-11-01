@@ -127,9 +127,9 @@ export function recordsRoutes(opts: RecordsRouteOptions = {}) {
   });
   // the attendance edit password: only an admin sets or changes it (the server stores only a hash)
   r.put('/staff-attendance/edit-password', async (c) => {
-    const b = z.object({ password: z.string().max(200) }).parse(await c.req.json());
+    const b = z.object({ password: z.string().max(200), currentPassword: z.string().max(200).optional() }).parse(await c.req.json());
     const sv = staffSvc(c); if (c.get('ctx').viewer.role !== 'admin' || onlyMe(c)) throw bad('forbidden', 'Only an admin can set the attendance edit password', 403);
-    await sv.setEditPassword(b.password, who(c));
+    await sv.setEditPassword(b.password, who(c), b.currentPassword);   // changing an existing password needs the current one
     return c.json({ ok: true });
   });
   r.post('/staff-attendance/members', async (c) => {
