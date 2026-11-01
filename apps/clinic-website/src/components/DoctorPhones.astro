@@ -1,0 +1,64 @@
+---
+import Icon from './Icon.astro';
+import { doctors } from '../data/site';
+
+interface Props {
+  /** Where it sits, for click tracking (data-location). */
+  location: string;
+  /** "stack": one doctor per line. "inline": side by side, wrapping. */
+  layout?: 'stack' | 'inline';
+}
+
+const { location, layout = 'stack' } = Astro.props;
+---
+
+<!-- Each doctor's own number. Text colour is inherited, so it suits light and dark sections alike. -->
+<ul class:list={['dp', `dp--${layout}`]}>
+  {
+    doctors.map((d) => (
+      <li>
+        <a href={`tel:${d.phone.tel}`} aria-label={`Call ${d.name} on ${d.phone.display}`} data-track="phone_click" data-location={`${location}-${d.n}`}>
+          <Icon name="phone" size={16} />
+          <span class="dp__name">{d.short}</span>
+          <strong>{d.phone.display}</strong>
+        </a>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .dp {
+    display: grid;
+    gap: 0.1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .dp--inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 1.4rem;
+  }
+  .dp a {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.15rem 0.5rem;
+    min-height: 44px;
+    color: inherit;
+    text-decoration: none;
+  }
+  .dp__name {
+    opacity: 0.78;
+  }
+  .dp strong {
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  }
+  .dp a:hover strong {
+    text-decoration-color: currentColor;
+  }
+</style>

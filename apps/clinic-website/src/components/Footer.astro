@@ -1,5 +1,6 @@
 ---
 import Icon from './Icon.astro';
+import DoctorPhones from './DoctorPhones.astro';
 import { clinic, hours, links, nav } from '../data/site';
 import { landingPages } from '../data/landing';
 
@@ -26,7 +27,7 @@ const year = new Date().getFullYear();
       </nav>
 
       <div class="contact">
-        <a class="phone" href={links.tel} data-track="phone_click" data-location="footer">{clinic.phone.display}</a>
+        <div class="phones"><DoctorPhones location="footer" /></div>
         <a class="btn btn-primary btn-sm" href={links.whatsapp} target="_blank" rel="noopener noreferrer" data-track="whatsapp_click" data-location="footer">
           <Icon name="message-circle" size={18} /> WhatsApp
         </a>
@@ -107,17 +108,9 @@ const year = new Date().getFullYear();
     align-items: center;
     gap: 1rem;
   }
-  .phone {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    font-weight: 700;
+  .phones {
+    font-size: 0.9375rem;
     color: var(--color-ivory);
-    text-decoration: none;
-  }
-  .phone:hover {
-    text-decoration: underline;
-    text-underline-offset: 4px;
   }
   .services {
     margin-top: 2rem;

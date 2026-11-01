@@ -2,6 +2,7 @@
 import Depth from './Depth.astro';
 import DarkFx from './DarkFx.astro';
 import Icon from './Icon.astro';
+import DoctorPhones from './DoctorPhones.astro';
 import { clinic, hours, links } from '../data/site';
 const { address } = clinic;
 ---
@@ -20,11 +21,8 @@ const { address } = clinic;
         <p>{address.street}</p>
         <p>{address.area}</p>
         <p>{address.city}, {address.region} {address.postalCode}</p>
-        <p class="addr__phone">
-          <Icon name="phone" size={16} />
-          <a href={links.tel} data-track="phone_click" data-location="visit">{clinic.phone.display}</a>
-        </p>
       </address>
+      <div class="addr__phones"><DoctorPhones location="visit" /></div>
 
       <div class="hours glass-dark">
         <p class="hours__title"><Icon name="clock" size={15} /> Hours</p>
@@ -111,21 +109,10 @@ const { address } = clinic;
     font: 400 1.5rem/1.2 var(--font-serif);
     color: var(--color-ivory);
   }
-  .addr__phone {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.7rem !important;
-    font-weight: 700;
-  }
-  .addr__phone a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
+  .addr__phones {
+    margin-top: -0.4rem;
+    font-size: 1.0625rem;
     color: var(--color-ivory);
-    text-decoration: underline;
-    text-underline-offset: 4px;
-    text-decoration-color: rgb(250 248 242 / 0.4);
   }
 
   .hours {

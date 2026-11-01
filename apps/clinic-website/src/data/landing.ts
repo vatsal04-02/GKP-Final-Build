@@ -7,7 +7,7 @@
  * (session length, fees, home visits) is left out rather than guessed.
  */
 
-import { clinic, hours } from './site';
+import { clinic, doctors, hours } from './site';
 
 export interface LandingFaq {
   q: string;
@@ -47,7 +47,7 @@ const common = (topic: string): LandingFaq[] => [
   },
   {
     q: 'How do I book, and when is the clinic open?',
-    a: `Message the clinic on WhatsApp, call ${clinic.phone.display}, or use the booking form on the website. The clinic is open ${when}.`,
+    a: `Message the clinic on WhatsApp (${clinic.phone.whatsappDisplay}), call ${doctors.map((d) => `${d.name} on ${d.phone.display}`).join(' or ')}, or use the booking form on the website. The clinic is open ${when}.`,
   },
 ];
 

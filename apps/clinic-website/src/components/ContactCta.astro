@@ -1,7 +1,8 @@
 ---
 import DarkFx from './DarkFx.astro';
 import Icon from './Icon.astro';
-import { clinic, hours, links } from '../data/site';
+import DoctorPhones from './DoctorPhones.astro';
+import { hours, links } from '../data/site';
 ---
 
 <section id="contact" class="cta curve on-dark" data-section data-ambient data-hide-sticky aria-labelledby="contact-title">
@@ -36,11 +37,8 @@ import { clinic, hours, links } from '../data/site';
       </div>
 
 
-      <p class="fine">
-        <a href={links.tel} data-track="phone_click" data-location="contact-cta-number">{clinic.phone.display}</a>
-        <span aria-hidden="true">·</span>
-        {hours.days} {hours.sessions.join(' & ')} · {hours.closed}
-      </p>
+      <div class="fine fine--phones"><DoctorPhones location="contact-cta" layout="inline" /></div>
+      <p class="fine">{hours.days} {hours.sessions.join(' & ')} · {hours.closed}</p>
     </div>
   </div>
 </section>
@@ -108,8 +106,13 @@ import { clinic, hours, links } from '../data/site';
     text-decoration: underline;
     text-underline-offset: 3px;
   }
-  .fine span {
-    margin-inline: 0.25rem;
+  .fine--phones {
+    margin-top: 0.3rem;
+    font-size: 0.9375rem;
+    color: var(--color-ivory);
+  }
+  .fine--phones :global(.dp--inline) {
+    justify-content: center;
   }
 
   /* Narrowest phones (≤359px): keep the 18.7px button labels, give them the room instead */

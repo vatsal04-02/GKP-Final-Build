@@ -5,6 +5,7 @@ import Footer from '../components/Footer.astro';
 import StickyCta from '../components/StickyCta.astro';
 import ClinicImage from '../components/ClinicImage.astro';
 import Icon from '../components/Icon.astro';
+import DoctorPhones from '../components/DoctorPhones.astro';
 import { landingBySlug, landingPages } from '../data/landing';
 import { clinic, concernMessage, doctorBookMessage, doctors, hours, links, seo, steps, whatsappLink } from '../data/site';
 
@@ -65,7 +66,7 @@ const schemaExtra = [
           </a>
           <a class="btn btn-glass" href={links.tel} data-track="phone_click" data-location={`landing-${page.slug}`}>
             <Icon name="phone" size={18} />
-            Call {clinic.phone.display}
+            Call the Clinic
           </a>
         </div>
         <ul class="chips" aria-label="Clinic at a glance">
@@ -166,9 +167,7 @@ const schemaExtra = [
             {clinic.address.city}, {clinic.address.region} {clinic.address.postalCode}
           </address>
           <p>{hours.days}, {hours.sessions.join(' and ')}. {hours.closed}.</p>
-          <p>
-            <a class="phone" href={links.tel} data-track="phone_click" data-location="landing-visit">{clinic.phone.display}</a>
-          </p>
+          <div class="phones"><DoctorPhones location="landing-visit" /></div>
           <a class="link-arrow" href={links.directions} target="_blank" rel="noopener noreferrer" data-track="directions_click" data-location="landing-visit">
             Get directions
             <Icon name="arrow-up-right" size={18} />
@@ -399,8 +398,7 @@ const schemaExtra = [
   .stack p {
     margin: 0;
   }
-  .phone {
-    font-weight: 800;
+  .phones {
     color: var(--color-pine);
   }
   .rel {

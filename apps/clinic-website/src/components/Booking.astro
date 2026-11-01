@@ -1,6 +1,7 @@
 ---
 import Depth from './Depth.astro';
 import Icon from './Icon.astro';
+import DoctorPhones from './DoctorPhones.astro';
 import { clinic, hours, links, schedule } from '../data/site';
 import { CONCERNS as concerns, SLOTS as slots } from '../lib/enquiry-shared.mjs';
 
@@ -39,7 +40,7 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
         </div>
         <div>
           <dt>Call</dt>
-          <dd><a href={links.tel} data-track="phone_click" data-location="booking-facts">{clinic.phone.display}</a></dd>
+          <dd class="facts__phones"><DoctorPhones location="booking-facts" /></dd>
         </div>
         <div>
           <dt>On Google</dt>
@@ -247,6 +248,7 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
   }
   .facts div {
     display: grid;
+    align-content: start;
     gap: 0.25rem;
     padding: 0.85rem 0.9rem 0.85rem 0;
     border-bottom: 1px solid rgb(250 248 242 / 0.22);
@@ -268,6 +270,17 @@ const endpoint = import.meta.env.PUBLIC_ENQUIRY_ENDPOINT || '/api/enquiry';
     color: inherit;
     text-decoration: underline;
     text-underline-offset: 3px;
+  }
+  /* Both doctors' numbers sit one under the other; the shared list sets its own link style */
+  .facts__phones :global(.dp a) {
+    min-height: 32px;
+    flex-wrap: nowrap;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+    text-decoration: none;
+  }
+  .facts__phones :global(.dp svg) {
+    display: none; /* the cell is narrow: the label already says "Call" */
   }
 
   /* ---- Form ---- */

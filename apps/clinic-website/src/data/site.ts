@@ -271,7 +271,7 @@ export const faqs: Faq[] = [
   },
   {
     q: 'How do I contact the clinic?',
-    a: `You can message the clinic on WhatsApp or call ${clinic.phone.display}. Tell them what you’re experiencing and they will help you with the next step.`,
+    a: `You can message the clinic on WhatsApp (${clinic.phone.whatsappDisplay}), or call ${doctors.map((d) => `${d.name} on ${d.phone.display}`).join(' or ')}. Tell them what you’re experiencing and they will help you with the next step.`,
     confirmed: true,
   },
   {
