@@ -61,9 +61,9 @@ function Footer({ clinic, rich }: { clinic: ClinicProfile; rich?: boolean }) {
 const Cell = ({ k, v }: { k: string; v: ReactNode }) => <div className="flex min-w-0 gap-1.5 border-b border-dotted border-black/60 pb-0.5"><span className="shrink-0 font-semibold">{k}</span><span className="min-w-0 break-words">{v || ''}</span></div>;
 function Section({ label, text }: { label: string; text: string }) {
   return (
-    <section className="keep mt-6 print:mt-4">
+    <section className="keep mt-4">
       <h3 className="border-b border-black pb-1 text-[10pt] font-bold uppercase tracking-wider">{label}</h3>
-      <div className="min-h-[16mm] print:min-h-[13mm] whitespace-pre-wrap break-words pt-2 text-[11pt] leading-loose">{text}</div>
+      <div className="min-h-[13mm] whitespace-pre-wrap break-words pt-2 text-[11pt] leading-loose">{text}</div>
     </section>
   );
 }

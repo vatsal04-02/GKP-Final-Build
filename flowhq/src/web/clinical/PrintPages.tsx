@@ -11,7 +11,29 @@ import { ErrorState, Skeleton } from '../components/ui/feedback';
 import { InvoiceDocument, PrescriptionDocument } from './documents';
 import { useClinic } from './common';
 
-function Frame({ title, back, children, ready }: { title: string; back: string; children: ReactNode; ready: boolean }) {
+// One sheet of paper: if the content is taller than an A4 page (less the 10mm print margins), shrink it just enough to fit on ONE page.
+const PAGE_MM = 267;   // 297mm - 2 x 10mm margins, minus a little safety
+function useFitOnePage(wrap: React.RefObject<HTMLDivElement>, on: boolean) {
+  useEffect(() => {
+    if (!on) return;
+    const mm = (px: number) => px * 25.4 / 96;
+    const fit = () => {
+      const el = wrap.current?.firstElementChild as HTMLElement | null; if (!el) return;
+      el.style.zoom = ''; el.style.minHeight = '0';
+      const cs = getComputedStyle(el);
+      // measured on screen, where the sheet has padding that print does not: only the content counts
+      const h = mm(el.scrollHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+      const z = h > PAGE_MM ? Math.max(0.5, PAGE_MM / h) : 1;
+      if (z < 1) el.style.zoom = String(z);
+      el.style.minHeight = `${PAGE_MM / z}mm`;   // the footer sits at the foot of the page
+    };
+    const reset = () => { const el = wrap.current?.firstElementChild as HTMLElement | null; if (el) { el.style.zoom = ''; el.style.minHeight = ''; } };
+    window.addEventListener('beforeprint', fit); window.addEventListener('afterprint', reset);
+    return () => { window.removeEventListener('beforeprint', fit); window.removeEventListener('afterprint', reset); };
+  }, [wrap, on]);
+}
+
+function Frame({ title, back, children, ready, fit }: { title: string; back: string; children: ReactNode; ready: boolean; fit?: boolean }) {
   const [sp] = useSearchParams(); const wrap = useRef<HTMLDivElement>(null); const [imgs, setImgs] = useState(false);
   useEffect(() => {   // wait for photos so they are on the paper
     if (!ready) return;
@@ -20,6 +42,7 @@ function Frame({ title, back, children, ready }: { title: string; back: string; 
     Promise.all(all.map((i) => (i.complete ? Promise.resolve() : new Promise<void>((r) => { i.onload = i.onerror = () => r(); })))).then(() => live && setImgs(true));
     return () => { live = false; };
   }, [ready]);
+  useFitOnePage(wrap, !!fit);
   useEffect(() => { document.title = title; }, [title]);
   useEffect(() => { if (imgs && sp.get('auto') === '1') window.print(); }, [imgs, sp]);
   return (
@@ -42,7 +65,7 @@ export function PrintPrescription() {
   const err = rx.error || pt.error || clinic.error;
   const ready = !!(rx.data && pt.data && clinic.data);
   return (
-    <Frame title={`Prescription ${rxId}`} back={`/w/${ws.id}/prescriptions/${rxId}`} ready={ready}>
+    <Frame fit title={`Prescription ${rxId}`} back={`/w/${ws.id}/prescriptions/${rxId}`} ready={ready}>
       {err ? <ErrorState error={err} /> : !ready ? <Loading /> : <PrescriptionDocument clinic={clinic.data!} rx={rx.data!} patient={pt.data!.patient} imageUrl={(id) => `/api${wsPath(ws.id, `/prescriptions/${rxId}/images/${id}`)}`} />}
     </Frame>
   );
