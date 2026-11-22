@@ -317,7 +317,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // Every page that is not one of the main tabs gets a Back button in place of the logo (an open conversation has its own).
   const atRoot = tabs.some((t) => loc.pathname.replace(/\/$/, '') === t.to);
   const showBack = !atRoot && !inThread;
-  const goBack = () => { const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0; if (idx > 0) nav(-1); else nav(pagePath(ws.id, 'dashboard')); };
+  // Back goes to a fixed parent, not to whatever was open before: a page inside a section (a record, an editor) returns to that section's list; a section itself returns to Home.
+  const goBack = () => { const parts = loc.pathname.split('/').filter(Boolean).slice(2); nav(parts.length > 1 ? `/w/${ws.id}/${parts[0]}` : pagePath(ws.id, 'dashboard')); };
   const moreActive = !tabs.some((t) => loc.pathname === t.to || (!t.end && loc.pathname.startsWith(`${t.to}/`)));
   // keyboard: ⌘K / Ctrl+K palette, "g" + key to jump to a page
   const shortcuts = useMemo(() => Object.fromEntries(ws.modules.filter((m) => MODULES[m].shortcut && MODULES[m].page !== null).map((m) => [MODULES[m].shortcut!.split(' ')[1], pagePath(ws.id, m)])), [ws]);
