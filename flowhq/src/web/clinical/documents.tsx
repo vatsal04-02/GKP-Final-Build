@@ -5,15 +5,16 @@ import type { ClinicProfile, Invoice, Patient, Prescription } from '@core/clinic
 import { amountInWords } from '@core/money';
 import { fdate, rs } from './common';
 
-function Letterhead({ clinic, title }: { clinic: ClinicProfile; title?: string }) {
+function Letterhead({ clinic, title, big }: { clinic: ClinicProfile; title?: string; big?: boolean }) {
   return (
-    <header className="keep">
+    <header className={big ? 'keep mb-2' : 'keep'}>
       <div className="flex items-center gap-4">
         <img src="/brand/gkp-logo-light.png" alt="" className="h-[20mm] w-auto shrink-0" />
         <div className="min-w-0 flex-1 text-center">
-          <h1 className="font-display text-[18pt] font-bold uppercase leading-none tracking-wide">{clinic.name}</h1>
-          <div className="mt-1 text-[9pt] font-semibold uppercase tracking-[0.2em]">Consultant Physiotherapist</div>
+          <h1 className={big ? 'font-display text-[26pt] font-extrabold uppercase leading-[1.05] tracking-wide' : 'font-display text-[18pt] font-bold uppercase leading-none tracking-wide'}>{clinic.name}</h1>
+          <div className={big ? 'mt-2 text-[10.5pt] font-bold uppercase tracking-[0.2em]' : 'mt-1 text-[9pt] font-semibold uppercase tracking-[0.2em]'}>Consultant Physiotherapist</div>
         </div>
+        {big && <img src="/brand/clinic-cross.jpg" alt="" className="h-[20mm] w-auto shrink-0 mix-blend-multiply" />}
       </div>
       {clinic.clinicians.length > 0 && (
         <div className="mt-3 flex flex-wrap justify-between gap-x-6 gap-y-2 text-[9.5pt] leading-tight">
@@ -46,9 +47,9 @@ function Footer({ clinic }: { clinic: ClinicProfile }) {
 const Cell = ({ k, v }: { k: string; v: ReactNode }) => <div className="flex min-w-0 gap-1.5 border-b border-dotted border-black/60 pb-0.5"><span className="shrink-0 font-semibold">{k}</span><span className="min-w-0 break-words">{v || ''}</span></div>;
 function Section({ label, text }: { label: string; text: string }) {
   return (
-    <section className="keep mt-2.5">
-      <h3 className="border-b border-black pb-0.5 text-[9.5pt] font-bold uppercase tracking-wider">{label}</h3>
-      <div className="min-h-[9mm] whitespace-pre-wrap break-words pt-1 text-[10.5pt] leading-relaxed">{text}</div>
+    <section className="keep mt-6 print:mt-4">
+      <h3 className="border-b border-black pb-1 text-[10pt] font-bold uppercase tracking-wider">{label}</h3>
+      <div className="min-h-[16mm] print:min-h-[13mm] whitespace-pre-wrap break-words pt-2 text-[11pt] leading-loose">{text}</div>
     </section>
   );
 }
@@ -56,9 +57,9 @@ function Section({ label, text }: { label: string; text: string }) {
 export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic: ClinicProfile; rx: Prescription; patient: Pick<Patient, 'name' | 'patientId' | 'age' | 'sex' | 'phone'>; imageUrl: (imageId: string) => string }) {
   const physio = clinic.clinicians.find((c) => c.name.toLowerCase() === rx.treatingPhysio.trim().toLowerCase());
   return (
-    <article className="paper text-[10.5pt]" aria-label="Prescription">
-      <Letterhead clinic={clinic} />
-      <div className="keep mt-3 grid grid-cols-2 gap-x-5 gap-y-2 text-[10.5pt] print:grid-cols-[1.6fr_1fr_1fr] sm:grid-cols-[1.6fr_1fr_1fr]">
+    <article className="paper flex flex-col text-[10.5pt] print:min-h-[258mm]" aria-label="Prescription">
+      <Letterhead clinic={clinic} big />
+      <div className="keep mt-6 grid grid-cols-2 gap-x-5 gap-y-4 text-[10.5pt] print:grid-cols-[1.6fr_1fr_1fr] sm:grid-cols-[1.6fr_1fr_1fr]">
         <Cell k="Name:" v={patient.name} /><Cell k="Age / Sex:" v={[patient.age, patient.sex].filter(Boolean).join(' / ')} /><Cell k="Date:" v={fdate(rx.rxDate)} />
         <Cell k="Patient ID:" v={patient.patientId} /><Cell k="Contact:" v={patient.phone} /><Cell k="Rx No.:" v={rx.rxId} />
         <Cell k="B.P.:" v={rx.bp} /><div className="col-span-2"><Cell k="Other vitals:" v={rx.vitals} /></div>
@@ -76,7 +77,7 @@ export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic
           </div>
         </section>
       )}
-      <div className="keep mt-4">
+      <div className="keep mt-auto pt-8">
         <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[10mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div><div className="text-[9pt]">Treating Physiotherapist{physio?.regNo ? ` · Regd. No. ${physio.regNo}` : ''}</div></div></div>
         <Footer clinic={clinic} />
       </div>
