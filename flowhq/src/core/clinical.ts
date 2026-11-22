@@ -61,7 +61,7 @@ export interface PatientProfile { patient: PatientRow; prescriptions: Prescripti
 
 export interface ClinicProfile {
   name: string; tagline: string; address: string; phones: string[]; timings: string; runBy: string;
-  clinicians: Array<{ name: string; qualifications: string; regNo: string; mobile: string }>;
+  clinicians: Array<{ name: string; qualifications: string; regNo: string; mobile: string; title?: string }>;   // title: printed after the name on the letterhead only, e.g. "(PT)"
   tax: { label: string; ratePercent: number } | null;
 }
 

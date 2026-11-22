@@ -14,7 +14,7 @@ function clean(raw: Record<string, unknown>, base: ClinicConfig): ClinicConfig {
     idPrefix: /^[A-Z0-9]{1,6}$/.test(str(raw.idPrefix)) ? str(raw.idPrefix) : base.idPrefix,
     name: str(raw.name, base.name), tagline: str(raw.tagline, base.tagline), address: str(raw.address, base.address), timings: str(raw.timings, base.timings), runBy: str(raw.runBy, base.runBy),
     phones: Array.isArray(raw.phones) ? raw.phones.map(String).slice(0, 5) : base.phones,
-    clinicians: Array.isArray(raw.clinicians) ? raw.clinicians.slice(0, 6).map((c: Record<string, unknown>) => ({ name: str(c.name), qualifications: str(c.qualifications), regNo: str(c.regNo), mobile: str(c.mobile) })) : base.clinicians,
+    clinicians: Array.isArray(raw.clinicians) ? raw.clinicians.slice(0, 6).map((c: Record<string, unknown>) => ({ name: str(c.name), qualifications: str(c.qualifications), regNo: str(c.regNo), mobile: str(c.mobile), title: str(c.title).slice(0, 20) })) : base.clinicians,
     tax: 'tax' in raw ? (t && str(t.label) && rate > 0 && rate <= 100 ? { label: str(t.label).slice(0, 20), ratePercent: Math.round(rate * 100) / 100 } : null) : base.tax,
   };
 }

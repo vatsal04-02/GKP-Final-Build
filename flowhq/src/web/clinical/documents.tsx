@@ -23,7 +23,7 @@ function Letterhead({ clinic, title, big }: { clinic: ClinicProfile; title?: str
         <div className="mt-3 flex flex-wrap justify-between gap-x-6 gap-y-2 text-[9.5pt] leading-tight">
           {clinic.clinicians.map((c, i) => (
             <div key={c.regNo || c.name} className={i % 2 ? 'text-right' : ''}>
-              <div className="text-[11.5pt] font-bold">{c.name}</div>
+              <div className="text-[11.5pt] font-bold">{c.name}{c.title ? ` ${c.title}` : ''}</div>
               <div>{c.qualifications}</div>
               {c.regNo && <div>Regd. No.: {c.regNo}</div>}
               {c.mobile && <div>Mob.: {c.mobile}</div>}
@@ -47,7 +47,7 @@ function Footer({ clinic, rich }: { clinic: ClinicProfile; rich?: boolean }) {
     </>
   );
   return (
-    <footer className="keep mt-3 border-t border-black pt-1.5 text-center text-[8.5pt] leading-snug">
+    <footer className="keep mt-3 border-t border-black pt-1.5 text-center text-[9.5pt] leading-snug">
       {rich ? (
         <div className="flex items-center justify-center gap-4">
           <div className="min-w-0 flex-1">{lines}</div>
@@ -69,7 +69,6 @@ function Section({ label, text }: { label: string; text: string }) {
 }
 
 export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic: ClinicProfile; rx: Prescription; patient: Pick<Patient, 'name' | 'patientId' | 'age' | 'sex' | 'phone'>; imageUrl: (imageId: string) => string }) {
-  const physio = clinic.clinicians.find((c) => c.name.toLowerCase() === rx.treatingPhysio.trim().toLowerCase());
   return (
     <article className="paper flex flex-col text-[10.5pt] print:min-h-[258mm]" aria-label="Prescription">
       <Letterhead clinic={clinic} big />
@@ -92,7 +91,7 @@ export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic
         </section>
       )}
       <div className="keep mt-auto pt-8">
-        <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[10mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div><div className="text-[9pt]">Treating Physiotherapist{physio?.regNo ? ` · Regd. No. ${physio.regNo}` : ''}</div></div></div>
+        <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[10mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div></div></div>
         <Footer clinic={clinic} rich />
       </div>
     </article>
