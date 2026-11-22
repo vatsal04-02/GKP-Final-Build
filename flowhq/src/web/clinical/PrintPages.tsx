@@ -12,7 +12,7 @@ import { InvoiceDocument, PrescriptionDocument } from './documents';
 import { useClinic } from './common';
 
 // One sheet of paper: if the content is taller than an A4 page (less the 10mm print margins), shrink it just enough to fit on ONE page.
-const PAGE_MM = 267;   // 297mm - 2 x 10mm margins, minus a little safety
+const PAGE_MM = 260;   // 297mm - 2 x 10mm margins = 277mm of paper; 17mm of slack so printers and browsers that differ a little still give ONE page
 function useFitOnePage(wrap: React.RefObject<HTMLDivElement>, on: boolean) {
   useEffect(() => {
     if (!on) return;
@@ -20,9 +20,12 @@ function useFitOnePage(wrap: React.RefObject<HTMLDivElement>, on: boolean) {
     const fit = () => {
       const el = wrap.current?.firstElementChild as HTMLElement | null; if (!el) return;
       el.style.zoom = ''; el.style.minHeight = '0';
-      const cs = getComputedStyle(el);
-      // measured on screen, where the sheet has padding that print does not: only the content counts
-      const h = mm(el.scrollHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+      // Measure the sheet the way it PRINTS: 190mm wide (A4 less the margins), no screen padding, border or shadow. The screen layout is
+      // narrower, so measuring it would give the wrong height.
+      const keep = { width: el.style.width, maxWidth: el.style.maxWidth, padding: el.style.padding, border: el.style.border, overflowWrap: el.style.overflowWrap };
+      Object.assign(el.style, { width: '190mm', maxWidth: 'none', padding: '0', border: '0', overflowWrap: 'normal' });
+      const h = mm(el.getBoundingClientRect().height);
+      Object.assign(el.style, keep);
       const z = h > PAGE_MM ? Math.max(0.5, PAGE_MM / h) : 1;
       if (z < 1) el.style.zoom = String(z);
       el.style.minHeight = `${PAGE_MM / z}mm`;   // the footer sits at the foot of the page
