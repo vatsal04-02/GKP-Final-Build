@@ -9,7 +9,9 @@ function Letterhead({ clinic, title, big }: { clinic: ClinicProfile; title?: str
   return (
     <header className={big ? 'keep mb-2' : 'keep'}>
       <div className="flex items-center gap-4">
-        <img src="/brand/gkp-logo-light.png" alt="" className="h-[20mm] w-auto shrink-0" />
+        {big
+          ? <div className="shrink-0 text-center"><img src="/brand/gkp-logo-light.png" alt="" className="h-[20mm] w-auto" /><div className="mt-0.5 text-[9.5pt] font-bold uppercase tracking-[0.18em]">Since 2004</div></div>
+          : <img src="/brand/gkp-logo-light.png" alt="" className="h-[20mm] w-auto shrink-0" />}
         {big
           ? <img src="/brand/gkp-name-cross.png" alt={clinic.name} className="h-auto max-h-[26mm] min-w-0 flex-1 object-contain" />
           : <div className="min-w-0 flex-1 text-center">
