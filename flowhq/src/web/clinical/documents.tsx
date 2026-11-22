@@ -6,32 +6,56 @@ import { amountInWords } from '@core/money';
 import { fdate, rs } from './common';
 
 // Change this whenever a file in public/brand changes: the server lets browsers keep brand images for a day, so a new picture under the same name would not show.
-const BRAND_V = '20261122b';
+const BRAND_V = '20261122c';
+
+const NAVY = 'border-[#1d2b4f]'; const RED = 'border-[#c8102e]';
+// A pair of rules (thick navy + thin red), used above and below the tagline and under the doctors' details.
+const Rules = ({ flip }: { flip?: boolean }) => <div className={flip ? 'flex flex-col-reverse gap-[0.6mm]' : 'flex flex-col gap-[0.6mm]'}><div className={`border-t-[1.1mm] ${NAVY}`} /><div className={`border-t-[0.45mm] ${RED}`} /></div>;
+const Doctor = ({ c, right }: { c: ClinicProfile['clinicians'][number]; right?: boolean }) => (
+  <div className={right ? 'text-right' : ''}>
+    <div className="text-[11.5pt] font-bold">{c.name}{c.title ? ` ${c.title}` : ''}</div>
+    <div>{c.qualifications}</div>
+    {c.regNo && <div>Regd. No.: {c.regNo}</div>}
+    {c.mobile && <div>Mob.: {c.mobile}</div>}
+  </div>
+);
 
 function Letterhead({ clinic, title, big }: { clinic: ClinicProfile; title?: string; big?: boolean }) {
+  if (big) {   // the prescription: GKP logo | name, tagline between rules | cross; the two doctors under the logo and the cross
+    const left = clinic.clinicians.filter((_, i) => i % 2 === 0); const right = clinic.clinicians.filter((_, i) => i % 2 === 1);
+    return (
+      <header className="keep mb-2">
+        <div className="grid grid-cols-[50mm_1fr_50mm] items-center">
+          <div className="text-center"><img src={`/brand/gkp-logo-light.png?v=${BRAND_V}`} alt="" className="mx-auto h-[20mm] w-auto" /><div className="mt-0.5 text-[9.5pt] font-bold uppercase tracking-[0.18em]">Since 2004</div></div>
+          <div className="px-3">
+            <img src={`/brand/gkp-name.png?v=${BRAND_V}`} alt={clinic.name} className="mx-auto h-auto w-[78mm] max-w-full" />
+            <div className="mt-2"><Rules /></div>
+            <div className="whitespace-nowrap py-1 text-center text-[9pt] font-bold uppercase">{title || clinic.tagline}</div>
+            <Rules flip />
+          </div>
+          <img src={`/brand/gkp-cross.png?v=${BRAND_V}`} alt="" className="mx-auto h-[17mm] w-auto" />
+        </div>
+        <div className="mt-2 grid grid-cols-[50mm_1fr_50mm] text-[9.5pt] leading-tight">
+          <div>{left.map((c) => <Doctor key={c.regNo || c.name} c={c} />)}</div>
+          <div className="mx-3 border-x border-black/30" />
+          <div>{right.map((c) => <Doctor key={c.regNo || c.name} c={c} right />)}</div>
+        </div>
+        <div className="mt-2"><Rules flip /></div>
+      </header>
+    );
+  }
   return (
-    <header className={big ? 'keep mb-2' : 'keep'}>
+    <header className="keep">
       <div className="flex items-center gap-6">
-        {big
-          ? <div className="shrink-0 text-center"><img src={`/brand/gkp-logo-light.png?v=${BRAND_V}`} alt="" className="h-[20mm] w-auto" /><div className="mt-0.5 text-[9.5pt] font-bold uppercase tracking-[0.18em]">Since 2004</div></div>
-          : <img src={`/brand/gkp-logo-light.png?v=${BRAND_V}`} alt="" className="h-[20mm] w-auto shrink-0" />}
-        {big
-          ? <img src={`/brand/gkp-name-cross.png?v=${BRAND_V}`} alt={clinic.name} className="h-auto max-h-[26mm] min-w-0 flex-1 object-contain" />
-          : <div className="min-w-0 flex-1 text-center">
-              <h1 className="font-display text-[18pt] font-bold uppercase leading-none tracking-wide">{clinic.name}</h1>
-              <div className="mt-1 text-[9pt] font-semibold uppercase tracking-[0.2em]">Consultant Physiotherapist</div>
-            </div>}
+        <img src={`/brand/gkp-logo-light.png?v=${BRAND_V}`} alt="" className="h-[20mm] w-auto shrink-0" />
+        <div className="min-w-0 flex-1 text-center">
+          <h1 className="font-display text-[18pt] font-bold uppercase leading-none tracking-wide">{clinic.name}</h1>
+          <div className="mt-1 text-[9pt] font-semibold uppercase tracking-[0.2em]">Consultant Physiotherapist</div>
+        </div>
       </div>
       {clinic.clinicians.length > 0 && (
         <div className="mt-3 flex flex-wrap justify-between gap-x-6 gap-y-2 text-[9.5pt] leading-tight">
-          {clinic.clinicians.map((c, i) => (
-            <div key={c.regNo || c.name} className={i % 2 ? 'text-right' : ''}>
-              <div className="text-[11.5pt] font-bold">{c.name}{c.title ? ` ${c.title}` : ''}</div>
-              <div>{c.qualifications}</div>
-              {c.regNo && <div>Regd. No.: {c.regNo}</div>}
-              {c.mobile && <div>Mob.: {c.mobile}</div>}
-            </div>
-          ))}
+          {clinic.clinicians.map((c, i) => <Doctor key={c.regNo || c.name} c={c} right={!!(i % 2)} />)}
         </div>
       )}
       <div className="mt-2 border-y-2 border-black py-1 text-center text-[11pt] font-bold uppercase tracking-wide">{title || clinic.tagline}</div>
@@ -44,8 +68,8 @@ function Footer({ clinic, rich }: { clinic: ClinicProfile; rich?: boolean }) {
     <>
       {rich && <div className="font-semibold">www.geetakrishnaphysiotherapy.co.in</div>}
       <div>{clinic.address}</div>
-      {clinic.phones.length > 0 && <div>Mobile: {clinic.phones.join(', ')}</div>}
       {clinic.timings && <div>{clinic.timings}</div>}
+      {clinic.phones.length > 0 && <div>Mobile: {clinic.phones.join(', ')}</div>}
       {clinic.runBy && <div>{clinic.runBy}</div>}
     </>
   );
