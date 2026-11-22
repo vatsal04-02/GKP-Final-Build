@@ -44,8 +44,8 @@ function Footer({ clinic, rich }: { clinic: ClinicProfile; rich?: boolean }) {
     <>
       {rich && <div className="font-semibold">www.geetakrishnaphysiotherapy.co.in</div>}
       <div>{clinic.address}</div>
-      {clinic.phones.length > 0 && <div>Mobile: {clinic.phones.join(', ')}</div>}
       {clinic.timings && <div>{clinic.timings}</div>}
+      {clinic.phones.length > 0 && <div>Mobile: {clinic.phones.join(', ')}</div>}
       {clinic.runBy && <div>{clinic.runBy}</div>}
     </>
   );
