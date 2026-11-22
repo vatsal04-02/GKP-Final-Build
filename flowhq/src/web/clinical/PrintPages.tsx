@@ -12,10 +12,8 @@ import { InvoiceDocument, PrescriptionDocument } from './documents';
 import { useClinic } from './common';
 
 // One sheet of paper: if the content is taller than an A4 page (less the 10mm print margins), shrink it just enough to fit on ONE page.
-// iPhone / iPad Safari print the sheet about 14% larger and with a bigger top margin, so there is only about 237mm of (CSS) height and 166mm of width: plan for that there.
-const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-const PAGE_MM = IOS ? 222 : 255;
-const SHEET_W_MM = IOS ? 166 : 190;   // the width the sheet is laid out at when printed
+const PAGE_MM = 268;   // 297mm - 2 x 10mm margins = 277mm of paper, less a little slack. A normal prescription is shorter than this and is NOT shrunk; only a long one is shrunk, just enough to fit
+const SHEET_W_MM = 190;   // the width the sheet is laid out at when printed (A4 less the margins)
 function useFitOnePage(wrap: React.RefObject<HTMLDivElement>, on: boolean) {
   useEffect(() => {
     if (!on) return;
