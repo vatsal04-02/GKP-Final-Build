@@ -8,8 +8,8 @@
     "timings": "Mon–Sat: 9:00 AM – 1:00 PM and 4:00 PM – 8:00 PM · Sunday closed",
     "runBy": "Run by: Vinayak Educational & Welfare Society, Gomti Nagar Extension, Lucknow (U.P.)",
     "clinicians": [
-      { "name": "Dr. Sandeep Tiwari", "title": "(PT)", "qualifications": "B.P.T., M.P.T., M.C.M.P.H.", "regNo": "0143", "mobile": "9838681421" },
-      { "name": "Dr. Mahesh Tiwari", "title": "(PT)", "qualifications": "B.P.T., M.P.T.", "regNo": "0144", "mobile": "9919282145" }
+      { "name": "Dr. Sandeep Tiwari", "title": "(PT)", "qualifications": "B.P.T, M.P.T, M.C.M.P.H.", "regNo": "0143", "mobile": "9838681421" },
+      { "name": "Dr. Mahesh Tiwari", "title": "(PT)", "qualifications": "B.P.T, M.P.T", "regNo": "0144", "mobile": "9919282145" }
     ],
     "tax": null
   }
