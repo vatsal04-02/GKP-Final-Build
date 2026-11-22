@@ -170,8 +170,8 @@ function Hero({ d, base, has }: { d: DoctorSummary; base: string; has: (m: strin
   const cta = 'inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all btn-primary text-white hover:brightness-110';
   return (
     <Card className="fhq-rise relative overflow-hidden" style={delay(0)}>
-      <span className={cn('absolute inset-y-0 left-0 w-1', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/60 fhq-breathe' : 'bg-warn/60') : 'bg-ok/60')} aria-hidden="true" />
-      <span className={cn('pointer-events-none absolute -left-16 -top-16 h-48 w-72 rounded-full blur-3xl', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/[0.07]' : 'bg-warn/[0.08]') : 'bg-ok/[0.08]')} aria-hidden="true" />
+      <span className={cn('absolute inset-y-0 left-0 w-1 max-sm:hidden', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/60 fhq-breathe' : 'bg-warn/60') : 'bg-ok/60')} aria-hidden="true" />
+      <span className={cn('pointer-events-none absolute -left-16 -top-16 h-48 w-72 rounded-full blur-3xl max-lg:hidden', showDue ? (next && next.overdueDays > 0 ? 'bg-bad/[0.07]' : 'bg-warn/[0.08]') : 'bg-ok/[0.08]')} aria-hidden="true" />
       <div className="flex flex-wrap items-center justify-between gap-3 py-3 pl-5 pr-4">
         <div className="min-w-0">
           <div className="text-[12.5px] font-semibold text-muted">{showDue ? 'Needs a message today' : 'Today so far'}</div>

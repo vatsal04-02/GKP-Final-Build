@@ -9,7 +9,7 @@ import type { Prescription, PatientProfile, RxImage } from '@core/clinical';
 import { api, apiUpload, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { Page, StickyBar } from '../components/layout/Shell';
-import { Badge, Button, Card, CardHeader, Input, Select, Textarea } from '../components/ui/primitives';
+import { AddButton, Badge, Button, Card, CardHeader, Input, Select, Textarea } from '../components/ui/primitives';
 import { EmptyState, ErrorState, SkeletonRows, useToast } from '../components/ui/feedback';
 import { Field, PatientPicker, errText, fdate, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
 import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
@@ -74,7 +74,7 @@ function List() {
   const [q, setQ] = useState(''); const dq = useDebounced(q); const doc = useDoctorFilter();
   const list = useQuery({ queryKey: ['rx-list', ws.id, dq, doc.key], queryFn: () => api<Prescription[]>(wsPath(ws.id, `/prescriptions?q=${encodeURIComponent(dq)}${doc.qs}`)) });
   return (
-    <Page title="Prescriptions" subtitle={doc.own ? `Your treatment sheets, ${doc.own}` : 'Treatment sheets written by the clinicians'} wide actions={<Link to={`/w/${ws.id}/prescriptions/new`} className="max-md:w-full"><Button className="max-md:w-full" variant="primary" icon={<Plus className="h-4 w-4" />}>New prescription</Button></Link>}>
+    <Page title="Prescriptions" subtitle={doc.own ? `Your treatment sheets, ${doc.own}` : 'Treatment sheets written by the clinicians'} wide compactActions actions={<Link to={`/w/${ws.id}/prescriptions/new`}><AddButton label="New prescription" icon={<Plus className="h-4 w-4" />} /></Link>}>
       <div className="mb-3 flex flex-wrap items-center gap-2.5"><div className="w-full max-w-xs max-md:max-w-none"><Input icon={<Search className="h-4 w-4" />} placeholder="Search patient, ID or diagnosis" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search prescriptions" /></div><DoctorFilter f={doc} /></div>
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="No prescriptions yet" body={q ? 'Try a different search.' : 'Create the first treatment sheet from here or from a patient’s record.'} /> : (

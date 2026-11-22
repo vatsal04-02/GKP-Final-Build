@@ -7,7 +7,7 @@ import { api, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { cn } from '../lib/cn';
 import { Page } from '../components/layout/Shell';
-import { Badge, Button, Card, Segmented, StatusDot, Switch } from '../components/ui/primitives';
+import { AddButton, Badge, Card, Segmented, StatusDot, Switch } from '../components/ui/primitives';
 import { ErrorState, Skeleton, useToast } from '../components/ui/feedback';
 import { AppointmentDrawer } from './schedule/AppointmentDrawer';
 import { AppointmentsList } from './schedule/AppointmentsList';
@@ -86,7 +86,7 @@ export default function Schedule() {
   const tabs = [{ value: 'calendar', label: 'Day calendar' }, { value: 'week', label: 'Week' }, { value: 'list', label: 'Appointments' }, { value: 'doctors', label: 'Doctors & hours' }, { value: 'settings', label: 'Settings' }, ...(admin ? [{ value: 'audit', label: 'History' }] : [])] as Array<{ value: Tab; label: string }>;
   return (
     <Page wide title="Schedule" subtitle={<><span className="max-sm:hidden">Book, move and cancel appointments, manage doctors and hours, and control WhatsApp AI booking.</span><span className="sm:hidden">Appointments, doctors and hours.</span></>}
-      actions={<Button className="max-sm:w-full" variant="primary" icon={<CalendarPlus className="h-4 w-4" />} onClick={() => setBooking('new')}>New appointment</Button>}>
+      compactActions actions={<AddButton label="New appointment" icon={<CalendarPlus className="h-4 w-4" />} onClick={() => setBooking('new')} />}>
       <div className="space-y-4 sm:space-y-5">
         {ov.isLoading ? <Card className="p-5"><Skeleton className="h-6 w-1/3" /><Skeleton className="mt-4 h-20 w-full" /></Card>
           : ov.isError ? <Card><ErrorState error={ov.error} retry={() => ov.refetch()} /></Card>

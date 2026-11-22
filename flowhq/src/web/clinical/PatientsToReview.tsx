@@ -28,15 +28,16 @@ export function PatientsToReview({ base, today, className }: { base: string; tod
           : rows.length ? (
             <ul className="divide-y divide-line">
               {rows.map((r) => (
-                <li key={r.patientId} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:py-2.5">
-                  <div className="w-full sm:w-auto sm:min-w-[10rem] sm:flex-1">
+                <li key={r.patientId} className="flex items-center gap-x-3 gap-y-2 py-3 sm:flex-wrap sm:py-2.5">
+                  <div className="min-w-0 flex-1 sm:min-w-[10rem]">
                     <Link to={`${base}/patients/${r.patientId}`} className="block break-words text-[13.5px] font-medium leading-snug hover:text-blue-bright">{r.name}</Link>
                     <p className="mt-0.5 break-words text-[12px] text-fg-2">{r.complaint || 'No complaint recorded'}</p>
+                    <p className={cn('num mt-1 text-[12.5px] font-medium sm:hidden', r.days >= 21 ? 'text-bad' : 'text-warn')}>{r.never ? `No visit in ${r.days} days` : `Last seen ${r.days} days ago`}</p>
                   </div>
-                  <span className={cn('num shrink-0 rounded-md border px-2 py-0.5 text-[12px] font-medium', r.days >= 21 ? 'border-bad/25 bg-bad/10 text-bad' : 'border-warn/25 bg-warn/10 text-warn')}>
+                  <span className={cn('num shrink-0 rounded-md border px-2 py-0.5 text-[12px] font-medium max-sm:hidden', r.days >= 21 ? 'border-bad/25 bg-bad/10 text-bad' : 'border-warn/25 bg-warn/10 text-warn')}>
                     {r.never ? `No visit in ${r.days} days` : `Last seen ${r.days} days ago`}
                   </span>
-                  <WhatsAppButton size="sm" className="max-sm:ml-auto" phone={r.phone} name={r.name} message={(clinic) => reviewMessage({ name: r.name, clinic, days: r.days, never: r.never })} />
+                  <WhatsAppButton size="sm" phone={r.phone} name={r.name} message={(clinic) => reviewMessage({ name: r.name, clinic, days: r.days, never: r.never })} />
                 </li>
               ))}
             </ul>

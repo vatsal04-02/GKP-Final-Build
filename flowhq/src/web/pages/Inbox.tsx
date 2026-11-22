@@ -60,7 +60,7 @@ function ConversationItem({ c, active, onOpen }: { c: Conversation; active: bool
   const { tt } = useWs();
   return (
     <li>
-      <button onClick={onOpen} className={cn('row-tap relative flex w-full gap-3 border-b border-line/60 px-4 py-3.5 text-left transition-colors md:py-3', active ? 'bg-blue/[0.08]' : 'hover:bg-surface')} aria-current={active ? 'true' : undefined}>
+      <button onClick={onOpen} className={cn('row-tap relative flex w-full gap-3 px-4 py-3.5 text-left transition-colors after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-line/70 md:py-3', active ? 'bg-blue/[0.08]' : 'hover:bg-surface')} aria-current={active ? 'true' : undefined}>
         {active && <span className="absolute left-0 top-0 h-full w-[2px] bg-blue-bright shadow-[0_0_10px_rgb(var(--blue-bright))]" />}
         <Avatar text={initials(c.contactName)} size={40} tone={active ? 'blue' : 'neutral'} />
         <div className="min-w-0 flex-1">

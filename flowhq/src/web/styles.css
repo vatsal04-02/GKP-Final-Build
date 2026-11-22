@@ -59,6 +59,8 @@
   /* A surface is a flat white sheet with a hairline border. No gradient, no inner highlight; interactive ones only change their border. */
   .card { @apply relative rounded-xl border border-line bg-surface transition-colors duration-150 ease-out; box-shadow: var(--shadow-card); }
   .card-hover { @apply cursor-pointer hover:border-line-2 active:bg-surface-2; }
+  /* Phone: larger radius, no shadow. The sheet of paper is told apart from the page by its edge alone. */
+  @media (max-width: 767.98px) { .card { border-radius: 16px; box-shadow: none; border-color: rgb(var(--line) / 0.75); } }
   .num { font-variant-numeric: tabular-nums; }
   .num-display { font-family: Figtree, 'Noto Sans', ui-sans-serif, sans-serif; font-weight: 600; font-variant-numeric: lining-nums tabular-nums; letter-spacing: -0.02em; }
   /* A small heading above a group of fields or figures: sentence case, not shouted. */
@@ -69,9 +71,9 @@
   /* Section heading inside a panel: a rule and a title, no icon tile. */
   .section-title { @apply text-[13px] font-semibold text-fg; font-family: Figtree, 'Noto Sans', sans-serif; letter-spacing: 0; }
   /* A row of chips or buttons that scrolls sideways inside its own band (no scrollbar); .hscroll-bleed lets it run to the screen edges on a phone. */
-  .hscroll { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  .hscroll { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch; }
   .hscroll::-webkit-scrollbar { display: none; }
-  .hscroll > * { flex: none; scroll-snap-align: start; }
+  .hscroll > * { flex: none; }
   .card-link { @apply inline-flex shrink-0 items-center gap-1 text-xs text-blue-soft hover:text-blue-bright; }
   .btn-primary { background-color: rgb(var(--accent-strong)); }
   .bg-grid { background-image: radial-gradient(rgb(var(--line)) 1px, transparent 1px); background-size: 22px 22px; }
@@ -90,7 +92,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
    Phone and tablet (below lg). The sidebar becomes a bottom tab bar and a "More" sheet; dialogs and drawers become bottom sheets.
    Everything here is scoped to small screens or touch, so the desktop layout is untouched.
    --------------------------------------------------------------------------------------------------------------------------------- */
-:root { --tabbar-h: 64px; }
+:root { --tabbar-h: 80px; }
 html { -webkit-tap-highlight-color: transparent; }
 a, button, [role='tab'], summary, label { touch-action: manipulation; }
 @keyframes fhq-sheet-up { from { transform: translateY(100%); } to { transform: none; } }

@@ -29,6 +29,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
 );
 Button.displayName = 'Button';
 
+// The one "add" action of a list page: a round plus button in the title row on a phone, a labelled button from tablet up.
+export const AddButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon: ReactNode }>(({ label, icon, className, ...p }, ref) => (
+  <Button ref={ref} variant="primary" icon={icon} aria-label={label} className={cn('max-md:h-11 max-md:w-11 max-md:rounded-full max-md:!px-0', className)} {...p}><span className="max-md:sr-only">{label}</span></Button>
+));
+AddButton.displayName = 'AddButton';
+
 export function Card({ className, children, hover, ...p }: { className?: string; children: ReactNode; hover?: boolean } & React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('card', hover && 'card-hover', className)} {...p}>{children}</div>;
 }
@@ -69,7 +75,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   icon ? (
     <div className="relative">
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">{icon}</span>
-      <input ref={ref} className={cn(field, 'pl-9', className)} {...p} />
+      <input ref={ref} className={cn(field, 'pl-9 max-md:rounded-xl max-md:border-transparent max-md:bg-bg-2/55 max-md:focus:bg-surface', className)} {...p} />
     </div>
   ) : <input ref={ref} className={cn(field, className)} {...p} />);
 Input.displayName = 'Input';
@@ -81,7 +87,7 @@ export function Select({ className, children, ...p }: SelectHTMLAttributes<HTMLS
 export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
   return (
     <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
-      className={cn('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue bg-blue' : 'border-line-2 bg-bg-2')}>
+      className={cn('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-150 before:absolute before:-inset-x-1 before:-inset-y-2.5 before:content-[""] disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue bg-blue' : 'border-line-2 bg-bg-2')}>
       <span className={cn('inline-block h-[18px] w-[18px] rounded-full transition-transform duration-150 ease-out', checked ? 'translate-x-[22px] bg-white' : 'translate-x-[3px] bg-fg-2')} />
     </button>
   );
@@ -102,12 +108,12 @@ export function Segmented<T extends string>({ value, onChange, options, size = '
     );
   }
   return (
-    <div className={cn('max-w-full overflow-x-auto rounded-lg border border-line-2 bg-surface p-0.5', fill ? 'flex w-full md:inline-flex md:w-auto' : 'inline-flex')} role="tablist">
+    <div className={cn('max-w-full overflow-x-auto rounded-[10px] bg-bg-2/55 p-0.5', fill ? 'flex w-full md:inline-flex md:w-auto' : 'inline-flex')} role="tablist">
       {options.map((o) => (
         <button key={o.value} type="button" role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
-          className={cn('press inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors duration-150', fill && 'max-md:flex-1', size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]', value === o.value ? 'bg-blue text-white' : 'text-fg-2 hover:bg-surface-2 hover:text-fg')}>
+          className={cn('press inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] font-medium transition-[background-color,color,box-shadow] duration-200', fill && 'max-md:flex-1', size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]', value === o.value ? 'bg-surface font-semibold text-fg shadow-[0_1px_3px_rgb(38_52_49/0.2),0_0_0_0.5px_rgb(38_52_49/0.06)]' : 'text-fg-2 hover:text-fg')}>
           {o.label}
-          {o.count !== undefined && <span className={cn('num px-0.5 text-[12px]', value === o.value ? 'text-white/80' : 'text-muted')}>{o.count}</span>}
+          {o.count !== undefined && <span className="num px-0.5 text-[12px] text-muted">{o.count}</span>}
         </button>
       ))}
     </div>

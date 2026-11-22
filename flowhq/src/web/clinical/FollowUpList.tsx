@@ -66,20 +66,22 @@ export function FollowUpList({ d, base, hasPatients, className }: { d: DoctorSum
           <ul className="divide-y divide-line">
             {rows.map((f) => {
               const due = dueLabel(f, d.today);
+              const badge = <Badge tone={due.tone} icon={due.tone === 'red' ? <AlertTriangle className="h-3 w-3" /> : undefined}>{due.text}</Badge>;
               return (
                 <li key={f.patientId} className="py-3 sm:py-2.5">
-                  <div className="flex flex-wrap items-start gap-x-3 gap-y-2.5">
+                  <div className="flex items-center gap-x-3 gap-y-2.5 sm:flex-wrap sm:items-start">
                     <div className="min-w-0 flex-1 sm:min-w-[10rem]">
                       <Link to={`${base}/patients/${f.patientId}`} className="block break-words text-[13.5px] font-medium leading-snug hover:text-blue-bright">{f.name}</Link>
                       <p className="mt-0.5 break-words text-[12px] text-fg-2">{f.complaint || 'No complaint recorded'}</p>
+                      <div className="mt-1.5 sm:hidden">{badge}</div>
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      <Badge tone={due.tone} icon={due.tone === 'red' ? <AlertTriangle className="h-3 w-3" /> : undefined}>{due.text}</Badge>
+                    <div className="flex shrink-0 flex-wrap items-center gap-1.5 max-sm:hidden">
+                      {badge}
                       <span className="num text-[11.5px] text-muted max-sm:hidden" title="Follow-up date">{fdate(f.followUpOn)}</span>
                     </div>
-                    <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-1.5">
-                      <WhatsAppButton size="sm" className="max-sm:flex-1" phone={f.phone} name={f.name} message={(clinic) => followUpMessage({ name: f.name, clinic, followUpOn: f.followUpOn, today: d.today })} />
-                      <Button size="sm" variant="secondary" className="max-sm:flex-1" icon={<CalendarClock className="h-3.5 w-3.5" />} aria-expanded={open === f.patientId} onClick={() => setOpen(open === f.patientId ? null : f.patientId)}>Reschedule</Button>
+                    <div className="flex shrink-0 items-center gap-2 sm:gap-1.5">
+                      <WhatsAppButton size="sm" phone={f.phone} name={f.name} message={(clinic) => followUpMessage({ name: f.name, clinic, followUpOn: f.followUpOn, today: d.today })} />
+                      <Button size="sm" variant="secondary" className="max-sm:w-11 max-sm:!rounded-full max-sm:!px-0" aria-label={`Reschedule ${f.name}`} icon={<CalendarClock className="h-3.5 w-3.5 max-sm:h-5 max-sm:w-5" />} aria-expanded={open === f.patientId} onClick={() => setOpen(open === f.patientId ? null : f.patientId)}><span className="max-sm:sr-only">Reschedule</span></Button>
                     </div>
                   </div>
                   {open === f.patientId && <Reschedule row={f} today={d.today} onDone={() => setOpen(null)} />}

@@ -13,10 +13,7 @@ export function SkeletonRows({ rows = 5, className }: { rows?: number; className
 export function EmptyState({ icon, title, body, action, className }: { icon: ReactNode; title: string; body?: ReactNode; action?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-14 text-center', className)}>
-      <div className="relative mb-4">
-        <div className="absolute inset-0 -m-3 rounded-full bg-blue/10 blur-xl" />
-        <div className="fhq-float relative flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-surface-2 text-blue-bright">{icon}</div>
-      </div>
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-sage/70 text-blue-bright">{icon}</div>
       <p className="text-sm font-semibold text-fg">{title}</p>
       {body && <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-fg-2">{body}</p>}
       {action && <div className="mt-4">{action}</div>}

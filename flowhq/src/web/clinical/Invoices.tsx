@@ -10,7 +10,7 @@ import { api, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { cn } from '../lib/cn';
 import { Page, StickyBar } from '../components/layout/Shell';
-import { Button, Card, CardHeader, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
+import { AddButton, Button, Card, CardHeader, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
 import { EmptyState, ErrorState, Modal, SkeletonRows, useToast } from '../components/ui/feedback';
 import { Field, PatientPicker, PaymentBadge, errText, fdate, newKey, rs, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
 import { DoctorFilter, useDoctorFilter } from './DoctorFilter';
@@ -26,7 +26,7 @@ function List() {
   const list = useQuery({ queryKey: ['invoices', ws.id, dq, status, doc.key], queryFn: () => api<Invoice[]>(wsPath(ws.id, `/invoices?q=${encodeURIComponent(dq)}${status !== 'all' ? `&status=${status}` : ''}${doc.qs}`)) });
   const due = (list.data || []).reduce((t, i) => t + i.balancePaise, 0);
   return (
-    <Page title="Invoices & payments" subtitle={list.data ? `${list.data.length} invoice${list.data.length === 1 ? '' : 's'} · ${rs(due)} outstanding` : ' '} wide actions={<Link to={`/w/${ws.id}/invoices/new`} className="max-md:w-full"><Button className="max-md:w-full" variant="primary" icon={<Plus className="h-4 w-4" />}>New invoice</Button></Link>}>
+    <Page title="Invoices & payments" subtitle={list.data ? `${list.data.length} invoice${list.data.length === 1 ? '' : 's'} · ${rs(due)} outstanding` : ' '} wide compactActions actions={<Link to={`/w/${ws.id}/invoices/new`}><AddButton label="New invoice" icon={<Plus className="h-4 w-4" />} /></Link>}>
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
         <div className="w-full max-w-xs max-md:max-w-none"><Input icon={<Search className="h-4 w-4" />} placeholder="Search invoice no., patient or ID" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search invoices" /></div>
         <div className="hscroll hscroll-bleed w-full items-center md:contents"><DoctorFilter f={doc} />

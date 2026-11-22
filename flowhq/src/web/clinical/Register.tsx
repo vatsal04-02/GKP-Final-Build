@@ -8,7 +8,7 @@ import { api, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { cn } from '../lib/cn';
 import { Page } from '../components/layout/Shell';
-import { Avatar, Badge, Button, Card, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
+import { AddButton, Avatar, Badge, Button, Card, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
 import { Drawer, EmptyState, ErrorState, Modal, Sheet, SkeletonRows, useToast } from '../components/ui/feedback';
 import { initials } from '../lib/format';
 import { Field, PaymentBadge, errText, fdate, rs, useDebounced, useToday } from './common';
@@ -88,8 +88,8 @@ export default function Register() {
   const stats = list.data ? ([['Patients', String(list.data.total), ''], ['Billed', rs(list.data.totals.billedPaise), ''], ['Collected', rs(list.data.totals.paidPaise), 'text-ok'], ['Balance due', rs(list.data.totals.outstandingPaise), list.data.totals.outstandingPaise > 0 ? 'text-bad' : '']] as const) : null;
 
   return (<>
-    <Page className="print:hidden" title="Patient register" subtitle={<><span className="max-sm:hidden">Every patient the clinic has registered, with billing and attendance at a glance.</span><span className="sm:hidden">{list.data ? `${list.data.total} registered` : ' '}</span></>} wide
-      actions={<><Button className="max-md:order-first max-md:w-full md:order-last" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Add patient</Button><Button className="max-md:hidden" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} loading={exporting}>Export CSV</Button><Button className="max-md:hidden" variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={printAll} loading={printing} title="Prints every patient in this view, one per line, on A4 landscape">Print register</Button></>}>
+    <Page className="print:hidden" title="Patient register" subtitle={<><span className="max-sm:hidden">Every patient the clinic has registered, with billing and attendance at a glance.</span><span className="sm:hidden">{list.data ? `${list.data.total} registered` : ' '}</span></>} wide compactActions
+      actions={<><Button className="max-md:hidden" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} loading={exporting}>Export CSV</Button><Button className="max-md:hidden" variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={printAll} loading={printing} title="Prints every patient in this view, one per line, on A4 landscape">Print register</Button><AddButton label="Add patient" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)} /></>}>
       <section aria-label="Register totals" className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4 lg:gap-3 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">
         {stats ? stats.map(([k, v, c]) => <Card key={k} className="px-4 py-3 max-lg:rounded-none max-lg:border-0 max-lg:shadow-none"><div className="label">{k}</div><div className={cn('num-display mt-1 text-[24px] font-semibold leading-tight', c)}>{v}</div></Card>)
           : Array.from({ length: 4 }, (_, i) => <Card key={i} className="px-4 py-3 max-lg:rounded-none max-lg:border-0 max-lg:shadow-none"><div className="skeleton h-3 w-16" /><div className="skeleton mt-2 h-6 w-24" /></Card>)}
@@ -124,12 +124,12 @@ export default function Register() {
         ) : (
           <>
           {/* Phone: one card per patient instead of a 14-column table */}
-          <ul className="divide-y divide-line/60 md:hidden" aria-label="Patients">
+          <ul className="md:hidden" aria-label="Patients">
             {list.data.rows.map((p) => {
               const call = p.phone ? p.phone.replace(/[^\d+]/g, '') : '';
               const due = !!p.followUpOn && p.followUpOn <= today && p.status === 'Active';
               return (
-                <li key={p.patientId} className="flex items-stretch">
+                <li key={p.patientId} className="relative flex items-stretch after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-line/70 last:after:hidden">
                   <Link to={`/w/${ws.id}/patients/${p.patientId}`} className={cn('row-tap flex min-w-0 flex-1 items-center gap-3 py-3 pl-4', !call && 'pr-4', p.patientId === patientId && 'bg-sage/60')}>
                     <Avatar text={initials(p.name)} size={40} tone={p.status === 'Active' ? 'blue' : 'neutral'} />
                     <div className="min-w-0 flex-1">

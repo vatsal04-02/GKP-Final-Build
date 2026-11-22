@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, Menu, Plus, Search, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Ellipsis, LogOut, Plus, Search, Trash2 } from 'lucide-react';
 import { MOBILE_TABS, MODULES, NAV_GROUPS } from '@core/registry';
 import { BRAND } from '@core/brand';
 import type { ModuleKey } from '@core/domain';
@@ -213,21 +213,22 @@ function useTabs(): Tab[] {
 }
 
 function TabBar({ tabs, moreActive, onMore, hidden }: { tabs: Tab[]; moreActive: boolean; onMore: () => void; hidden: boolean }) {
-  const pill = (active: boolean) => cn('flex h-8 w-16 items-center justify-center rounded-full transition-colors duration-200', active ? 'bg-sage' : 'bg-transparent');
-  const base = 'press flex min-w-0 flex-1 flex-col items-center gap-0.5 pt-2 text-[11px] leading-4';
+  // A capsule that floats above the content, as the tab bar does on iPhone. The selected tab is a soft capsule of its own; labels stay (HIG: tab bars).
+  const base = 'press flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[11px] leading-4 transition-colors duration-200';
+  const tone = (on: boolean) => (on ? 'bg-sage text-blue-bright font-semibold' : 'font-medium text-fg-2');
   return (
-    <nav aria-label="Primary" className={cn('fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] transition-transform duration-200 lg:hidden print:hidden', hidden && 'translate-y-full')}>
-      <div className="mx-auto flex h-[var(--tabbar-h)] max-w-xl items-start px-1">
+    <nav aria-label="Primary" className={cn('pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out lg:hidden print:hidden', hidden && 'translate-y-[150%]')}>
+      <div className="pointer-events-auto mx-auto flex h-16 max-w-md items-stretch gap-0.5 rounded-[32px] border border-line/70 bg-surface/90 p-1 shadow-[0_10px_30px_-12px_rgb(38_52_49/0.45)] backdrop-blur-xl">
         {tabs.map((t) => {
           const Icon = icon(t.iconName);
           return (
-            <NavLink key={t.module} to={t.to} end={t.end} className={({ isActive }) => cn(base, isActive ? 'font-semibold text-blue-bright' : 'font-medium text-fg-2')}>
-              {({ isActive }) => (<><span className={pill(isActive)}><Icon className="h-[22px] w-[22px]" strokeWidth={isActive ? 2.25 : 1.75} /></span><span className="max-w-full truncate px-0.5">{t.label}</span></>)}
+            <NavLink key={t.module} to={t.to} end={t.end} className={({ isActive }) => cn(base, tone(isActive))}>
+              {({ isActive }) => (<><Icon className="h-[22px] w-[22px]" strokeWidth={isActive ? 2.25 : 1.75} /><span className="max-w-full truncate px-0.5">{t.label}</span></>)}
             </NavLink>
           );
         })}
-        <button type="button" onClick={onMore} aria-haspopup="dialog" className={cn(base, '!min-h-0', moreActive ? 'font-semibold text-blue-bright' : 'font-medium text-fg-2')}>
-          <span className={pill(moreActive)}><Menu className="h-[22px] w-[22px]" strokeWidth={moreActive ? 2.25 : 1.75} /></span><span>More</span>
+        <button type="button" onClick={onMore} aria-haspopup="dialog" className={cn(base, '!min-h-0', tone(moreActive))}>
+          <Ellipsis className="h-[22px] w-[22px]" strokeWidth={moreActive ? 2.25 : 1.75} /><span>More</span>
         </button>
       </div>
     </nav>
@@ -295,11 +296,12 @@ export function Shell({ children }: { children: ReactNode }) {
   const [palette, setPalette] = useState(false);
   const [more, setMore] = useState(false);
   const [typing, setTyping] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const nav = useNavigate();
   const loc = useLocation();
   const qc = useQueryClient();
   const tabs = useTabs();
-  useEffect(() => setMore(false), [loc.pathname]);
+  useEffect(() => { setMore(false); setScrolled(false); }, [loc.pathname]);
   // The tab bar steps out of the way while a text field has the keyboard, so it never sits on top of what is being typed.
   useEffect(() => {
     const isText = (el: EventTarget | null) => { const t = el as HTMLElement | null; if (!t?.tagName) return false; if (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return true; return t.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'file', 'range'].includes((t as HTMLInputElement).type); };
@@ -310,7 +312,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }, []);
   const inThread = /\/inbox\/[^/]+/.test(loc.pathname);
   const barHidden = typing || inThread;
-  useEffect(() => { document.documentElement.style.setProperty('--tabbar-h', barHidden ? '0px' : '64px'); }, [barHidden]);
+  useEffect(() => { document.documentElement.style.setProperty('--tabbar-h', barHidden ? '0px' : '80px'); }, [barHidden]);
   const moreActive = !tabs.some((t) => loc.pathname === t.to || (!t.end && loc.pathname.startsWith(`${t.to}/`)));
   // keyboard: ⌘K / Ctrl+K palette, "g" + key to jump to a page
   const shortcuts = useMemo(() => Object.fromEntries(ws.modules.filter((m) => MODULES[m].shortcut && MODULES[m].page !== null).map((m) => [MODULES[m].shortcut!.split(' ')[1], pagePath(ws.id, m)])), [ws]);
@@ -334,13 +336,12 @@ export function Shell({ children }: { children: ReactNode }) {
         {/* Soft leaf imprint behind the page, top right. Decorative only. */}
         <div aria-hidden="true" className="pointer-events-none absolute right-0 top-14 z-0 hidden h-[460px] w-[370px] bg-[url('/brand/leaf.svg')] bg-contain bg-right-top bg-no-repeat opacity-70 lg:block print:hidden" />
         {/* Phone and tablet: a slim bar with the clinic mark, search and the account. */}
-        <header className="safe-t z-20 shrink-0 border-b border-line bg-bg lg:hidden print:hidden">
+        <header className={cn('safe-t z-20 shrink-0 border-b bg-bg transition-colors duration-200 lg:hidden print:hidden', scrolled ? 'border-line' : 'border-transparent')}>
           <div className="flex h-[52px] items-center gap-1 px-4">
             <Logo compact />
             <div className="ml-auto flex items-center gap-1">
-              {ws.demo && <Badge tone="blue" className="mr-1">Demo</Badge>}
               <button type="button" onClick={() => setPalette(true)} aria-label="Search" className="press flex h-11 w-11 items-center justify-center rounded-full text-fg hover:bg-surface"><Search className="h-5 w-5" /></button>
-              <button type="button" onClick={() => setMore(true)} aria-label="Account and menu" className="press -mr-1 flex h-11 w-11 items-center justify-center rounded-full"><Avatar text={initials(me.user.name)} size={32} tone="blue" /></button>
+              <button type="button" onClick={() => setMore(true)} aria-label="Account and menu" className="press -mr-1 flex h-11 w-11 items-center justify-center rounded-full"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue text-[12.5px] font-semibold text-white">{initials(me.user.name)}</span></button>
             </div>
           </div>
         </header>
@@ -359,7 +360,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <button onClick={signOut} className="rounded-lg p-2 text-fg-2 transition-colors hover:bg-surface hover:text-fg" aria-label="Sign out"><LogOut className="h-[18px] w-[18px]" /></button>
           </div>
         </header>
-        <main className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] lg:pb-0 print:overflow-visible print:pb-0">{children}</main>
+        <main onScroll={(e) => { const s = e.currentTarget.scrollTop > 6; if (s !== scrolled) setScrolled(s); }} className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] transition-[padding] duration-300 lg:pb-0 print:overflow-visible print:pb-0">{children}</main>
       </div>
       <TabBar tabs={tabs} moreActive={moreActive} onMore={() => setMore(true)} hidden={barHidden} />
       <MoreSheet open={more} onClose={() => setMore(false)} tabs={tabs} onSearch={() => setPalette(true)} onSignOut={signOut} />
@@ -374,12 +375,12 @@ export function StickyBar({ children, className }: { children: ReactNode; classN
 }
 
 // The page frame: a title row, then the content. On a phone the title is smaller, the actions fill the width and the margins are 16px.
-export function Page({ title, subtitle, actions, children, wide, className }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; wide?: boolean; className?: string }) {
+export function Page({ title, subtitle, actions, children, wide, className, compactActions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; wide?: boolean; className?: string; compactActions?: boolean }) {
   return (
     <div className={cn('mx-auto w-full animate-fade-up px-4 pb-8 pt-4 md:px-8 md:pb-12 md:pt-6', wide ? 'max-w-[1680px]' : 'max-w-[1400px]', className)}>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 md:mb-6">
-        <div className="min-w-0"><h1 className="text-[24px] font-semibold tracking-tight md:text-[26px]">{title}</h1>{subtitle && <p className="mt-1 text-[13.5px] text-fg-2 md:text-sm">{subtitle}</p>}</div>
-        {actions && <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">{actions}</div>}
+      <div className={cn('mb-4 flex justify-between gap-x-4 gap-y-3 md:mb-6', compactActions ? 'items-start md:flex-wrap md:items-end' : 'flex-wrap items-end')}>
+        <div className="min-w-0"><h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] md:text-[26px] md:font-semibold md:tracking-tight">{title}</h1>{subtitle && <p className="mt-1.5 text-[14.5px] text-fg-2 md:mt-1 md:text-sm">{subtitle}</p>}</div>
+        {actions && <div className={cn('flex items-center gap-2 md:w-auto', compactActions ? 'shrink-0 pt-0.5 md:pt-0' : 'w-full flex-wrap')}>{actions}</div>}
       </div>
       {children}
     </div>

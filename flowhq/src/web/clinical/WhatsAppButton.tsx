@@ -11,8 +11,8 @@ export function WhatsAppButton({ phone, name, message, size = 'md', label = 'Wha
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`Message ${name} on WhatsApp`} title="Opens WhatsApp with a message ready to send"
       className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-lg font-semibold text-white transition-colors hover:brightness-95',
-        'bg-[#0E7A6D]', 'press justify-center', size === 'sm' ? 'h-10 px-3.5 text-[13px] sm:h-8 sm:px-3 sm:text-[12.5px]' : size === 'lg' ? 'h-12 px-5 text-[15px] sm:h-10 sm:px-4 sm:text-sm' : 'h-11 px-4 text-[14px] sm:h-9 sm:px-3.5 sm:text-[13px]', className)}>
-      <MessageCircle className={size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'} />{label}
+        'bg-[#0E7A6D]', 'press justify-center', size === 'sm' ? 'h-11 w-11 !rounded-full px-0 text-[13px] sm:h-8 sm:w-auto sm:!rounded-lg sm:px-3 sm:text-[12.5px]' : size === 'lg' ? 'h-12 px-5 text-[15px] sm:h-10 sm:px-4 sm:text-sm' : 'h-11 px-4 text-[14px] sm:h-9 sm:px-3.5 sm:text-[13px]', className)}>
+      <MessageCircle className={size === 'sm' ? 'h-5 w-5 sm:h-3.5 sm:w-3.5' : 'h-4 w-4'} />{size === 'sm' ? <span className="max-sm:sr-only">{label}</span> : label}
     </a>
   );
 }

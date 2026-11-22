@@ -46,9 +46,9 @@ export default function Contacts() {
           <EmptyState icon={<Users className="h-5 w-5" />} title={tt('No {contact.plural|lower} found')} body={q || status !== 'all' || stage || attention ? 'Try clearing the filters.' : tt('New {contact.plural|lower} appear here automatically from your channels.')} />
         ) : (
           <>
-          <ul className="divide-y divide-line/60 md:hidden" aria-label={t('contact.plural')}>
+          <ul className="md:hidden" aria-label={t('contact.plural')}>
             {list.data.map((c) => (
-              <li key={c.id}>
+              <li key={c.id} className="relative after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-line/70 last:after:hidden">
                 <button type="button" onClick={() => nav(`/w/${ws.id}/contacts/${c.id}`)} className={cn('row-tap flex w-full items-center gap-3 px-4 py-3 text-left', c.id === contactId && 'bg-blue/[0.06]')}>
                   <Avatar text={initials(c.name)} size={40} />
                   <div className="min-w-0 flex-1">
