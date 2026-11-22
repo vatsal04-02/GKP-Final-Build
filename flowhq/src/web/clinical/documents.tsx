@@ -10,11 +10,12 @@ function Letterhead({ clinic, title, big }: { clinic: ClinicProfile; title?: str
     <header className={big ? 'keep mb-2' : 'keep'}>
       <div className="flex items-center gap-4">
         <img src="/brand/gkp-logo-light.png" alt="" className="h-[20mm] w-auto shrink-0" />
-        <div className="min-w-0 flex-1 text-center">
-          <h1 className={big ? 'font-display text-[26pt] font-extrabold uppercase leading-[1.05] tracking-wide' : 'font-display text-[18pt] font-bold uppercase leading-none tracking-wide'}>{clinic.name}</h1>
-          <div className={big ? 'mt-2 text-[10.5pt] font-bold uppercase tracking-[0.2em]' : 'mt-1 text-[9pt] font-semibold uppercase tracking-[0.2em]'}>Consultant Physiotherapist</div>
-        </div>
-        {big && <img src="/brand/clinic-cross.jpg" alt="" className="h-[20mm] w-auto shrink-0 mix-blend-multiply" />}
+        {big
+          ? <img src="/brand/gkp-name-cross.png" alt={clinic.name} className="h-auto max-h-[26mm] min-w-0 flex-1 object-contain" />
+          : <div className="min-w-0 flex-1 text-center">
+              <h1 className="font-display text-[18pt] font-bold uppercase leading-none tracking-wide">{clinic.name}</h1>
+              <div className="mt-1 text-[9pt] font-semibold uppercase tracking-[0.2em]">Consultant Physiotherapist</div>
+            </div>}
       </div>
       {clinic.clinicians.length > 0 && (
         <div className="mt-3 flex flex-wrap justify-between gap-x-6 gap-y-2 text-[9.5pt] leading-tight">
