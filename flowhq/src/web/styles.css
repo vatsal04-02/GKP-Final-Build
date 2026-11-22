@@ -86,13 +86,17 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
   button:not([role='switch']), [role='tab'], select, input:not([type='checkbox']):not([type='radio']) { min-height: 44px; }
   /* 16px text in fields: anything smaller makes iOS zoom the page when a field is focused. */
   input:not([type='checkbox']):not([type='radio']), select, textarea { font-size: 16px !important; }
+  textarea { resize: none; }
+  /* iOS draws date and time fields at their own width and centres the value: keep them inside their column and left-aligned like the other fields. */
+  input[type='date'], input[type='time'], input[type='month'], input[type='datetime-local'] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; text-align: left; }
+  input[type='date']::-webkit-date-and-time-value, input[type='time']::-webkit-date-and-time-value, input[type='month']::-webkit-date-and-time-value { text-align: left; margin: 0; }
 }
 
 /* ---------------------------------------------------------------------------------------------------------------------------------
    Phone and tablet (below lg). The sidebar becomes a bottom tab bar and a "More" sheet; dialogs and drawers become bottom sheets.
    Everything here is scoped to small screens or touch, so the desktop layout is untouched.
    --------------------------------------------------------------------------------------------------------------------------------- */
-:root { --tabbar-h: 80px; }
+:root { --tabbar-h: 72px; }
 html { -webkit-tap-highlight-color: transparent; }
 a, button, [role='tab'], summary, label { touch-action: manipulation; }
 @keyframes fhq-sheet-up { from { transform: translateY(100%); } to { transform: none; } }

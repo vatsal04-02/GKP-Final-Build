@@ -1,5 +1,6 @@
 // The app shell: cream sidebar, green active states, top bar with command palette, theme and account.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Ellipsis, LogOut, Plus, Search, Trash2 } from 'lucide-react';
@@ -312,7 +313,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }, []);
   const inThread = /\/inbox\/[^/]+/.test(loc.pathname);
   const barHidden = typing || inThread;
-  useEffect(() => { document.documentElement.style.setProperty('--tabbar-h', barHidden ? '0px' : '80px'); }, [barHidden]);
+  useEffect(() => { document.documentElement.style.setProperty('--tabbar-h', barHidden ? '0px' : '72px'); }, [barHidden]);
   const moreActive = !tabs.some((t) => loc.pathname === t.to || (!t.end && loc.pathname.startsWith(`${t.to}/`)));
   // keyboard: ⌘K / Ctrl+K palette, "g" + key to jump to a page
   const shortcuts = useMemo(() => Object.fromEntries(ws.modules.filter((m) => MODULES[m].shortcut && MODULES[m].page !== null).map((m) => [MODULES[m].shortcut!.split(' ')[1], pagePath(ws.id, m)])), [ws]);
@@ -360,7 +361,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <button onClick={signOut} className="rounded-lg p-2 text-fg-2 transition-colors hover:bg-surface hover:text-fg" aria-label="Sign out"><LogOut className="h-[18px] w-[18px]" /></button>
           </div>
         </header>
-        <main onScroll={(e) => { const s = e.currentTarget.scrollTop > 6; if (s !== scrolled) setScrolled(s); }} className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] transition-[padding] duration-300 lg:pb-0 print:overflow-visible print:pb-0">{children}</main>
+        <main onScroll={(e) => { const s = e.currentTarget.scrollTop > 6; if (s !== scrolled) setScrolled(s); }} className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(var(--tabbar-h)+max(0.625rem,env(safe-area-inset-bottom)))] transition-[padding] duration-300 lg:pb-0 print:overflow-visible print:pb-0">{children}</main>
       </div>
       <TabBar tabs={tabs} moreActive={moreActive} onMore={() => setMore(true)} hidden={barHidden} />
       <MoreSheet open={more} onClose={() => setMore(false)} tabs={tabs} onSearch={() => setPalette(true)} onSignOut={signOut} />
@@ -371,7 +372,14 @@ export function Shell({ children }: { children: ReactNode }) {
 
 // A bar pinned just above the tab bar on a phone, for the one action a long form is for (Save). Hidden from tablets up.
 export function StickyBar({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('sticky bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-20 -mx-4 mt-5 flex items-center gap-3 border-t border-line bg-bg px-4 py-3 md:hidden print:hidden', className)}>{children}</div>;
+  // position:fixed, like the tab bar, so both are measured from the same edge of the screen (a sticky bar inside the scroller drifted on iOS Safari). The spacer keeps the last field clear of it.
+  return (
+    <>
+      <div aria-hidden="true" className="h-[72px] md:hidden print:hidden" />
+      {/* Portalled to <body>: the page above has an entrance animation, and an animated ancestor makes a fixed child scroll with the page. */}
+      {createPortal(<div className={cn('fixed inset-x-3 bottom-[calc(max(0.625rem,env(safe-area-inset-bottom))+var(--tabbar-h))] z-20 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-line/70 bg-surface/95 p-2.5 shadow-[0_10px_30px_-12px_rgb(38_52_49/0.45)] backdrop-blur-xl transition-[bottom] duration-300 md:hidden print:hidden', className)}>{children}</div>, document.body)}
+    </>
+  );
 }
 
 // The page frame: a title row, then the content. On a phone the title is smaller, the actions fill the width and the margins are 16px.

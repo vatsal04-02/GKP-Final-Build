@@ -147,7 +147,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastCtx.Provider value={push}>
       {children}
       {/* On a phone the toast sits just above the tab bar and spans the width; on a wide screen it is a small card at the corner. */}
-      <div className="pointer-events-none fixed inset-x-4 bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+12px)] z-[60] flex flex-col gap-2 sm:left-auto sm:right-4 lg:bottom-4" aria-live="polite">
+      <div className="pointer-events-none fixed inset-x-4 bottom-[calc(max(0.625rem,env(safe-area-inset-bottom))+var(--tabbar-h)+8px)] z-[60] flex flex-col gap-2 sm:left-auto sm:right-4 lg:bottom-4" aria-live="polite">
         {list.map((t) => (
           <div key={t.id} className={cn('pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border border-line bg-elevated px-3.5 py-3 text-[13px] shadow-pop sm:w-auto sm:max-w-sm', t.leaving ? 'fhq-toast-out' : 'fhq-toast-in')}>
             {t.tone === 'ok' ? <CheckCircle2 className="mt-px h-4 w-4 shrink-0 text-ok" /> : <AlertTriangle className="mt-px h-4 w-4 shrink-0 text-bad" />}
