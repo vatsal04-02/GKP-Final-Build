@@ -13,7 +13,7 @@ function Letterhead({ clinic, title, big }: { clinic: ClinicProfile; title?: str
     <header className={big ? 'keep mb-2' : 'keep'}>
       <div className="flex items-center gap-6">
         {big
-          ? <div className="shrink-0 text-center"><img src={`/brand/gkp-logo-light.png?v=${BRAND_V}`} alt="" className="h-[20mm] w-auto" /><div className="mt-0.5 text-[9.5pt] font-bold uppercase tracking-[0.18em]">Since 2004</div></div>
+          ? <div className="shrink-0 text-center"><img src={`/brand/gkp-logo-light.png?v=${BRAND_V}`} alt="" className="h-[18mm] w-auto" /><div className="mt-0.5 text-[9.5pt] font-bold uppercase tracking-[0.18em]">Since 2004</div></div>
           : <img src={`/brand/gkp-logo-light.png?v=${BRAND_V}`} alt="" className="h-[20mm] w-auto shrink-0" />}
         {big
           ? <img src={`/brand/gkp-name-cross.png?v=${BRAND_V}`} alt={clinic.name} className="h-auto max-h-[26mm] min-w-0 flex-1 object-contain" />
@@ -64,18 +64,18 @@ function Footer({ clinic, rich }: { clinic: ClinicProfile; rich?: boolean }) {
 const Cell = ({ k, v }: { k: string; v: ReactNode }) => <div className="flex min-w-0 gap-1.5 border-b border-dotted border-black/60 pb-0.5"><span className="shrink-0 font-semibold">{k}</span><span className="min-w-0 break-words">{v || ''}</span></div>;
 function Section({ label, text }: { label: string; text: string }) {
   return (
-    <section className="keep mt-4">
+    <section className="keep mt-3">
       <h3 className="border-b border-black pb-1 text-[10pt] font-bold uppercase tracking-wider">{label}</h3>
-      <div className="min-h-[9mm] whitespace-pre-wrap break-words pt-2 text-[11pt] leading-loose">{text}</div>
+      <div className="min-h-[8mm] whitespace-pre-wrap break-words pt-1.5 text-[11pt] leading-loose">{text}</div>
     </section>
   );
 }
 
 export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic: ClinicProfile; rx: Prescription; patient: Pick<Patient, 'name' | 'patientId' | 'age' | 'sex' | 'phone'>; imageUrl: (imageId: string) => string }) {
   return (
-    <article className="paper flex flex-col text-[10.5pt] print:min-h-[250mm]" aria-label="Prescription">
+    <article className="paper flex flex-col text-[10.5pt] print:min-h-[235mm]" aria-label="Prescription">
       <Letterhead clinic={clinic} big />
-      <div className="keep mt-6 grid grid-cols-2 gap-x-5 gap-y-4 text-[10.5pt] print:grid-cols-[1.6fr_1fr_1fr] sm:grid-cols-[1.6fr_1fr_1fr]">
+      <div className="keep mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-[10.5pt] print:grid-cols-[1.6fr_1fr_1fr] sm:grid-cols-[1.6fr_1fr_1fr]">
         <Cell k="Name:" v={patient.name} /><Cell k="Age / Sex:" v={[patient.age, patient.sex].filter(Boolean).join(' / ')} /><Cell k="Date:" v={fdate(rx.rxDate)} />
         <Cell k="Patient ID:" v={patient.patientId} /><Cell k="Contact:" v={patient.phone} /><Cell k="Rx No.:" v={rx.rxId} />
         <Cell k="B.P.:" v={rx.bp} /><div className="col-span-2"><Cell k="Other vitals:" v={rx.vitals} /></div>
@@ -93,8 +93,8 @@ export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic
           </div>
         </section>
       )}
-      <div className="keep mt-auto pt-8">
-        <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[10mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div></div></div>
+      <div className="keep mt-auto pt-3">
+        <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[8mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div></div></div>
         <Footer clinic={clinic} rich />
       </div>
     </article>
