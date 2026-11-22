@@ -189,7 +189,7 @@ function Editor({ rxId }: { rxId: string }) {
 
   return (
     <Page title={isNew ? 'New prescription' : `Prescription ${rxId}`} subtitle={isNew ? 'Treatment sheet' : `Version ${version ?? ''} · last saved ${saved.data?.createdAt ? new Date(saved.data.createdAt).toLocaleString('en-IN', { timeZone: ws.timezone, dateStyle: 'medium', timeStyle: 'short' }) : ''} by ${saved.data?.createdBy || '—'}`}
-      actions={<><Link to={`/w/${ws.id}/prescriptions`}><Button variant="ghost">Back to list</Button></Link>
+      actions={<><Link to={`/w/${ws.id}/prescriptions`} className="max-md:hidden"><Button variant="ghost">Back to list</Button></Link>
         <Button className="max-md:hidden" icon={<Printer className="h-4 w-4" />} disabled={!canPrint} title={canPrint ? undefined : isNew ? 'Save the prescription first' : 'Save your changes first so the printout matches the saved record'} onClick={() => nav(`/w/${ws.id}/print/prescription/${rxId}?auto=1`)}>Print Prescription</Button>
         <Button className="max-md:hidden" variant="primary" loading={save.isPending} disabled={!dirty || !f.patient} onClick={() => save.mutate()}>{isNew ? 'Save prescription' : 'Save changes'}</Button></>}>
       {conflict && <div role="alert" className="mb-4 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px]">Someone else saved a newer version of this prescription. <button className="font-medium underline" onClick={() => { loaded.current = ''; qc.invalidateQueries({ queryKey: ['rx', ws.id, rxId] }).then(() => saved.refetch()); }}>Reload it</button> and apply your edit again (what you typed here will be replaced).</div>}

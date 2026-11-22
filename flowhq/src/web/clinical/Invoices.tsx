@@ -126,7 +126,7 @@ function Editor() {
   const shown = (k: string) => errs[k];
 
   return (
-    <Page title="New invoice" subtitle="Saved invoices are final. A mistake is corrected by voiding the invoice and issuing a new one." wide actions={<><Link to={`/w/${ws.id}/invoices`}><Button variant="ghost">Cancel</Button></Link><Button className="max-md:hidden" variant="primary" loading={save.isPending} onClick={submit}>Save invoice</Button></>}>
+    <Page title="New invoice" subtitle="Saved invoices are final. A mistake is corrected by voiding the invoice and issuing a new one." wide actions={<><Link to={`/w/${ws.id}/invoices`} className="max-md:hidden"><Button variant="ghost">Cancel</Button></Link><Button className="max-md:hidden" variant="primary" loading={save.isPending} onClick={submit}>Save invoice</Button></>}>
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <Card className="p-4 sm:p-5">
           <div className="grid gap-3.5 sm:grid-cols-[1fr_180px]">
@@ -204,7 +204,7 @@ function Detail({ no }: { no: string }) {
   const i = q.data;
   return (
     <Page title={`Invoice ${i.invoiceNo}`} subtitle={<span className="flex flex-wrap items-center gap-2"><PaymentBadge status={i.paymentStatus} /><span>{fdate(i.date)} ·{' '}<Link className="underline" to={`/w/${ws.id}/patients/${i.patientId}`}>{i.patientName || i.patientId}</Link></span></span>}
-      actions={<><Link to={`/w/${ws.id}/invoices`}><Button variant="ghost">All invoices</Button></Link>
+      actions={<><Link to={`/w/${ws.id}/invoices`} className="max-md:hidden"><Button variant="ghost">All invoices</Button></Link>
         <Button icon={<Printer className="h-4 w-4" />} onClick={() => nav(`/w/${ws.id}/print/invoice/${i.invoiceNo}?auto=1`)}>Print invoice</Button>
         {i.status === 'issued' && i.balancePaise > 0 && <Button className="max-md:order-first max-md:w-full" variant="primary" onClick={() => setPay(true)}>Record payment</Button>}</>}>
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Ellipsis, LogOut, Plus, Search, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Ellipsis, LogOut, Plus, Search, Trash2 } from 'lucide-react';
 import { MOBILE_TABS, MODULES, NAV_GROUPS } from '@core/registry';
 import { BRAND } from '@core/brand';
 import type { ModuleKey } from '@core/domain';
@@ -314,6 +314,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const inThread = /\/inbox\/[^/]+/.test(loc.pathname);
   const barHidden = typing || inThread;
   useEffect(() => { document.documentElement.style.setProperty('--tabbar-h', barHidden ? '0px' : '72px'); }, [barHidden]);
+  // Every page that is not one of the main tabs gets a Back button in place of the logo (an open conversation has its own).
+  const atRoot = tabs.some((t) => loc.pathname.replace(/\/$/, '') === t.to);
+  const showBack = !atRoot && !inThread;
+  const goBack = () => { const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0; if (idx > 0) nav(-1); else nav(pagePath(ws.id, 'dashboard')); };
   const moreActive = !tabs.some((t) => loc.pathname === t.to || (!t.end && loc.pathname.startsWith(`${t.to}/`)));
   // keyboard: ⌘K / Ctrl+K palette, "g" + key to jump to a page
   const shortcuts = useMemo(() => Object.fromEntries(ws.modules.filter((m) => MODULES[m].shortcut && MODULES[m].page !== null).map((m) => [MODULES[m].shortcut!.split(' ')[1], pagePath(ws.id, m)])), [ws]);
@@ -339,7 +343,9 @@ export function Shell({ children }: { children: ReactNode }) {
         {/* Phone and tablet: a slim bar with the clinic mark, search and the account. */}
         <header className={cn('safe-t z-20 shrink-0 border-b bg-bg transition-colors duration-200 lg:hidden print:hidden', scrolled ? 'border-line' : 'border-transparent')}>
           <div className="flex h-[52px] items-center gap-1 px-4">
-            <Logo compact />
+            {showBack
+              ? <button type="button" onClick={goBack} aria-label="Go back" className="press -ml-2 flex h-11 items-center gap-0.5 rounded-full pl-1.5 pr-3 text-[17px] font-medium text-blue-bright hover:bg-surface"><ChevronLeft className="h-6 w-6" strokeWidth={2.25} />Back</button>
+              : <Logo compact />}
             <div className="ml-auto flex items-center gap-1">
               <button type="button" onClick={() => setPalette(true)} aria-label="Search" className="press flex h-11 w-11 items-center justify-center rounded-full text-fg hover:bg-surface"><Search className="h-5 w-5" /></button>
               <button type="button" onClick={() => setMore(true)} aria-label="Account and menu" className="press -mr-1 flex h-11 w-11 items-center justify-center rounded-full"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue text-[12.5px] font-semibold text-white">{initials(me.user.name)}</span></button>
