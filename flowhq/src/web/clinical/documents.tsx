@@ -16,7 +16,7 @@ function Letterhead({ clinic, title }: { clinic: ClinicProfile; title?: string }
         </div>
       </div>
       {clinic.clinicians.length > 0 && (
-        <div className="mt-3 flex justify-between gap-6 text-[9.5pt] leading-tight">
+        <div className="mt-3 flex flex-wrap justify-between gap-x-6 gap-y-2 text-[9.5pt] leading-tight">
           {clinic.clinicians.map((c, i) => (
             <div key={c.regNo || c.name} className={i % 2 ? 'text-right' : ''}>
               <div className="text-[11.5pt] font-bold">{c.name}</div>
@@ -58,7 +58,7 @@ export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic
   return (
     <article className="paper text-[10.5pt]" aria-label="Prescription">
       <Letterhead clinic={clinic} />
-      <div className="keep mt-3 grid grid-cols-[1.6fr_1fr_1fr] gap-x-5 gap-y-2 text-[10.5pt]">
+      <div className="keep mt-3 grid grid-cols-2 gap-x-5 gap-y-2 text-[10.5pt] print:grid-cols-[1.6fr_1fr_1fr] sm:grid-cols-[1.6fr_1fr_1fr]">
         <Cell k="Name:" v={patient.name} /><Cell k="Age / Sex:" v={[patient.age, patient.sex].filter(Boolean).join(' / ')} /><Cell k="Date:" v={fdate(rx.rxDate)} />
         <Cell k="Patient ID:" v={patient.patientId} /><Cell k="Contact:" v={patient.phone} /><Cell k="Rx No.:" v={rx.rxId} />
         <Cell k="B.P.:" v={rx.bp} /><div className="col-span-2"><Cell k="Other vitals:" v={rx.vitals} /></div>
@@ -77,7 +77,7 @@ export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic
         </section>
       )}
       <div className="keep mt-4">
-        <div className="flex justify-end"><div className="w-[68mm] text-center text-[10pt]"><div className="h-[10mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div><div className="text-[9pt]">Treating Physiotherapist{physio?.regNo ? ` · Regd. No. ${physio.regNo}` : ''}</div></div></div>
+        <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[10mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div><div className="text-[9pt]">Treating Physiotherapist{physio?.regNo ? ` · Regd. No. ${physio.regNo}` : ''}</div></div></div>
         <Footer clinic={clinic} />
       </div>
     </article>
@@ -91,7 +91,7 @@ export function InvoiceDocument({ clinic, inv, patient }: { clinic: ClinicProfil
   return (
     <article className="paper relative text-[10.5pt]" aria-label="Invoice">
       <Letterhead clinic={clinic} title="Invoice" />
-      <div className="keep mt-3 grid grid-cols-2 gap-x-6 gap-y-2">
+      <div className="keep mt-3 grid grid-cols-1 gap-x-6 gap-y-2 print:grid-cols-2 sm:grid-cols-2">
         <Cell k="Invoice No.:" v={<b>{inv.invoiceNo}</b>} /><Cell k="Date:" v={fdate(inv.date)} />
         <Cell k="Patient:" v={patient.name} /><Cell k="Patient ID:" v={patient.patientId} />
         <Cell k="Contact:" v={patient.phone} /><Cell k="Address:" v={patient.address} />
@@ -119,7 +119,7 @@ export function InvoiceDocument({ clinic, inv, patient }: { clinic: ClinicProfil
       </div>
       {inv.notes && <p className="keep mt-3 whitespace-pre-wrap text-[10pt]"><b>Notes:</b> {inv.notes}</p>}
       <div className="keep mt-10">
-        <div className="flex justify-end"><div className="w-[68mm] text-center text-[10pt]"><div className="h-[14mm] border-b border-black" /><div className="mt-1 font-semibold">Authorised Signatory</div><div className="text-[9pt]">{clinic.name}</div></div></div>
+        <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[14mm] border-b border-black" /><div className="mt-1 font-semibold">Authorised Signatory</div><div className="text-[9pt]">{clinic.name}</div></div></div>
         <Footer clinic={clinic} />
       </div>
       {inv.status === 'void' && <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center"><span className="-rotate-[24deg] border-[6px] border-black/25 px-8 py-2 font-display text-[64pt] font-bold tracking-widest text-black/20">VOID</span></div>}

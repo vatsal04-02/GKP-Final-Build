@@ -124,7 +124,14 @@ export default function PaymentManagement() {
           <div className="ml-auto w-full max-w-xs sm:w-72"><Input placeholder="Search reference, name, number or UTR" value={text} onChange={(e) => setText(e.target.value)} aria-label="Search payments" /></div>
         </div>
         {q.isLoading ? <Card><SkeletonRows rows={6} /></Card> : q.isError ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card> : (
-          <Card className="overflow-hidden"><div className="max-h-[calc(100vh-26rem)] min-h-40 overflow-auto"><table className="w-full min-w-[980px] border-separate border-spacing-0 text-[13px]">
+          <Card className="overflow-hidden">
+          <ul className="divide-y divide-line/60 md:hidden" aria-label="Payments">{q.data!.rows.map((r) => (
+            <li key={r.id}><button type="button" onClick={() => setOpen(r.id)} className="block w-full px-4 py-3 text-left active:bg-sage/40">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium">{r.patient.name || '—'}</div><div className="text-[12px] text-muted"><span className="font-mono">{r.booking_reference}</span> · {r.appointment ? `${r.appointment.date} · ${r.appointment.start_time}` : '—'}</div></div><div className="shrink-0 text-right"><div className="num text-[14px] font-medium">₹{r.amount_inr}</div></div></div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1"><Badge tone={TONE[r.status] || 'neutral'}>{LABEL[r.status] || r.status}</Badge>{r.flags.length > 0 && <span className="text-[12px] text-bad">{r.flags.length} flag{r.flags.length === 1 ? '' : 's'}</span>}{r.refund_due && <span className="text-[12px] font-semibold text-bad">refund due</span>}{r.patient.phone && <span className="num text-[12px] text-muted">{r.patient.phone}</span>}</div>
+              {r.utr && <div className="mt-1 font-mono text-[12px] text-fg-2">UTR {r.utr}</div>}
+            </button></li>))}</ul>
+          <div className="hidden max-h-[calc(100vh-26rem)] min-h-40 overflow-auto md:block"><table className="w-full min-w-[980px] border-separate border-spacing-0 text-[13px]">
             <thead><tr>{['Booking reference', 'Patient', 'Contact', 'Appointment', 'Amount', 'Payment status', 'UTR', 'Submitted', 'Actions'].map((x) => <th key={x} className="sticky top-0 z-[2] whitespace-nowrap border-b border-line-2 bg-[rgb(235_242_238)] px-3 py-2.5 text-left text-[12.5px] font-semibold">{x}</th>)}</tr></thead>
             <tbody>{q.data!.rows.map((r) => (
               <tr key={r.id} className="cursor-pointer even:bg-surface-2/60 hover:bg-surface-2" onClick={() => setOpen(r.id)}>

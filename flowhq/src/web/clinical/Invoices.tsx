@@ -34,7 +34,13 @@ function List() {
       </div>
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<Receipt className="h-5 w-5" />} title="No invoices found" body={q || status !== 'all' ? 'Try clearing the filters.' : 'Create the first invoice for a registered patient.'} /> : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-[13px]">
+          <>
+          <ul className="divide-y divide-line/60 md:hidden" aria-label="Invoices">{list.data.map((i) => (
+            <li key={i.invoiceNo}><Link to={`/w/${ws.id}/invoices/${i.invoiceNo}`} className="block px-4 py-3 active:bg-sage/40">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium">{i.patientName || '—'}</div><div className="text-[12px] text-muted"><span className="font-mono">{i.invoiceNo}</span> · {fdate(i.date)}</div></div><PaymentBadge status={i.paymentStatus} /></div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[12px]"><div><div className="text-muted">Total</div><div className="num">{rs(i.totalPaise)}</div></div><div><div className="text-muted">Paid</div><div className="num">{rs(i.paidPaise)}</div></div><div><div className="text-muted">Balance</div><div className={cn('num font-medium', i.balancePaise > 0 && 'text-bad')}>{rs(i.balancePaise)}</div></div></div>
+            </Link></li>))}</ul>
+          <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[820px] text-left text-[13px]">
             <thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 font-semibold">Invoice</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 text-right font-semibold">Total</th><th className="px-3 py-2.5 text-right font-semibold">Paid</th><th className="px-3 py-2.5 text-right font-semibold">Balance</th><th className="px-3 py-2.5 font-semibold">Status</th></tr></thead>
             <tbody>{list.data.map((i) => (
               <tr key={i.invoiceNo} onClick={() => nav(`/w/${ws.id}/invoices/${i.invoiceNo}`)} className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-sage/30">
@@ -43,6 +49,7 @@ function List() {
                 <td className="num px-3 py-2.5 text-right">{rs(i.totalPaise)}</td><td className="num px-3 py-2.5 text-right">{rs(i.paidPaise)}</td><td className={cn('num px-3 py-2.5 text-right font-medium', i.balancePaise > 0 && 'text-bad')}>{rs(i.balancePaise)}</td><td className="px-3 py-2.5"><PaymentBadge status={i.paymentStatus} /></td>
               </tr>))}</tbody>
           </table></div>
+          </>
         )}
       </Card>
     </Page>

@@ -78,7 +78,14 @@ function List() {
       <div className="mb-3 flex flex-wrap items-center gap-2.5"><div className="w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search patient, ID or diagnosis" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search prescriptions" /></div><DoctorFilter f={doc} /></div>
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="No prescriptions yet" body={q ? 'Try a different search.' : 'Create the first treatment sheet from here or from a patient’s record.'} /> : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-[13px]">
+          <>
+          <ul className="divide-y divide-line/60 md:hidden" aria-label="Prescriptions">{list.data.map((r) => (
+            <li key={r.rxId}><Link to={`/w/${ws.id}/prescriptions/${r.rxId}`} className="block px-4 py-3 active:bg-sage/40">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium">{r.patientName || '—'}</div><div className="text-[12px] text-muted"><span className="font-mono">{r.rxId}</span> · {fdate(r.rxDate)}</div></div>{r.images.length > 0 && <span className="shrink-0 text-[12px] text-muted">{r.images.length} photo{r.images.length === 1 ? '' : 's'}</span>}</div>
+              {r.diagnosis && <div className="mt-1 line-clamp-2 text-[13px] text-fg-2">{r.diagnosis}</div>}
+              {r.treatingPhysio && <div className="mt-1 text-[12px] text-muted">{r.treatingPhysio}</div>}
+            </Link></li>))}</ul>
+          <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[760px] text-left text-[13px]">
             <thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 font-semibold">Rx</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 font-semibold">Diagnosis</th><th className="px-3 py-2.5 font-semibold">Physiotherapist</th><th className="px-3 py-2.5 font-semibold">Photos</th></tr></thead>
             <tbody>{list.data.map((r) => (
               <tr key={r.rxId} onClick={() => nav(`/w/${ws.id}/prescriptions/${r.rxId}`)} className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-sage/30">
@@ -87,6 +94,7 @@ function List() {
                 <td className="max-w-[320px] truncate px-3 py-2.5">{r.diagnosis || '—'}</td><td className="px-3 py-2.5">{r.treatingPhysio || '—'}</td><td className="px-3 py-2.5">{r.images.length || '—'}</td>
               </tr>))}</tbody>
           </table></div>
+          </>
         )}
       </Card>
     </Page>

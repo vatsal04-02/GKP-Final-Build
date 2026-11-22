@@ -81,7 +81,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 
 /* ---- Printing: A4 documents (prescription, invoice) and the register ---- */
 .paper { background: #fff; color: #111; }
-@media screen { .paper { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 14mm 15mm; box-shadow: var(--shadow-card); border: 1px solid rgb(var(--line)); } }
+@media screen { .paper { width: 210mm; max-width: 100%; min-height: 297mm; margin: 0 auto; padding: 14mm 15mm; box-shadow: var(--shadow-card); border: 1px solid rgb(var(--line)); overflow-wrap: anywhere; } }
+/* Phone: the sheet shrinks to the screen instead of running off it (print is unaffected: A4 rules above and below) */
+@media screen and (max-width: 640px) { .paper { min-height: 0; padding: 5mm 4mm; } }
 @page { size: A4; margin: 10mm; }
 /* The patient register prints on A4 landscape (named page), one patient per line, headings repeated on every page, rows never split. */
 @page register { size: A4 landscape; margin: 8mm; }

@@ -119,7 +119,32 @@ export default function Register() {
         {list.isLoading ? <SkeletonRows rows={10} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.rows.length ? (
           <EmptyState icon={<UserRound className="h-5 w-5" />} title="No patients found" body={q || status || followUp || owing || dated ? 'Try clearing the search or filters.' : 'Register the first patient to start the register.'} action={!q && !status && !dated ? <Button variant="primary" onClick={() => setCreating(true)} icon={<Plus className="h-4 w-4" />}>Add patient</Button> : undefined} />
         ) : (
-          <div className="max-h-[calc(100vh-20rem)] min-h-[320px] overflow-auto">
+          <>
+          {/* Phone: one card per patient instead of a 14-column table */}
+          <ul className="divide-y divide-line/60 md:hidden" aria-label="Patients">
+            {list.data.rows.map((p) => (
+              <li key={p.patientId}>
+                <Link to={`/w/${ws.id}/patients/${p.patientId}`} className={cn('block px-4 py-3 active:bg-sage/40', p.patientId === patientId && 'bg-sage/60')}>
+                  <div className="flex items-start gap-3">
+                    <Avatar text={initials(p.name)} size={36} tone={p.status === 'Active' ? 'blue' : 'neutral'} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium text-fg">{p.name}</div><div className="text-[12px] text-muted">{[p.age, p.sex].filter(Boolean).join(' · ') || '—'} · <span className="font-mono">{p.patientId}</span></div></div><Badge tone={p.status === 'Active' ? 'green' : 'neutral'}>{p.status}</Badge></div>
+                      {p.phone && <div className="num mt-1 text-[13px] text-fg-2">{p.phone}</div>}
+                      {p.mainComplaint && <div className="mt-1 line-clamp-2 text-[13px] text-fg-2">{p.mainComplaint}</div>}
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-[12px]">
+                        <div><div className="text-muted">Billed</div><div className="num">{rs(p.billedPaise)}</div></div>
+                        <div><div className="text-muted">Paid</div><div className="num">{rs(p.paidPaise)}</div></div>
+                        <div><div className="text-muted">Balance</div><div className={cn('num font-medium', p.outstandingPaise > 0 ? 'text-bad' : 'text-muted')}>{rs(p.outstandingPaise)}</div></div>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-x-3 text-[12px] text-muted"><span>Last visit {fdate(p.latestVisit)}</span>{p.followUpOn && <span className={cn(p.followUpOn <= today && p.status === 'Active' && 'font-medium text-warn')}>Follow-up {fdate(p.followUpOn)}</span>}</div>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+            <li className="bg-[rgb(235_242_238)] px-4 py-2.5 text-[12.5px] font-semibold">{list.data.total} patient{list.data.total === 1 ? '' : 's'} · Billed {rs(list.data.totals.billedPaise)} · Paid {rs(list.data.totals.paidPaise)} · Due {rs(list.data.totals.outstandingPaise)}</li>
+          </ul>
+          <div className="hidden max-h-[calc(100vh-20rem)] min-h-[320px] overflow-auto md:block">
             <table className={cn('w-full border-separate border-spacing-0 text-[13px]', weekOn ? 'min-w-[1500px]' : 'min-w-[1280px]')}>
               <thead><tr>
                 {th('S.No', 'serial', 'w-14')}{th('Patient ID', undefined, 'w-[104px]')}{th('Name', 'name', 'min-w-[170px]')}{th('Address & contact', undefined, 'min-w-[210px]')}{th('Referred by')}{th('Occupation')}{th('Disorder / complaint')}{th('Registered', 'registered')}
@@ -156,6 +181,7 @@ export default function Register() {
               </tr></tfoot>
             </table>
           </div>
+          </>
         )}
       </Card>
       {list.data && pages > 1 && (

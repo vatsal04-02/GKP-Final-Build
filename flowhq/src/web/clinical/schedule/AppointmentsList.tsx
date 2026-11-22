@@ -36,7 +36,13 @@ export function AppointmentsList({ doctors, onOpen }: { doctors: Doctor[]; onOpe
         {q.isLoading ? <SkeletonRows rows={7} /> : q.isError ? <ErrorState error={q.error} retry={() => q.refetch()} />
           : !q.data!.rows.length ? <EmptyState icon={<CalendarX className="h-5 w-5" />} title="No appointments match" body="Try another day or clear a filter." />
           : (
-            <div className="max-h-[calc(100vh-24rem)] min-h-[260px] overflow-auto">
+            <>
+            <ul className="divide-y divide-line/60 md:hidden" aria-label="Appointments">{q.data!.rows.map((a) => (
+              <li key={a.id}><button type="button" onClick={() => onOpen(a.booking_reference)} className="block w-full px-4 py-3 text-left active:bg-sage/40">
+                <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium">{a.patient.name || 'Unnamed'}</div><div className="text-[12.5px] text-fg-2">{a.start_time}–{a.end_time} · {fdateLong(a.date)}</div></div><StatusBadge status={a.status} /></div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted"><span>{a.doctor_name || '—'}{a.shift ? <span className="capitalize"> · {a.shift}</span> : null}</span>{a.patient.phone && <span className="num">{a.patient.phone}</span>}<SourceBadge source={a.source} /></div>
+              </button></li>))}</ul>
+            <div className="hidden max-h-[calc(100vh-24rem)] min-h-[260px] overflow-auto md:block">
               <table className="w-full min-w-[860px] border-separate border-spacing-0 text-[13px]">
                 <thead><tr>{['When', 'Patient', 'Doctor', 'Status', 'Booked by', 'Reference'].map((h) => <th key={h} className="sticky top-0 z-[2] whitespace-nowrap border-b border-line-2 bg-[rgb(235_242_238)] px-3 py-2.5 text-left text-[12.5px] font-semibold text-fg-2">{h}</th>)}</tr></thead>
                 <tbody>{q.data!.rows.map((a) => (
@@ -49,7 +55,8 @@ export function AppointmentsList({ doctors, onOpen }: { doctors: Doctor[]; onOpe
                     <td className="whitespace-nowrap border-b border-line/60 px-3 py-2.5 font-mono text-[12px] text-fg-2">{a.booking_reference}</td>
                   </tr>))}</tbody>
               </table>
-            </div>)}
+            </div>
+            </>)}
       </Card>
     </div>
   );
