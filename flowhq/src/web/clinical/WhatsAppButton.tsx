@@ -11,7 +11,7 @@ export function WhatsAppButton({ phone, name, message, size = 'md', label = 'Wha
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`Message ${name} on WhatsApp`} title="Opens WhatsApp with a message ready to send"
       className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-lg font-semibold text-white transition-colors hover:brightness-95',
-        'bg-[#0E7A6D]', size === 'sm' ? 'h-8 px-3 text-[12.5px]' : size === 'lg' ? 'h-10 px-4 text-sm' : 'h-9 px-3.5 text-[13px]', className)}>
+        'bg-[#0E7A6D]', 'press justify-center', size === 'sm' ? 'h-10 px-3.5 text-[13px] sm:h-8 sm:px-3 sm:text-[12.5px]' : size === 'lg' ? 'h-12 px-5 text-[15px] sm:h-10 sm:px-4 sm:text-sm' : 'h-11 px-4 text-[14px] sm:h-9 sm:px-3.5 sm:text-[13px]', className)}>
       <MessageCircle className={size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'} />{label}
     </a>
   );

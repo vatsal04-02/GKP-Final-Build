@@ -19,13 +19,13 @@ export function DayCalendar({ doctors, onOpen, onBook }: { doctors: Doctor[]; on
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="flex items-center gap-1"><Button size="sm" variant="ghost" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}><ChevronLeft className="h-4 w-4" /></Button>
-          <Input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-[10.5rem]" aria-label="Day" />
+        <h3 className="font-display text-xl font-semibold sm:order-last sm:ml-auto max-sm:w-full">{fdateLong(date)}</h3>
+        <div className="flex items-center gap-1 max-sm:flex-1"><Button size="sm" variant="ghost" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}><ChevronLeft className="h-4 w-4" /></Button>
+          <Input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-[10.5rem] max-sm:min-w-0 max-sm:flex-1" aria-label="Day" />
           <Button size="sm" variant="ghost" aria-label="Next day" onClick={() => setDate(addDays(date, 1))}><ChevronRight className="h-4 w-4" /></Button></div>
         <Button size="sm" variant={date === today ? 'subtle' : 'secondary'} onClick={() => setDate(today)}>Today</Button>
-        <div className="w-[12rem]"><Select value={doctor} onChange={(e) => setDoctor(e.target.value)} aria-label="Doctor"><option value="">All doctors</option>{doctors.map((x) => <option key={x.doctor_id} value={x.doctor_id}>{x.name}</option>)}</Select></div>
-        <Segmented value={shift} onChange={setShift} options={[{ value: 'all', label: 'Both shifts' }, { value: 'morning', label: 'Morning' }, { value: 'evening', label: 'Evening' }]} />
-        <h3 className="ml-auto font-display text-xl font-semibold">{fdateLong(date)}</h3>
+        <div className="w-[12rem] max-sm:w-full"><Select value={doctor} onChange={(e) => setDoctor(e.target.value)} aria-label="Doctor"><option value="">All doctors</option>{doctors.map((x) => <option key={x.doctor_id} value={x.doctor_id}>{x.name}</option>)}</Select></div>
+        <Segmented fill value={shift} onChange={setShift} options={[{ value: 'all', label: 'Both shifts' }, { value: 'morning', label: 'Morning' }, { value: 'evening', label: 'Evening' }]} />
       </div>
 
       {q.isLoading ? <Card className="p-5"><Skeleton className="h-6 w-1/3" /><Skeleton className="mt-4 h-40 w-full" /></Card>
@@ -39,7 +39,7 @@ export function DayCalendar({ doctors, onOpen, onBook }: { doctors: Doctor[]; on
               <header className="flex items-baseline justify-between gap-3 border-b border-line bg-surface-2 px-4 py-3"><div><h4 className="font-display text-[15px] font-semibold">{name}</h4><div className="mt-0.5 text-[12.5px] capitalize text-fg-2">{sh} shift · <span className="num">{slots[0]!.start_time}–{slots[slots.length - 1]!.end_time}</span></div></div>
                 <span className="num text-[13px] text-fg-2"><span className="font-semibold text-ok">{slots.filter((s) => s.state === 'open').length}</span> free</span></header>
               <ul className="divide-y divide-line">{slots.map((s) => (
-                <li key={s.slot_id} className="flex items-center gap-3 px-4 py-2.5">
+                <li key={s.slot_id} className="flex min-h-[52px] items-center gap-3 px-4 py-2.5">
                   <span className="num w-12 shrink-0 text-[13px] font-semibold text-fg-2">{s.start_time}</span>
                   <div className="min-w-0 flex-1">
                     {s.appointments.length ? s.appointments.map((a) => (

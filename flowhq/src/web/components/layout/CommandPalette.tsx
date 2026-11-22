@@ -45,13 +45,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   };
   let lastGroup = '';
   return (
-    <Modal open={open} onClose={onClose} label="Command palette">
-      <div className="flex items-center gap-2.5 border-b border-line px-4">
+    <Modal open={open} onClose={onClose} label="Command palette" full>
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 pt-[env(safe-area-inset-top)] sm:pt-0">
         <Search className="h-4 w-4 text-muted" />
-        <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder={tt('Type a page, {contact.singular|lower} or command…')} className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted" aria-label="Search" />
-        <Kbd>esc</Kbd>
+        <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder={tt('Search pages, {contact.plural|lower}…')} className="h-14 flex-1 bg-transparent text-base outline-none !shadow-none focus-visible:outline-none placeholder:text-muted sm:h-12 sm:text-sm" aria-label="Search" enterKeyHint="go" autoComplete="off" />
+        <span className="hidden sm:inline"><Kbd>esc</Kbd></span>
+        <button type="button" onClick={onClose} className="press -mr-2 px-3 text-[15px] font-medium text-blue-bright sm:hidden">Cancel</button>
       </div>
-      <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 sm:max-h-[52vh] sm:flex-none" role="listbox">
         {!items.length && <p className="px-3 py-8 text-center text-sm text-fg-2">Nothing matches “{q}”.</p>}
         {items.map((it, k) => {
           const head = it.group !== lastGroup ? (lastGroup = it.group) : null;
@@ -59,7 +60,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <div key={it.id}>
               {head && <div className="label px-2.5 pb-1 pt-2.5">{head}</div>}
               <button role="option" aria-selected={k === i} onMouseEnter={() => setI(k)} onClick={it.run}
-                className={cn('flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors', k === i ? 'bg-blue/[0.12] text-fg shadow-[inset_0_0_0_1px_rgb(var(--blue)/0.25)]' : 'text-fg-2')}>
+                className={cn('flex min-h-[48px] w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[15px] transition-colors sm:min-h-0 sm:text-sm', k === i ? 'bg-blue/[0.12] text-fg shadow-[inset_0_0_0_1px_rgb(var(--blue)/0.25)]' : 'text-fg-2')}>
                 <span className={k === i ? 'text-blue-bright' : 'text-muted'}>{it.icon}</span>
                 <span className="flex-1 truncate">{it.label}</span>
                 {it.hint && <span className="max-w-[45%] truncate text-xs text-muted">{it.hint}</span>}
@@ -69,7 +70,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           );
         })}
       </div>
-      <div className="flex items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-muted"><span><Kbd>↑</Kbd> <Kbd>↓</Kbd> move</span><span><Kbd>↵</Kbd> open</span><span className="ml-auto">Tip: press <Kbd>g</Kbd> then a letter to jump</span></div>
+      <div className="hidden items-center gap-3 border-t border-line px-4 py-2 text-[12px] text-muted sm:flex"><span><Kbd>↑</Kbd> <Kbd>↓</Kbd> move</span><span><Kbd>↵</Kbd> open</span><span className="ml-auto">Tip: press <Kbd>g</Kbd> then a letter to jump</span></div>
     </Modal>
   );
 }

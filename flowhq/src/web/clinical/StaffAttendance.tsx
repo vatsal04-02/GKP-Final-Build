@@ -30,32 +30,60 @@ export default function StaffAttendance() {
   const { ws } = useWs();
   const qc = useQueryClient(); const today = useToday();
   const [week, setWeek] = useState(() => mondayOf(today)); const [tab, setTab] = useState<'week' | 'month'>('week'); const [month, setMonth] = useState(() => today.slice(0, 7));
-  const [target, setTarget] = useState<Target | null>(null); const [adding, setAdding] = useState(false); const [removing, setRemoving] = useState<Row | null>(null); const [settingPw, setSettingPw] = useState(false);
+  const [day, setDay] = useState(''); const [target, setTarget] = useState<Target | null>(null); const [adding, setAdding] = useState(false); const [removing, setRemoving] = useState<Row | null>(null); const [settingPw, setSettingPw] = useState(false);
   const data = useQuery({ queryKey: ['staff-att', ws.id, 'week', week], queryFn: () => api<StaffWeek>(wsPath(ws.id, `/staff-attendance?week=${week}`)), placeholderData: keepPreviousData });
   const sum = useQuery({ queryKey: ['staff-att', ws.id, 'month', month], queryFn: () => api<StaffMonth>(wsPath(ws.id, `/staff-attendance/month?month=${month}`)), enabled: tab === 'month', placeholderData: keepPreviousData });
   const refresh = () => qc.invalidateQueries({ queryKey: ['staff-att', ws.id] });
   const w = data.data; const rows = w?.rows || [];
   const count = (d: string) => rows.filter((r) => { const s = r.cells[d]?.status; return s === 'Present' || s === 'Half day'; }).length;
+  const sel = w && (w.days.includes(day) ? day : w.days.includes(today) ? today : w.days[0]! > today ? w.days[0]! : w.days[w.days.length - 1]!);
   const nav = tab === 'week'
-    ? <div className="flex items-center gap-1"><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[150px] text-center text-sm font-medium">{fdate(week)} – {fdate(addDays(week, 6))}</span><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button><Button size="sm" onClick={() => setWeek(mondayOf(today))}>This week</Button></div>
-    : <div className="flex items-center gap-1"><Button size="sm" variant="ghost" onClick={() => setMonth(addMonths(month, -1))} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[150px] text-center text-sm font-medium">{monthLabel(month)}</span><Button size="sm" variant="ghost" onClick={() => setMonth(addMonths(month, 1))} aria-label="Next month" disabled={month >= today.slice(0, 7)}><ChevronRight className="h-4 w-4" /></Button><Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>This month</Button></div>;
+    ? <div className="flex w-full items-center gap-1 md:w-auto"><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[150px] flex-1 text-center text-sm font-medium md:flex-none">{fdate(week)} – {fdate(addDays(week, 6))}</span><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button><Button size="sm" onClick={() => setWeek(mondayOf(today))}>This week</Button></div>
+    : <div className="flex w-full items-center gap-1 md:w-auto"><Button size="sm" variant="ghost" onClick={() => setMonth(addMonths(month, -1))} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[150px] flex-1 text-center text-sm font-medium md:flex-none">{monthLabel(month)}</span><Button size="sm" variant="ghost" onClick={() => setMonth(addMonths(month, 1))} aria-label="Next month" disabled={month >= today.slice(0, 7)}><ChevronRight className="h-4 w-4" /></Button><Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>This month</Button></div>;
 
   return (
-    <Page title="Staff attendance" subtitle="Mark each person Present, Absent, Half day or Leave. Every change is saved to the clinic's records and logged." wide actions={nav}>
+    <Page title="Staff attendance" subtitle={<><span className="max-md:hidden">Mark each person Present, Absent, Half day or Leave. Every change is saved to the clinic's records and logged.</span><span className="md:hidden">Pick a day, then tap a person to mark them.</span></>} wide actions={nav}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="hscroll hscroll-bleed w-full items-center md:flex md:w-auto md:flex-wrap md:overflow-visible md:gap-3">
           <Segmented value={tab} onChange={setTab} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month summary' }]} />
           {w?.canManageTeam && <Button size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>Add staff</Button>}
           {w?.canSetLockPassword && <Button size="sm" icon={<KeyRound className="h-4 w-4" />} onClick={() => setSettingPw(true)}>{w.lockPasswordSet ? 'Change edit password' : 'Set edit password'}</Button>}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-fg-2">{STAFF_STATUSES.map((s) => <span key={s} className="inline-flex items-center gap-1"><span className={cn('inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-semibold', LOOK[s].cls)}>{LOOK[s].glyph}</span>{s}</span>)}</div>
+        <div className="hidden flex-wrap items-center gap-1.5 text-[12px] text-fg-2 md:flex">{STAFF_STATUSES.map((s) => <span key={s} className="inline-flex items-center gap-1"><span className={cn('inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-semibold', LOOK[s].cls)}>{LOOK[s].glyph}</span>{s}</span>)}</div>
       </div>
 
       {w && !w.lockPasswordSet && <p className="mb-3 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-[13px] text-fg-2" role="status"><Lock className="mt-0.5 h-4 w-4 shrink-0 text-warn" /><span>A marked day is locked, and no edit password has been set yet, so nobody can change a mark. {w.canSetLockPassword ? 'Use "Set edit password" above so mistakes can be corrected.' : 'Ask the admin to set the attendance edit password.'}</span></p>}
       {tab === 'week' ? (
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none">
           {data.isLoading ? <SkeletonRows rows={6} /> : data.error ? <ErrorState error={data.error} retry={() => data.refetch()} /> : !rows.length ? <EmptyState icon={<UserCheck className="h-5 w-5" />} title="No staff to show" body="People with a FLOW HQ login and the doctors in the clinic details appear here automatically. Use Add staff for anyone else." /> : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="md:hidden">
+              <div className="hscroll hscroll-bleed pb-1 pt-0.5" role="group" aria-label="Day of the week">
+                {w!.days.map((d, i) => (
+                  <button key={d} type="button" onClick={() => setDay(d)} aria-pressed={d === sel} className={cn('press flex h-[64px] w-[54px] flex-col items-center justify-center rounded-2xl border text-center', d === sel ? 'border-blue bg-blue text-white' : 'border-line bg-surface text-fg', d > today && d !== sel && 'opacity-55')}>
+                    <span className={cn('text-[12px]', d === sel ? 'text-white/85' : 'text-fg-2')}>{NAMES[i]}</span>
+                    <span className="num text-[18px] font-semibold leading-tight">{d.slice(8)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center justify-between px-0.5 pb-2 text-[13px] text-fg-2"><span className="font-medium text-fg">{fdate(sel)}{sel === today ? ' · Today' : ''}</span><span><b className="num font-semibold text-ok">{sel ? count(sel) : 0}</b> in</span></div>
+              <ul className="divide-y divide-line/60 rounded-xl border border-line bg-surface" aria-label="Staff">
+                {rows.map((r) => {
+                  const c = sel ? r.cells[sel] : undefined; const future = !!sel && sel > w!.today;
+                  return (
+                    <li key={r.key} className={cn('flex items-center gap-3 py-2 pl-4 pr-3', r.isMe && 'bg-sage/15')}>
+                      <div className="min-w-0 flex-1"><div className="truncate text-[15px] font-medium">{r.name}{r.isMe && <span className="ml-1.5 text-[12px] font-normal text-muted">(you)</span>}</div>{r.former && <div className="text-[12px] text-muted">No longer on the team list</div>}{c?.notes && <div className="truncate text-[12px] text-muted">{c.notes}</div>}</div>
+                      {r.removable && w!.canManageTeam && <button type="button" onClick={() => setRemoving(r)} className="shrink-0 px-1 text-[12.5px] text-muted underline" aria-label={`Remove ${r.name} from the list`}>Remove</button>}
+                      <button type="button" disabled={future || !sel} onClick={() => sel && setTarget({ row: r, date: sel })} aria-label={`${r.name}, ${fdate(sel)}: ${c ? `${c.status}, locked` : 'not marked'}`}
+                        className={cn('press flex h-11 min-w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-xl border text-[14px] font-semibold', c ? `${LOOK[c.status].cls} border-current` : 'border-line-2 bg-surface text-fg', future && 'opacity-50')}>
+                        {c ? <>{c.status}<Lock className="h-3 w-3 opacity-60" aria-hidden /></> : 'Mark'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[760px] border-collapse text-[13px]">
                 <thead><tr>
                   <th className="border-b border-r border-line/70 bg-sage/40 px-3 py-2 text-left text-[12.5px] font-semibold text-fg-2">Staff</th>
@@ -89,16 +117,17 @@ export default function StaffAttendance() {
                 <tfoot><tr className="bg-sage/30 text-[12px] font-semibold"><td className="px-3 py-2">In (present + half day)</td>{w!.days.map((d) => <td key={d} className="num px-1 py-2 text-center">{count(d)}</td>)}</tr></tfoot>
               </table>
             </div>
+            </>
           )}
         </Card>
       ) : (
         <Card className="overflow-hidden">
           {sum.isLoading ? <SkeletonRows rows={6} /> : sum.error ? <ErrorState error={sum.error} retry={() => sum.refetch()} /> : !sum.data?.rows.length ? <EmptyState icon={<UserCheck className="h-5 w-5" />} title="No staff to show" /> : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] border-collapse text-[13px]">
+              <table className="w-full border-collapse text-[13px] md:min-w-[520px]">
                 <thead><tr className="bg-sage/40 text-[12.5px] font-semibold text-fg-2">
                   <th className="border-b border-line/70 px-3 py-2 text-left">Staff</th>
-                  {['Present', 'Half day', 'Absent', 'Leave'].map((h) => <th key={h} className="border-b border-line/70 px-3 py-2 text-right">{h}</th>)}
+                  {['Present', 'Half day', 'Absent', 'Leave'].map((h) => <th key={h} className="border-b border-line/70 px-1.5 py-2 text-right md:px-3">{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {sum.data.rows.map((r) => (
@@ -137,7 +166,7 @@ function MarkDialog({ target, lockSet, canSetPassword, onSetPassword, onClose, o
       <div className="space-y-3.5 p-5">
         <div><h2 className="flex items-center gap-2 text-lg font-semibold"><Lock className="h-4 w-4" />{row.name}</h2><p className="text-[13px] text-fg-2">{fdate(date)} · marked <b>{cur!.status}</b></p></div>
         <p className="text-[13px] text-fg-2">This day is already marked, so it is locked. No attendance edit password has been set yet, so it cannot be changed.{canSetPassword ? ' Set one now to be able to correct marks.' : ' Ask the admin to set the attendance edit password.'}</p>
-        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Close</Button>{canSetPassword && <Button type="button" variant="primary" onClick={onSetPassword}>Set edit password</Button>}</div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" onClick={onClose}>Close</Button>{canSetPassword && <Button type="button" variant="primary" onClick={onSetPassword}>Set edit password</Button>}</div>
       </div>
     </Modal>
   );
@@ -175,7 +204,7 @@ function PasswordDialog({ changing, onClose, onSaved }: { changing: boolean; onC
         <Field label="New password" required hint="At least 8 characters"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" autoFocus={!changing} /></Field>
         <Field label="Type it again" required><Input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></Field>
         {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>{changing ? 'Change password' : 'Set password'}</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>{changing ? 'Change password' : 'Set password'}</Button></div>
       </form>
     </Modal>
   );
@@ -195,7 +224,7 @@ function AddDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
         <div><h2 className="text-lg font-semibold">Add staff</h2><p className="text-[13px] text-fg-2">For people who do not have a FLOW HQ login, such as a receptionist or helper.</p></div>
         <Field label="Name" required><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoFocus placeholder="e.g. Priya Sharma" /></Field>
         {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={add.isPending}>Add</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={add.isPending}>Add</Button></div>
       </form>
     </Modal>
   );
@@ -214,7 +243,7 @@ function RemoveDialog({ row, onClose, onDone }: { row: Row; onClose: () => void;
         <h2 className="text-lg font-semibold">Remove {row.name}?</h2>
         <p className="text-[13px] text-fg-2">They will no longer be listed. Their past attendance stays saved and still shows in the weeks it covers. Adding the same name again brings them back.</p>
         {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Keep</Button><Button type="button" variant="danger" loading={rm.isPending} onClick={() => { setErr(''); rm.mutate(); }}>Remove</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" onClick={onClose}>Keep</Button><Button type="button" variant="danger" loading={rm.isPending} onClick={() => { setErr(''); rm.mutate(); }}>Remove</Button></div>
       </div>
     </Modal>
   );

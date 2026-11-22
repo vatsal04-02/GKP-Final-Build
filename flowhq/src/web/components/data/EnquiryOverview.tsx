@@ -34,7 +34,7 @@ export function EnquiryOverview({ d, days }: { d: Dashboard | undefined; days: s
   return (
     <Card>
       <CardHeader title={tt('{contact.singular} enquiries')} subtitle={`Created ${RANGE[days] || 'in this period'}`} icon={<Target className="h-4 w-4" />}
-        action={<Link to={`${base}/contacts`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">{tt('All {contact.plural|lower}')} <ArrowRight className="h-3 w-3" /></Link>} />
+        action={<Link to={`${base}/contacts`} className="card-link">{tt('All {contact.plural|lower}')} <ArrowRight className="h-3 w-3" /></Link>} />
       <div className="px-4 pb-4 pt-3 sm:px-5">
         {!d ? (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">{Array.from({ length: 5 }, (_, i) => <div key={i}><Skeleton className="h-3 w-20" /><Skeleton className="mt-3 h-7 w-12" /></div>)}</div>
@@ -44,7 +44,7 @@ export function EnquiryOverview({ d, days }: { d: Dashboard | undefined; days: s
             {overdue ? <p className="mt-1.5"><Link to={`${base}/tasks`} className="font-medium text-bad hover:underline">{overdue} earlier {overdue === 1 ? 'enquiry is' : 'enquiries are'} still waiting for a first reply</Link></p> : null}
           </div>
         ) : (
-          <ul className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-5">
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-5 max-md:[&>li:last-child:nth-child(odd)]:col-span-2">
             {tiles.map((t) => (
               <li key={t.key}>
                 <Link to={t.to} title={'hint' in t ? t.hint : undefined} className="block rounded-lg px-2 py-1.5 -mx-2 transition-colors hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-bright">

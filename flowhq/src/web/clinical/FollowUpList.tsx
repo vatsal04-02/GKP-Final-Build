@@ -43,7 +43,7 @@ function Reschedule({ row, today, onDone }: { row: Row; today: string; onDone: (
         ))}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Input type="date" min={today} value={value} onChange={(e) => { setValue(e.target.value); setErr(''); }} aria-label="Pick a date" className="w-[11rem]" />
+        <Input type="date" min={today} value={value} onChange={(e) => { setValue(e.target.value); setErr(''); }} aria-label="Pick a date" className="w-full sm:w-[11rem]" />
         <Button size="sm" variant="primary" loading={save.isPending} onClick={() => go(value)}>Save date</Button>
         <Button size="sm" variant="ghost" disabled={save.isPending} onClick={() => save.mutate('')} title="Remove the follow-up date">Clear</Button>
         <Button size="sm" variant="ghost" onClick={onDone} aria-label="Close"><X className="h-3.5 w-3.5" /></Button>
@@ -60,26 +60,26 @@ export function FollowUpList({ d, base, hasPatients, className }: { d: DoctorSum
   return (
     <Card className={cn('fhq-rise', className)}>
       <CardHeader title="Follow-ups to message" subtitle={d ? (rows.length ? `${overdue ? `${overdue} overdue · ` : ''}${rows.length} in the next 3 days` : 'Nothing due in the next 3 days') : ' '} icon={<CalendarCheck className="h-4 w-4" />}
-        action={hasPatients ? <Link to={`${base}/patients`} className="inline-flex shrink-0 items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">Register <ArrowRight className="h-3 w-3" /></Link> : undefined} />
+        action={hasPatients ? <Link to={`${base}/patients`} className="card-link">Register <ArrowRight className="h-3 w-3" /></Link> : undefined} />
       <div className="px-4 pb-3 pt-1 sm:px-5">
         {!d ? <Skeleton className="h-32" /> : rows.length ? (
           <ul className="divide-y divide-line">
             {rows.map((f) => {
               const due = dueLabel(f, d.today);
               return (
-                <li key={f.patientId} className="py-2.5">
-                  <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-                    <div className="min-w-[10rem] flex-1">
+                <li key={f.patientId} className="py-3 sm:py-2.5">
+                  <div className="flex flex-wrap items-start gap-x-3 gap-y-2.5">
+                    <div className="min-w-0 flex-1 sm:min-w-[10rem]">
                       <Link to={`${base}/patients/${f.patientId}`} className="block break-words text-[13.5px] font-medium leading-snug hover:text-blue-bright">{f.name}</Link>
                       <p className="mt-0.5 break-words text-[12px] text-fg-2">{f.complaint || 'No complaint recorded'}</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                       <Badge tone={due.tone} icon={due.tone === 'red' ? <AlertTriangle className="h-3 w-3" /> : undefined}>{due.text}</Badge>
-                      <span className="num text-[11.5px] text-muted" title="Follow-up date">{fdate(f.followUpOn)}</span>
+                      <span className="num text-[11.5px] text-muted max-sm:hidden" title="Follow-up date">{fdate(f.followUpOn)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <WhatsAppButton size="sm" phone={f.phone} name={f.name} message={(clinic) => followUpMessage({ name: f.name, clinic, followUpOn: f.followUpOn, today: d.today })} />
-                      <Button size="sm" variant="secondary" icon={<CalendarClock className="h-3.5 w-3.5" />} aria-expanded={open === f.patientId} onClick={() => setOpen(open === f.patientId ? null : f.patientId)}>Reschedule</Button>
+                    <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-1.5">
+                      <WhatsAppButton size="sm" className="max-sm:flex-1" phone={f.phone} name={f.name} message={(clinic) => followUpMessage({ name: f.name, clinic, followUpOn: f.followUpOn, today: d.today })} />
+                      <Button size="sm" variant="secondary" className="max-sm:flex-1" icon={<CalendarClock className="h-3.5 w-3.5" />} aria-expanded={open === f.patientId} onClick={() => setOpen(open === f.patientId ? null : f.patientId)}>Reschedule</Button>
                     </div>
                   </div>
                   {open === f.patientId && <Reschedule row={f} today={d.today} onDone={() => setOpen(null)} />}

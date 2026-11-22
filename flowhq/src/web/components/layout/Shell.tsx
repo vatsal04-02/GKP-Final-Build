@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronsUpDown, LogOut, Menu, Plus, Search, Trash2, X } from 'lucide-react';
-import { MODULES, NAV_GROUPS } from '@core/registry';
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, Menu, Plus, Search, Trash2 } from 'lucide-react';
+import { MOBILE_TABS, MODULES, NAV_GROUPS } from '@core/registry';
 import { BRAND } from '@core/brand';
 import type { ModuleKey } from '@core/domain';
 import { useWs } from '../../lib/workspace';
@@ -11,7 +11,7 @@ import { icon } from '../../lib/icons';
 import { api, ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { Avatar, Badge, Button, Input, Kbd } from '../ui/primitives';
-import { Modal, useToast } from '../ui/feedback';
+import { Modal, Sheet, useToast } from '../ui/feedback';
 import { initials } from '../../lib/format';
 import { CommandPalette } from './CommandPalette';
 
@@ -53,7 +53,7 @@ function AddWorkspace({ open, onClose }: { open: boolean; onClose: () => void })
         </div>
         <label className="block"><span className="mb-1.5 block text-[12.5px] text-fg-2">Workspace name</span><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="e.g. Branch 2" aria-invalid={!!err} /></label>
         {err && <p className="text-[12.5px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" variant="primary" loading={busy}>Create workspace</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" variant="primary" loading={busy}>Create workspace</Button></div>
       </form>
     </Modal>
   );
@@ -92,7 +92,7 @@ function RemoveWorkspace({ target, currentId, mainId, onClose }: { target: { id:
         </div>
         <label className="block"><span className="mb-1.5 block text-[12.5px] text-fg-2">Type <b className="font-medium text-fg">{target.name}</b> to confirm</span><Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} /></label>
         {err && <p className="text-[12.5px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" variant="danger" loading={busy} disabled={!match}>Delete workspace</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" variant="danger" loading={busy} disabled={!match}>Delete workspace</Button></div>
       </form>
     </Modal>
   );
@@ -198,14 +198,120 @@ function NavItem({ to, label, iconName, end, onNavigate, shortcut }: { to: strin
   );
 }
 
+// ---- Phone and tablet navigation (below lg): a bottom tab bar for the four places used all day, and a "More" sheet for the rest.
+type Tab = { to: string; label: string; iconName: string; end?: boolean; module: ModuleKey };
+
+function useTabs(): Tab[] {
+  const { ws, tt } = useWs();
+  return useMemo(() => {
+    const on = (m: ModuleKey) => ws.modules.includes(m) && MODULES[m].page !== null;
+    // Home, then the people, the diary and the messages; a workspace without one of them falls back to the closest module it has.
+    const out: Tab[] = [];
+    for (const s of MOBILE_TABS) { const m = s.find(on); if (m && !out.some((t) => t.module === m)) out.push({ to: pagePath(ws.id, m), label: m === 'dashboard' ? 'Home' : tt(MODULES[m].label), iconName: MODULES[m].icon, end: m === 'dashboard', module: m }); }
+    return out;
+  }, [ws, tt]);
+}
+
+function TabBar({ tabs, moreActive, onMore, hidden }: { tabs: Tab[]; moreActive: boolean; onMore: () => void; hidden: boolean }) {
+  const pill = (active: boolean) => cn('flex h-8 w-16 items-center justify-center rounded-full transition-colors duration-200', active ? 'bg-sage' : 'bg-transparent');
+  const base = 'press flex min-w-0 flex-1 flex-col items-center gap-0.5 pt-2 text-[11px] leading-4';
+  return (
+    <nav aria-label="Primary" className={cn('fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] transition-transform duration-200 lg:hidden print:hidden', hidden && 'translate-y-full')}>
+      <div className="mx-auto flex h-[var(--tabbar-h)] max-w-xl items-start px-1">
+        {tabs.map((t) => {
+          const Icon = icon(t.iconName);
+          return (
+            <NavLink key={t.module} to={t.to} end={t.end} className={({ isActive }) => cn(base, isActive ? 'font-semibold text-blue-bright' : 'font-medium text-fg-2')}>
+              {({ isActive }) => (<><span className={pill(isActive)}><Icon className="h-[22px] w-[22px]" strokeWidth={isActive ? 2.25 : 1.75} /></span><span className="max-w-full truncate px-0.5">{t.label}</span></>)}
+            </NavLink>
+          );
+        })}
+        <button type="button" onClick={onMore} aria-haspopup="dialog" className={cn(base, '!min-h-0', moreActive ? 'font-semibold text-blue-bright' : 'font-medium text-fg-2')}>
+          <span className={pill(moreActive)}><Menu className="h-[22px] w-[22px]" strokeWidth={moreActive ? 2.25 : 1.75} /></span><span>More</span>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+function MoreSheet({ open, onClose, tabs, onSearch, onSignOut }: { open: boolean; onClose: () => void; tabs: Tab[]; onSearch: () => void; onSignOut: () => void }) {
+  const { ws, me, tt } = useWs();
+  const nav = useNavigate();
+  const [adding, setAdding] = useState(false);
+  const inTabs = new Set(tabs.map((t) => t.module));
+  const on = (m: ModuleKey) => ws.modules.includes(m) && MODULES[m].page !== null && !inTabs.has(m) && m !== 'dashboard';
+  const grouped = new Set<ModuleKey>(NAV_GROUPS.flatMap((x) => x.modules));
+  const strays = ws.modules.filter((m) => on(m) && !grouped.has(m)).sort((a, b) => MODULES[a].order - MODULES[b].order);
+  const groups = NAV_GROUPS.map((g) => ({ key: g.key, label: g.label, mods: [...g.modules.filter(on), ...(g.key === 'system' ? strays : [])] })).filter((g) => g.mods.length);
+  const industryLabel = (k: string) => me.industries.find((i) => i.key === k)?.label || k;
+  const row = 'press row-tap flex h-[52px] w-full items-center gap-3.5 px-4 text-left text-[15px] font-medium text-fg';
+  return (
+    <>
+      <Sheet open={open} onClose={onClose} title={ws.name} subtitle={`${me.user.name} · ${me.user.role === 'admin' ? 'Administrator' : 'Staff'}${ws.demo ? ' · Demo data' : ''}`}>
+        <button type="button" onClick={() => { onClose(); onSearch(); }} className="press mb-4 flex h-12 w-full items-center gap-2.5 rounded-xl border border-line bg-surface px-3.5 text-left text-[15px] text-muted"><Search className="h-[18px] w-[18px]" />{tt('Search {contact.plural|lower}, pages…')}</button>
+        {groups.map((g) => (
+          <section key={g.key} className="mb-4">
+            <h3 className="label mb-1.5 px-1">{g.label}</h3>
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+              {g.mods.map((m) => {
+                const Icon = icon(MODULES[m].icon);
+                return (
+                  <li key={m}>
+                    <NavLink to={pagePath(ws.id, m)} onClick={onClose} className={({ isActive }) => cn(row, isActive && 'bg-sage/50')}>
+                      <Icon className="h-5 w-5 shrink-0 text-blue-bright" strokeWidth={1.75} /><span className="flex-1 truncate">{tt(MODULES[m].label)}</span><ChevronRight className="h-4 w-4 shrink-0 text-muted" />
+                    </NavLink>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+        {(me.workspaces.length > 1 || me.canCreateWorkspace) && (
+          <section className="mb-4">
+            <h3 className="label mb-1.5 px-1">Workspace</h3>
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+              {me.workspaces.map((w) => (
+                <li key={w.id}>
+                  <button type="button" className={cn(row, 'h-[56px]')} onClick={() => { onClose(); try { localStorage.setItem('fhq-ws', w.id); } catch { /* ignore */ } nav(`/w/${w.id}`); }}>
+                    <Avatar text={w.initials} src={w.logoUrl} size={32} tone={w.id === ws.id ? 'blue' : 'neutral'} />
+                    <span className="min-w-0 flex-1"><span className="block truncate">{w.name}</span><span className="block truncate text-[12.5px] font-normal text-muted">{w.protected ? 'Main workspace' : industryLabel(w.industry)}</span></span>
+                    {w.id === ws.id && <Check className="h-4 w-4 shrink-0 text-blue-bright" />}
+                  </button>
+                </li>
+              ))}
+              {me.canCreateWorkspace && <li><button type="button" className={cn(row, 'text-blue-bright')} onClick={() => { onClose(); setAdding(true); }}><Plus className="h-5 w-5" />Add workspace</button></li>}
+            </ul>
+          </section>
+        )}
+        <ul className="overflow-hidden rounded-2xl border border-line bg-surface"><li><button type="button" className={cn(row, 'text-bad')} onClick={() => { onClose(); onSignOut(); }}><LogOut className="h-5 w-5" strokeWidth={1.75} />Sign out</button></li></ul>
+      </Sheet>
+      <AddWorkspace open={adding} onClose={() => setAdding(false)} />
+    </>
+  );
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { ws, me, tt } = useWs();
   const [palette, setPalette] = useState(false);
-  const [mobile, setMobile] = useState(false);
+  const [more, setMore] = useState(false);
+  const [typing, setTyping] = useState(false);
   const nav = useNavigate();
   const loc = useLocation();
   const qc = useQueryClient();
-  useEffect(() => setMobile(false), [loc.pathname]);
+  const tabs = useTabs();
+  useEffect(() => setMore(false), [loc.pathname]);
+  // The tab bar steps out of the way while a text field has the keyboard, so it never sits on top of what is being typed.
+  useEffect(() => {
+    const isText = (el: EventTarget | null) => { const t = el as HTMLElement | null; if (!t?.tagName) return false; if (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return true; return t.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'file', 'range'].includes((t as HTMLInputElement).type); };
+    const inn = (e: FocusEvent) => setTyping(isText(e.target));
+    const out = () => setTyping(false);
+    document.addEventListener('focusin', inn); document.addEventListener('focusout', out);
+    return () => { document.removeEventListener('focusin', inn); document.removeEventListener('focusout', out); };
+  }, []);
+  const inThread = /\/inbox\/[^/]+/.test(loc.pathname);
+  const barHidden = typing || inThread;
+  useEffect(() => { document.documentElement.style.setProperty('--tabbar-h', barHidden ? '0px' : '64px'); }, [barHidden]);
+  const moreActive = !tabs.some((t) => loc.pathname === t.to || (!t.end && loc.pathname.startsWith(`${t.to}/`)));
   // keyboard: ⌘K / Ctrl+K palette, "g" + key to jump to a page
   const shortcuts = useMemo(() => Object.fromEntries(ws.modules.filter((m) => MODULES[m].shortcut && MODULES[m].page !== null).map((m) => [MODULES[m].shortcut!.split(' ')[1], pagePath(ws.id, m)])), [ws]);
   useEffect(() => {
@@ -224,18 +330,21 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full print:block print:h-auto">
       <aside className="hidden w-[248px] shrink-0 lg:block print:hidden"><Sidebar /></aside>
-      {mobile && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMobile(false)} />
-          <div className="absolute left-0 top-0 h-full w-[264px] animate-fade-up"><Sidebar onNavigate={() => setMobile(false)} /></div>
-        </div>
-      )}
       <div className="relative flex min-w-0 flex-1 flex-col print:block">
         {/* Soft leaf imprint behind the page, top right. Decorative only. */}
-        <div aria-hidden="true" className="pointer-events-none absolute right-0 top-14 z-0 hidden h-[460px] w-[370px] bg-[url('/brand/leaf.svg')] bg-contain bg-right-top bg-no-repeat opacity-70 md:block print:hidden" />
-        <header className="sticky top-0 z-20 flex h-14 print:hidden shrink-0 items-center gap-3 border-b border-line bg-bg/80 px-4 backdrop-blur-xl md:px-6">
-          <button className="rounded-lg p-1.5 text-fg-2 hover:bg-surface lg:hidden" onClick={() => setMobile(true)} aria-label="Open menu">{mobile ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
-          <div className="lg:hidden"><Logo compact /></div>
+        <div aria-hidden="true" className="pointer-events-none absolute right-0 top-14 z-0 hidden h-[460px] w-[370px] bg-[url('/brand/leaf.svg')] bg-contain bg-right-top bg-no-repeat opacity-70 lg:block print:hidden" />
+        {/* Phone and tablet: a slim bar with the clinic mark, search and the account. */}
+        <header className="safe-t z-20 shrink-0 border-b border-line bg-bg lg:hidden print:hidden">
+          <div className="flex h-[52px] items-center gap-1 px-4">
+            <Logo compact />
+            <div className="ml-auto flex items-center gap-1">
+              {ws.demo && <Badge tone="blue" className="mr-1">Demo</Badge>}
+              <button type="button" onClick={() => setPalette(true)} aria-label="Search" className="press flex h-11 w-11 items-center justify-center rounded-full text-fg hover:bg-surface"><Search className="h-5 w-5" /></button>
+              <button type="button" onClick={() => setMore(true)} aria-label="Account and menu" className="press -mr-1 flex h-11 w-11 items-center justify-center rounded-full"><Avatar text={initials(me.user.name)} size={32} tone="blue" /></button>
+            </div>
+          </div>
+        </header>
+        <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center gap-3 border-b border-line bg-bg/80 px-6 backdrop-blur-xl lg:flex print:hidden">
           <button onClick={() => setPalette(true)} aria-label="Search and commands" className="group flex h-9 min-w-0 max-w-md flex-1 items-center gap-2.5 rounded-lg border border-line bg-surface/70 px-3 text-left text-[13px] text-muted transition-colors hover:border-line-2 hover:text-fg-2">
             <Search className="h-4 w-4" />
             <span className="flex-1 truncate">{tt('Search {contact.plural|lower}, conversations, pages…')}</span>
@@ -250,19 +359,27 @@ export function Shell({ children }: { children: ReactNode }) {
             <button onClick={signOut} className="rounded-lg p-2 text-fg-2 transition-colors hover:bg-surface hover:text-fg" aria-label="Sign out"><LogOut className="h-[18px] w-[18px]" /></button>
           </div>
         </header>
-        <main className="relative z-10 min-h-0 flex-1 overflow-y-auto print:overflow-visible">{children}</main>
+        <main className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] lg:pb-0 print:overflow-visible print:pb-0">{children}</main>
       </div>
+      <TabBar tabs={tabs} moreActive={moreActive} onMore={() => setMore(true)} hidden={barHidden} />
+      <MoreSheet open={more} onClose={() => setMore(false)} tabs={tabs} onSearch={() => setPalette(true)} onSignOut={signOut} />
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </div>
   );
 }
 
+// A bar pinned just above the tab bar on a phone, for the one action a long form is for (Save). Hidden from tablets up.
+export function StickyBar({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('sticky bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-20 -mx-4 mt-5 flex items-center gap-3 border-t border-line bg-bg px-4 py-3 md:hidden print:hidden', className)}>{children}</div>;
+}
+
+// The page frame: a title row, then the content. On a phone the title is smaller, the actions fill the width and the margins are 16px.
 export function Page({ title, subtitle, actions, children, wide, className }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; wide?: boolean; className?: string }) {
   return (
-    <div className={cn('mx-auto w-full animate-fade-up px-4 pb-12 pt-6 md:px-8', wide ? 'max-w-[1680px]' : 'max-w-[1400px]', className)}>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0"><h1 className="text-[26px] font-semibold tracking-tight">{title}</h1>{subtitle && <p className="mt-1 text-sm text-fg-2">{subtitle}</p>}</div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    <div className={cn('mx-auto w-full animate-fade-up px-4 pb-8 pt-4 md:px-8 md:pb-12 md:pt-6', wide ? 'max-w-[1680px]' : 'max-w-[1400px]', className)}>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 md:mb-6">
+        <div className="min-w-0"><h1 className="text-[24px] font-semibold tracking-tight md:text-[26px]">{title}</h1>{subtitle && <p className="mt-1 text-[13.5px] text-fg-2 md:text-sm">{subtitle}</p>}</div>
+        {actions && <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">{actions}</div>}
       </div>
       {children}
     </div>

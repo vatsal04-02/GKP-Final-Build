@@ -27,7 +27,7 @@ function Row({ b, base, next }: { b: Booking; base: string; next: boolean }) {
   });
   const canMark = b.needsOutcome && caps.bookingStatusUpdate.length > 0;
   return (
-    <li className="relative py-3 pl-5">
+    <li className="relative py-3.5 pl-5 sm:py-3">
       <span aria-hidden="true" className={cn("absolute left-0 top-[18px] h-2.5 w-2.5 rounded-full border-2 bg-surface", next ? "border-accent bg-accent" : b.needsOutcome ? "border-warn" : "border-blue/50")} />
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <div className="num w-16 shrink-0 pt-px text-[14px] font-semibold">{time(f, b.start)}{next && <span className="mt-0.5 block text-[12.5px] font-semibold text-accent-strong">Next</span>}</div>
@@ -39,7 +39,7 @@ function Row({ b, base, next }: { b: Booking; base: string; next: boolean }) {
         <Badge tone={b.needsOutcome ? 'amber' : TONE[b.status]}>{b.needsOutcome ? 'Needs outcome' : t(`bookingStatus.${b.status}`)}</Badge>
       </div>
       {canMark && (
-        <div className="mt-2 flex flex-wrap gap-1.5 pl-[4.75rem]">
+        <div className="mt-2 flex flex-wrap gap-2 sm:gap-1.5 sm:pl-[4.75rem] max-sm:[&>*]:flex-1">
           {caps.bookingStatusUpdate.includes('completed') && <Button size="sm" variant="subtle" icon={<CalendarCheck2 className="h-3.5 w-3.5" />} loading={mark.isPending && mark.variables === 'completed'} disabled={mark.isPending} onClick={() => mark.mutate('completed')}>Completed</Button>}
           {caps.bookingStatusUpdate.includes('no_show') && <Button size="sm" variant="ghost" icon={<CalendarX2 className="h-3.5 w-3.5" />} loading={mark.isPending && mark.variables === 'no_show'} disabled={mark.isPending} onClick={() => mark.mutate('no_show')}>No-show</Button>}
         </div>
@@ -57,7 +57,7 @@ export function TodaysAppointments({ base, className }: { base: string; classNam
   return (
     <Card className={cn('fhq-rise', className)}>
       <CardHeader title="Today's appointments" subtitle={q.data ? (list.length ? `${list.length} booked today` : 'Nothing booked today') : ' '} icon={<CalendarClock className="h-4 w-4" />}
-        action={<Link to={`${base}/bookings`} className="inline-flex shrink-0 items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">All <ArrowRight className="h-3 w-3" /></Link>} />
+        action={<Link to={`${base}/bookings`} className="card-link">All <ArrowRight className="h-3 w-3" /></Link>} />
       <div className="px-4 pb-3 pt-1 sm:px-5">
         {q.isLoading ? <SkeletonRows rows={3} className="p-0" /> : q.error ? <ErrorState error={q.error} retry={() => q.refetch()} />
           : list.length ? <ul className="relative divide-y divide-line before:absolute before:bottom-4 before:left-[4px] before:top-4 before:w-px before:bg-line">{list.map((b) => <Row key={b.id} b={b} base={base} next={b.id === nextId} />)}</ul>

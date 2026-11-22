@@ -11,7 +11,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       disabled={disabled || loading}
       className={cn(
         // Flat, square-ish buttons: colour changes on hover and press, nothing lifts, glows or scales.
-        'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-sans font-semibold transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50',
+        'press inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-sans font-semibold transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50',
         size === 'sm' ? 'h-8 px-3 text-[13px]' : 'h-9 px-4 text-[13.5px]',
         variant === 'primary' && 'btn-primary text-white hover:bg-accent-strong/90 active:bg-accent-strong/80',
         variant === 'secondary' && 'border border-line-2 bg-surface text-fg hover:bg-surface-2 active:bg-bg-2',
@@ -34,7 +34,7 @@ export function Card({ className, children, hover, ...p }: { className?: string;
 }
 export function CardHeader({ title, subtitle, action, icon }: { title: ReactNode; subtitle?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 px-5 pt-4">
+    <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-5">
       <div className="flex min-w-0 items-center gap-2">
         {icon && <span className="text-fg-2">{icon}</span>}
         <div className="min-w-0">
@@ -81,13 +81,13 @@ export function Select({ className, children, ...p }: SelectHTMLAttributes<HTMLS
 export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
   return (
     <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
-      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue bg-blue' : 'border-line-2 bg-bg-2')}>
-      <span className={cn('inline-block h-3.5 w-3.5 rounded-full transition-transform duration-150 ease-out', checked ? 'translate-x-[18px] bg-white' : 'translate-x-[3px] bg-fg-2')} />
+      className={cn('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50', checked ? 'border-blue bg-blue' : 'border-line-2 bg-bg-2')}>
+      <span className={cn('inline-block h-[18px] w-[18px] rounded-full transition-transform duration-150 ease-out', checked ? 'translate-x-[22px] bg-white' : 'translate-x-[3px] bg-fg-2')} />
     </button>
   );
 }
 // `pill` is a compact choice group (filters, view switches); `tabs` is an underlined row for the page's main sections.
-export function Segmented<T extends string>({ value, onChange, options, size = 'md', variant = 'pill' }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode; count?: number }>; size?: 'sm' | 'md'; variant?: 'pill' | 'tabs' }) {
+export function Segmented<T extends string>({ value, onChange, options, size = 'md', variant = 'pill', fill }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode; count?: number }>; size?: 'sm' | 'md'; variant?: 'pill' | 'tabs'; fill?: boolean }) {
   if (variant === 'tabs') {
     return (
       <div className="flex max-w-full gap-1 overflow-x-auto border-b border-line" role="tablist">
@@ -102,10 +102,10 @@ export function Segmented<T extends string>({ value, onChange, options, size = '
     );
   }
   return (
-    <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-line-2 bg-surface p-0.5" role="tablist">
+    <div className={cn('max-w-full overflow-x-auto rounded-lg border border-line-2 bg-surface p-0.5', fill ? 'flex w-full md:inline-flex md:w-auto' : 'inline-flex')} role="tablist">
       {options.map((o) => (
         <button key={o.value} type="button" role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
-          className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors duration-150', size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]', value === o.value ? 'bg-blue text-white' : 'text-fg-2 hover:bg-surface-2 hover:text-fg')}>
+          className={cn('press inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors duration-150', fill && 'max-md:flex-1', size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-[13px]', value === o.value ? 'bg-blue text-white' : 'text-fg-2 hover:bg-surface-2 hover:text-fg')}>
           {o.label}
           {o.count !== undefined && <span className={cn('num px-0.5 text-[12px]', value === o.value ? 'text-white/80' : 'text-muted')}>{o.count}</span>}
         </button>

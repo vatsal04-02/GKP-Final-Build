@@ -9,7 +9,7 @@ import { computeTotals, parseRupees, type PaymentStatus } from '@core/money';
 import { api, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { cn } from '../lib/cn';
-import { Page } from '../components/layout/Shell';
+import { Page, StickyBar } from '../components/layout/Shell';
 import { Button, Card, CardHeader, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
 import { EmptyState, ErrorState, Modal, SkeletonRows, useToast } from '../components/ui/feedback';
 import { Field, PatientPicker, PaymentBadge, errText, fdate, newKey, rs, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
@@ -26,19 +26,19 @@ function List() {
   const list = useQuery({ queryKey: ['invoices', ws.id, dq, status, doc.key], queryFn: () => api<Invoice[]>(wsPath(ws.id, `/invoices?q=${encodeURIComponent(dq)}${status !== 'all' ? `&status=${status}` : ''}${doc.qs}`)) });
   const due = (list.data || []).reduce((t, i) => t + i.balancePaise, 0);
   return (
-    <Page title="Invoices & payments" subtitle={list.data ? `${list.data.length} invoice${list.data.length === 1 ? '' : 's'} · ${rs(due)} outstanding` : ' '} wide actions={<Link to={`/w/${ws.id}/invoices/new`}><Button variant="primary" icon={<Plus className="h-4 w-4" />}>New invoice</Button></Link>}>
+    <Page title="Invoices & payments" subtitle={list.data ? `${list.data.length} invoice${list.data.length === 1 ? '' : 's'} · ${rs(due)} outstanding` : ' '} wide actions={<Link to={`/w/${ws.id}/invoices/new`} className="max-md:w-full"><Button className="max-md:w-full" variant="primary" icon={<Plus className="h-4 w-4" />}>New invoice</Button></Link>}>
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
-        <div className="w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search invoice no., patient or ID" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search invoices" /></div>
-        <DoctorFilter f={doc} />
-        <Segmented value={status} onChange={setStatus} options={[{ value: 'all', label: 'All' }, { value: 'unpaid', label: 'Unpaid' }, { value: 'partial', label: 'Part paid' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }]} />
+        <div className="w-full max-w-xs max-md:max-w-none"><Input icon={<Search className="h-4 w-4" />} placeholder="Search invoice no., patient or ID" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search invoices" /></div>
+        <div className="hscroll hscroll-bleed w-full items-center md:contents"><DoctorFilter f={doc} />
+        <Segmented value={status} onChange={setStatus} options={[{ value: 'all', label: 'All' }, { value: 'unpaid', label: 'Unpaid' }, { value: 'partial', label: 'Part paid' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }]} /></div>
       </div>
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<Receipt className="h-5 w-5" />} title="No invoices found" body={q || status !== 'all' ? 'Try clearing the filters.' : 'Create the first invoice for a registered patient.'} /> : (
           <>
           <ul className="divide-y divide-line/60 md:hidden" aria-label="Invoices">{list.data.map((i) => (
-            <li key={i.invoiceNo}><Link to={`/w/${ws.id}/invoices/${i.invoiceNo}`} className="block px-4 py-3 active:bg-sage/40">
-              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium">{i.patientName || '—'}</div><div className="text-[12px] text-muted"><span className="font-mono">{i.invoiceNo}</span> · {fdate(i.date)}</div></div><PaymentBadge status={i.paymentStatus} /></div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-[12px]"><div><div className="text-muted">Total</div><div className="num">{rs(i.totalPaise)}</div></div><div><div className="text-muted">Paid</div><div className="num">{rs(i.paidPaise)}</div></div><div><div className="text-muted">Balance</div><div className={cn('num font-medium', i.balancePaise > 0 && 'text-bad')}>{rs(i.balancePaise)}</div></div></div>
+            <li key={i.invoiceNo}><Link to={`/w/${ws.id}/invoices/${i.invoiceNo}`} className="row-tap block px-4 py-3">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[15px] font-medium">{i.patientName || '—'}</div><div className="truncate text-[12.5px] text-muted"><span className="font-mono">{i.invoiceNo}</span> · {fdate(i.date)}</div></div><div className="shrink-0 text-right"><div className="num text-[15px] font-semibold">{rs(i.totalPaise)}</div></div></div>
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-[12.5px]"><PaymentBadge status={i.paymentStatus} />{i.balancePaise > 0 ? <span className="num font-medium text-bad">{rs(i.balancePaise)} due</span> : <span className="text-muted">Settled</span>}</div>
             </Link></li>))}</ul>
           <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[820px] text-left text-[13px]">
             <thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 font-semibold">Invoice</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 text-right font-semibold">Total</th><th className="px-3 py-2.5 text-right font-semibold">Paid</th><th className="px-3 py-2.5 text-right font-semibold">Balance</th><th className="px-3 py-2.5 font-semibold">Status</th></tr></thead>
@@ -126,9 +126,9 @@ function Editor() {
   const shown = (k: string) => errs[k];
 
   return (
-    <Page title="New invoice" subtitle="Saved invoices are final. A mistake is corrected by voiding the invoice and issuing a new one." wide actions={<><Link to={`/w/${ws.id}/invoices`}><Button variant="ghost">Cancel</Button></Link><Button variant="primary" loading={save.isPending} onClick={submit}>Save invoice</Button></>}>
+    <Page title="New invoice" subtitle="Saved invoices are final. A mistake is corrected by voiding the invoice and issuing a new one." wide actions={<><Link to={`/w/${ws.id}/invoices`}><Button variant="ghost">Cancel</Button></Link><Button className="max-md:hidden" variant="primary" loading={save.isPending} onClick={submit}>Save invoice</Button></>}>
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <div className="grid gap-3.5 sm:grid-cols-[1fr_180px]">
             <Field label="Patient" required><PatientPicker value={patient} onChange={setPatient} /></Field>
             <Field label="Invoice date"><Input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></Field>
@@ -143,12 +143,12 @@ function Editor() {
               {lines.map((l) => {
                 const qty = Number(l.qty); const price = parseRupees(l.price); const amt = qty >= 1 && price !== null ? qty * price : null;
                 return (
-                  <div key={l.id} className="grid grid-cols-2 items-start gap-2 sm:grid-cols-[1fr_72px_120px_110px_32px]">
-                    <div className="col-span-2 sm:col-span-1"><Input value={l.description} onChange={(e) => setLine(l.id, { description: e.target.value })} placeholder="e.g. Physiotherapy session" maxLength={200} aria-label="Service description" aria-invalid={!!shown(`d${l.id}`)} />{shown(`d${l.id}`) && <span className="text-[12px] text-bad">{shown(`d${l.id}`)}</span>}</div>
+                  <div key={l.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-2 max-sm:rounded-xl max-sm:border max-sm:border-line max-sm:bg-surface-2/50 max-sm:p-2.5 sm:grid-cols-[1fr_72px_120px_110px_32px]">
+                    <div className="col-span-3 sm:col-span-1"><Input value={l.description} onChange={(e) => setLine(l.id, { description: e.target.value })} placeholder="e.g. Physiotherapy session" maxLength={200} aria-label="Service description" aria-invalid={!!shown(`d${l.id}`)} />{shown(`d${l.id}`) && <span className="text-[12px] text-bad">{shown(`d${l.id}`)}</span>}</div>
                     <div><Input value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} inputMode="numeric" aria-label="Quantity or sessions" aria-invalid={!!shown(`q${l.id}`)} />{shown(`q${l.id}`) && <span className="text-[12px] text-bad">{shown(`q${l.id}`)}</span>}</div>
                     <div><Input value={l.price} onChange={(e) => setLine(l.id, { price: e.target.value })} inputMode="decimal" placeholder="0.00" aria-label="Unit price in rupees" aria-invalid={!!shown(`p${l.id}`)} />{shown(`p${l.id}`) && <span className="text-[12px] text-bad">{shown(`p${l.id}`)}</span>}</div>
-                    <div className="num flex h-9 items-center justify-end text-sm">{amt === null ? '—' : rs(amt)}</div>
-                    <Button variant="ghost" size="sm" disabled={lines.length === 1} aria-label="Remove this service" onClick={() => setLines((x) => x.filter((y) => y.id !== l.id))}><Trash2 className="h-4 w-4" /></Button>
+                    <div className="contents max-sm:flex max-sm:items-center max-sm:gap-1"><div className="num flex h-9 min-w-[4.5rem] items-center justify-end text-sm">{amt === null ? '—' : rs(amt)}</div>
+                    <Button variant="ghost" size="sm" disabled={lines.length === 1} aria-label="Remove this service" onClick={() => setLines((x) => x.filter((y) => y.id !== l.id))}><Trash2 className="h-4 w-4" /></Button></div>
                   </div>
                 );
               })}
@@ -185,6 +185,10 @@ function Editor() {
           {formErr && <p className="rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-[13px] text-bad" role="alert">{formErr}</p>}
         </div>
       </div>
+      <StickyBar>
+        <div className="min-w-0 flex-1 leading-tight"><div className="text-[12px] text-fg-2">Total</div><div className="num truncate text-[17px] font-semibold">{rs(calc.t.totalPaise)}</div></div>
+        <Button variant="primary" className="shrink-0 px-6" loading={save.isPending} onClick={submit}>Save invoice</Button>
+      </StickyBar>
     </Page>
   );
 }
@@ -202,7 +206,7 @@ function Detail({ no }: { no: string }) {
     <Page title={`Invoice ${i.invoiceNo}`} subtitle={<span className="flex flex-wrap items-center gap-2"><PaymentBadge status={i.paymentStatus} /><span>{fdate(i.date)} ·{' '}<Link className="underline" to={`/w/${ws.id}/patients/${i.patientId}`}>{i.patientName || i.patientId}</Link></span></span>}
       actions={<><Link to={`/w/${ws.id}/invoices`}><Button variant="ghost">All invoices</Button></Link>
         <Button icon={<Printer className="h-4 w-4" />} onClick={() => nav(`/w/${ws.id}/print/invoice/${i.invoiceNo}?auto=1`)}>Print invoice</Button>
-        {i.status === 'issued' && i.balancePaise > 0 && <Button variant="primary" onClick={() => setPay(true)}>Record payment</Button>}</>}>
+        {i.status === 'issued' && i.balancePaise > 0 && <Button className="max-md:order-first max-md:w-full" variant="primary" onClick={() => setPay(true)}>Record payment</Button>}</>}>
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
           <table className="w-full text-[13px]"><thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 text-left font-semibold">Service</th><th className="px-3 py-2.5 text-right font-semibold">Qty</th><th className="px-3 py-2.5 text-right font-semibold">Unit price</th><th className="px-4 py-2.5 text-right font-semibold">Amount</th></tr></thead>
@@ -257,7 +261,7 @@ function PayDialog({ open, onClose, invoice, today, onDone }: { open: boolean; o
         <div className="grid grid-cols-2 gap-3"><Field label="Method"><Select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>{PAYMENT_METHODS.map((x) => <option key={x}>{x}</option>)}</Select></Field><Field label="Date"><Input type="date" value={on} max={today} onChange={(e) => setOn(e.target.value)} /></Field></div>
         <Field label="Reference" hint="UPI / cheque / transaction no."><Input value={ref} onChange={(e) => setRef(e.target.value)} maxLength={120} /></Field>
         {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={m.isPending}>Record payment</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={m.isPending}>Record payment</Button></div>
       </form>
     </Modal>
   );
@@ -276,7 +280,7 @@ function VoidDialog({ target, onClose, onDone }: { target: { kind: 'invoice' | '
         <p className="text-[13px] text-fg-2">The record stays in the history, marked void. This cannot be undone.</p>
         <Field label="Reason" required><Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={300} autoFocus /></Field>
         {err && <p className="text-[13px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" onClick={onClose}>Keep it</Button><Button type="submit" variant="danger" loading={m.isPending}>Void</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button type="button" onClick={onClose}>Keep it</Button><Button type="submit" variant="danger" loading={m.isPending}>Void</Button></div>
       </form>
     </Modal>
   );

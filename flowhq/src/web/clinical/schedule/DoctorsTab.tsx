@@ -99,7 +99,7 @@ function ScheduleDialog({ target, onClose, onSaved }: { target: { doctor: Doctor
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }));
   return (
     <Modal open={!!target} onClose={onClose} label="Doctor hours" className="max-w-xl">
-      <form onSubmit={(e) => { e.preventDefault(); setErr(''); save.mutate(); }} className="max-h-[78vh] space-y-4 overflow-y-auto p-6">
+      <form onSubmit={(e) => { e.preventDefault(); setErr(''); save.mutate(); }} className="space-y-4 p-5 sm:max-h-[78vh] sm:overflow-y-auto sm:p-6">
         <div><h2 className="font-display text-lg font-semibold">{row ? 'Edit hours' : 'Add hours'} · {doc?.name}</h2><p className="mt-1 text-[13px] text-fg-2">Leave the length, buffer or capacity empty to use the clinic's default (see Settings).</p></div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Day"><Select value={f.weekday} onChange={(e) => set('weekday', e.target.value)}>{WEEK.map((d) => <option key={d}>{d}</option>)}</Select></Field>
@@ -119,7 +119,7 @@ function ScheduleDialog({ target, onClose, onSaved }: { target: { doctor: Doctor
           {f.override && <div className="mt-3"><Field label="Reason"><Textarea rows={2} maxLength={200} value={f.reason} onChange={(e) => set('reason', e.target.value)} /></Field></div>}
         </div>
         {err && <p className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-[13px] text-bad" role="alert">{err}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>Save hours</Button></div>
+        <div className="sheet-actions flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>Save hours</Button></div>
       </form>
     </Modal>
   );
@@ -145,7 +145,7 @@ function BlockDialog({ open, doctors, onClose, onSaved }: { open: boolean; docto
           <div className="flex justify-end"><Button variant="primary" onClick={onClose}>Done</Button></div>
         </div>
       ) : (
-        <form onSubmit={(e) => { e.preventDefault(); setErr(''); save.mutate(); }} className="max-h-[78vh] space-y-4 overflow-y-auto p-6">
+        <form onSubmit={(e) => { e.preventDefault(); setErr(''); save.mutate(); }} className="space-y-4 p-5 sm:max-h-[78vh] sm:overflow-y-auto sm:p-6">
           <div><h2 className="font-display text-lg font-semibold">Leave, closure or blocked time</h2><p className="mt-1 text-[13px] text-fg-2">These times stop being offered immediately. Existing appointments are not touched.</p></div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Type"><Select value={f.kind} onChange={(e) => set('kind', e.target.value)}>{BLOCK_KINDS.map((k) => <option key={k}>{k}</option>)}</Select></Field>
@@ -160,7 +160,7 @@ function BlockDialog({ open, doctors, onClose, onSaved }: { open: boolean; docto
           </div>
           <Field label="Reason (optional)"><Input value={f.reason} maxLength={200} onChange={(e) => set('reason', e.target.value)} /></Field>
           {err && <p className="rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-[13px] text-bad" role="alert">{err}</p>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending} disabled={!f.from}>Save</Button></div>
+          <div className="sheet-actions flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending} disabled={!f.from}>Save</Button></div>
         </form>
       )}
     </Modal>

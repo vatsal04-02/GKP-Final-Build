@@ -44,7 +44,7 @@ export default function Dashboard() {
   const aiMetric = d && clinical ? (() => { const m = d.metrics.find((x) => x.key === 'ai_handled'); return m ? <MetricCard m={m} spark={days !== '1' ? series(m.key) : undefined} emphasis /> : null; })() : null;
   const attentionCard = (
     <Card className="flex flex-col">
-      <CardHeader title="Needs attention" subtitle={d ? `${d.attention.length ? d.metrics.find((m) => m.key === 'pending_actions')?.value : 0} open` : ' '} action={has('tasks') ? <Link to={`/w/${ws.id}/tasks`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">All tasks <ArrowRight className="h-3 w-3" /></Link> : undefined} />
+      <CardHeader title="Needs attention" subtitle={d ? `${d.attention.length ? d.metrics.find((m) => m.key === 'pending_actions')?.value : 0} open` : ' '} action={has('tasks') ? <Link to={`/w/${ws.id}/tasks`} className="card-link">All tasks <ArrowRight className="h-3 w-3" /></Link> : undefined} />
       <div className="flex-1 px-3 pb-3 pt-2">
         {!d ? <SkeletonRows rows={4} className="p-2" /> : d.attention.length ? d.attention.map((tk) => <TaskRow key={tk.id} task={tk} />) : <EmptyState className="py-8" icon={<CheckCircle2 className="h-5 w-5" />} title="All clear" body="Nothing is waiting for a person right now." />}
       </div>
@@ -53,15 +53,15 @@ export default function Dashboard() {
   return (
     <Page
       title={`${greet}, ${firstName(doc.key || me.user.name, me.user.role)}`}
-      subtitle={<span>Here is what is happening at <span className="text-fg">{ws.name}</span>.</span>}
-      actions={<Segmented value={days} onChange={setDays} options={RANGES.map((r) => ({ value: r.value, label: r.label }))} />}
+      subtitle={<span className="max-sm:hidden">Here is what is happening at <span className="text-fg">{ws.name}</span>.</span>}
+      actions={<Segmented fill value={days} onChange={setDays} options={RANGES.map((r) => ({ value: r.value, label: r.label }))} />}
     >
       {q.error ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card> : (
         <div className="space-y-6">
           {clinical && <DoctorOverview days={days} doc={doc} />}
           {clinical && <h2 className="border-t border-line pt-6 text-[12.5px] font-semibold text-muted">Enquiries &amp; messages</h2>}
           {clinical ? (
-            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] [&>*]:min-w-0">
+            <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] [&>*]:min-w-0">
               {enquiryCard ? <EnquiryOverview d={d} days={days} /> : <div />}
               <div className="space-y-6">{aiMetric}{attentionCard}</div>
             </div>
@@ -89,7 +89,7 @@ export default function Dashboard() {
           <div className={clinical ? 'hidden' : 'grid gap-4 xl:grid-cols-3 [&>*]:min-w-0'}>
             {has('bookings') && !clinical && (
               <Card className="xl:col-span-1">
-                <CardHeader title={tt('Upcoming {booking.plural|lower}')} icon={<CalendarDays className="h-4 w-4" />} action={<Link to={`/w/${ws.id}/bookings`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">View all <ArrowRight className="h-3 w-3" /></Link>} />
+                <CardHeader title={tt('Upcoming {booking.plural|lower}')} icon={<CalendarDays className="h-4 w-4" />} action={<Link to={`/w/${ws.id}/bookings`} className="card-link">View all <ArrowRight className="h-3 w-3" /></Link>} />
                 <div className="px-5 pb-4 pt-2">
                   {!d ? <SkeletonRows rows={4} className="p-0" /> : d.upcoming.length ? (
                     <ul className="divide-y divide-line">
@@ -106,7 +106,7 @@ export default function Dashboard() {
               </Card>
             )}
             {!clinical && (            <Card className={has('bookings') ? 'xl:col-span-2' : 'xl:col-span-3'}>
-              <CardHeader title="Recent activity" action={<Link to={`/w/${ws.id}/activity`} className="inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">Timeline <ArrowRight className="h-3 w-3" /></Link>} />
+              <CardHeader title="Recent activity" action={<Link to={`/w/${ws.id}/activity`} className="card-link">Timeline <ArrowRight className="h-3 w-3" /></Link>} />
               <div className="grid gap-x-8 px-5 pb-3 pt-1 md:grid-cols-2">
                 {!d ? <SkeletonRows rows={6} className="p-0" /> : d.recent.length ? d.recent.map((a) => <ActivityRow key={a.id} a={a} compact />) : <EmptyState className="py-8 md:col-span-2" icon={<Sparkles className="h-5 w-5" />} title="No activity yet" />}
               </div>

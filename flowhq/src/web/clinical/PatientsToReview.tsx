@@ -22,21 +22,21 @@ export function PatientsToReview({ base, today, className }: { base: string; tod
   return (
     <Card className={cn('fhq-rise', className)}>
       <CardHeader title="Patients to review" subtitle={q.data ? (rows.length ? `Not seen for ${MIN_DAYS}+ days · may be dropping out` : `Everyone active was seen in the last ${MIN_DAYS} days`) : ' '} icon={<HeartPulse className="h-4 w-4" />}
-        action={<Link to={`${base}/patients`} className="inline-flex shrink-0 items-center gap-1 text-xs text-blue-soft hover:text-blue-bright">Register <ArrowRight className="h-3 w-3" /></Link>} />
+        action={<Link to={`${base}/patients`} className="card-link">Register <ArrowRight className="h-3 w-3" /></Link>} />
       <div className="px-4 pb-3 pt-1 sm:px-5">
         {q.isLoading ? <SkeletonRows rows={3} className="p-0" /> : q.error ? <ErrorState error={q.error} retry={() => q.refetch()} />
           : rows.length ? (
             <ul className="divide-y divide-line">
               {rows.map((r) => (
-                <li key={r.patientId} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5">
-                  <div className="min-w-[10rem] flex-1">
+                <li key={r.patientId} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:py-2.5">
+                  <div className="w-full sm:w-auto sm:min-w-[10rem] sm:flex-1">
                     <Link to={`${base}/patients/${r.patientId}`} className="block break-words text-[13.5px] font-medium leading-snug hover:text-blue-bright">{r.name}</Link>
                     <p className="mt-0.5 break-words text-[12px] text-fg-2">{r.complaint || 'No complaint recorded'}</p>
                   </div>
                   <span className={cn('num shrink-0 rounded-md border px-2 py-0.5 text-[12px] font-medium', r.days >= 21 ? 'border-bad/25 bg-bad/10 text-bad' : 'border-warn/25 bg-warn/10 text-warn')}>
                     {r.never ? `No visit in ${r.days} days` : `Last seen ${r.days} days ago`}
                   </span>
-                  <WhatsAppButton size="sm" phone={r.phone} name={r.name} message={(clinic) => reviewMessage({ name: r.name, clinic, days: r.days, never: r.never })} />
+                  <WhatsAppButton size="sm" className="max-sm:ml-auto" phone={r.phone} name={r.name} message={(clinic) => reviewMessage({ name: r.name, clinic, days: r.days, never: r.never })} />
                 </li>
               ))}
             </ul>

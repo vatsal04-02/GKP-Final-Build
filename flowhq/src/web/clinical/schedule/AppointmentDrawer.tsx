@@ -31,7 +31,7 @@ export function AppointmentDrawer({ reference, onClose }: { reference: string | 
   return (
     <Drawer open={!!reference} onClose={() => { setMoving(false); setCancelling(false); onClose(); }} title={a ? a.patient.name || 'Appointment' : 'Appointment'} subtitle={a ? `${fdateLong(a.date)} · ${a.start_time}–${a.end_time}` : undefined} width={520}>
       {q.isLoading || !a ? <div className="space-y-3 p-5"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-24 w-full" /></div> : (
-        <div className="space-y-5 p-5">
+        <div className="space-y-5 p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-2"><StatusBadge status={a.status} /><SourceBadge source={a.source} />{a.ai_created && <span className="text-[12px] text-muted">Made by the WhatsApp assistant</span>}</div>
           <dl className="grid gap-x-6 gap-y-3.5 sm:grid-cols-2 text-[13.5px]">
             {([['Reference', a.booking_reference], ['Doctor', a.doctor_name || '—'], ['Mobile', a.patient.phone || '—'], ['Register ID', a.patient.patient_id || 'Not linked'], ['Reason', a.reason || '—'], ['Service', a.service || '—'], ['Booked', when(a.created_at)], ['Last change', when(a.updated_at)]] as const).map(([k, v]) => (
@@ -52,13 +52,13 @@ export function AppointmentDrawer({ reference, onClose }: { reference: string | 
           {canAct && !closed && (
             <section className="space-y-2.5 border-t border-line pt-4" aria-label="Actions">
               <h4 className="section-title">Update</h4>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 {a.status === 'Pending confirmation' && <Button size="sm" icon={<CheckCircle2 className="h-4 w-4" />} loading={status.isPending} onClick={() => status.mutate('Confirmed')}>Confirm</Button>}
                 {a.status !== 'Checked in' && <Button size="sm" icon={<LogIn className="h-4 w-4" />} loading={status.isPending} onClick={() => status.mutate('Checked in')}>Check in</Button>}
                 <Button size="sm" variant="subtle" icon={<CheckCircle2 className="h-4 w-4" />} loading={status.isPending} onClick={() => status.mutate('Completed')}>Mark completed</Button>
                 <Button size="sm" icon={<UserX className="h-4 w-4" />} loading={status.isPending} onClick={() => status.mutate('No-show')}>No-show</Button>
               </div>
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-wrap">
                 <Button size="sm" icon={<CalendarClock className="h-4 w-4" />} onClick={() => setMoving((m) => !m)}>{moving ? 'Close' : 'Reschedule'}</Button>
                 <Button size="sm" variant="danger" icon={<XCircle className="h-4 w-4" />} onClick={() => setCancelling(true)}>Cancel appointment</Button>
               </div>

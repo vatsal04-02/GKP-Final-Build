@@ -36,6 +36,9 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   forms: { key: 'forms', core: false, label: 'Forms', page: null, icon: 'file-text', order: 62 },
 };
 // Sidebar sections: the dashboard stays pinned at the top; everything else is grouped. A module that is not enabled simply does not show.
+// The bottom tab bar on a phone: four slots, each a list of modules in order of preference (the first one the workspace has is used).
+export const MOBILE_TABS: ModuleKey[][] = [['dashboard'], ['patients', 'contacts'], ['schedule', 'bookings'], ['inbox', 'invoices', 'tasks']];
+
 export const NAV_GROUPS: Array<{ key: string; label: string; modules: ModuleKey[] }> = [
   { key: 'care', label: 'Care', modules: ['inbox', 'contacts', 'patients', 'bookings', 'schedule', 'prescriptions', 'visits', 'staff_attendance'] },
   { key: 'money', label: 'Money', modules: ['invoices', 'payments'] },

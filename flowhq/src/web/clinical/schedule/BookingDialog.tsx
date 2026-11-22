@@ -58,7 +58,7 @@ export function BookingDialog({ open, onClose, initial }: { open: boolean; onClo
   const ready = !!slot && name.trim().length > 0 && phone.trim().length > 0 && !(mode === 'register' && !picked);
   return (
     <Modal open={open} onClose={onClose} label="New appointment" className="max-w-2xl">
-      <form onSubmit={(e) => { e.preventDefault(); setErr(''); if (ready) save.mutate(); }} className="max-h-[78vh] overflow-y-auto p-6">
+      <form onSubmit={(e) => { e.preventDefault(); setErr(''); if (ready) save.mutate(); }} className="p-5 sm:max-h-[78vh] sm:overflow-y-auto sm:p-6">
         <h2 className="font-display text-xl font-semibold">New appointment</h2>
         <p className="mt-1 text-[13px] text-fg-2">Booked by staff. This works whether or not AI booking is switched on.</p>
         <div className="mt-4 space-y-4">
@@ -68,14 +68,14 @@ export function BookingDialog({ open, onClose, initial }: { open: boolean; onClo
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name" required><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} disabled={mode === 'register'} /></Field>
-            <Field label="Mobile number" required hint="10-digit Indian mobile, used for reminders"><Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" maxLength={30} disabled={mode === 'register' && !!prof.data?.patient.phone} /></Field>
+            <Field label="Mobile number" required hint="10-digit Indian mobile, used for reminders"><Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" maxLength={30} disabled={mode === 'register' && !!prof.data?.patient.phone} /></Field>
           </div>
           <SlotPicker date={date} onDate={setDate} value={slot} onChange={setSlot} />
           <Field label="Reason for visit"><Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={300} /></Field>
           <Field label="Status"><Segmented value={stage} onChange={setStage} options={[{ value: 'Confirmed', label: 'Confirmed' }, { value: 'Pending confirmation', label: 'Pending confirmation' }]} /></Field>
         </div>
         {err && <p className="mt-4 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-[13px] text-bad" role="alert">{err}</p>}
-        <div className="mt-5 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending} disabled={!ready}>Book appointment</Button></div>
+        <div className="sheet-actions mt-5 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending} disabled={!ready}>Book appointment</Button></div>
       </form>
     </Modal>
   );

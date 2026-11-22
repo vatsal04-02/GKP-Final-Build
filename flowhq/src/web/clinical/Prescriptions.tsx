@@ -8,7 +8,7 @@ import { ClipboardList, ImagePlus, Plus, Printer, Search, X } from 'lucide-react
 import type { Prescription, PatientProfile, RxImage } from '@core/clinical';
 import { api, apiUpload, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
-import { Page } from '../components/layout/Shell';
+import { Page, StickyBar } from '../components/layout/Shell';
 import { Badge, Button, Card, CardHeader, Input, Select, Textarea } from '../components/ui/primitives';
 import { EmptyState, ErrorState, SkeletonRows, useToast } from '../components/ui/feedback';
 import { Field, PatientPicker, errText, fdate, useClinic, useDebounced, useToday, useUnsavedGuard } from './common';
@@ -74,16 +74,16 @@ function List() {
   const [q, setQ] = useState(''); const dq = useDebounced(q); const doc = useDoctorFilter();
   const list = useQuery({ queryKey: ['rx-list', ws.id, dq, doc.key], queryFn: () => api<Prescription[]>(wsPath(ws.id, `/prescriptions?q=${encodeURIComponent(dq)}${doc.qs}`)) });
   return (
-    <Page title="Prescriptions" subtitle={doc.own ? `Your treatment sheets, ${doc.own}` : 'Treatment sheets written by the clinicians'} wide actions={<Link to={`/w/${ws.id}/prescriptions/new`}><Button variant="primary" icon={<Plus className="h-4 w-4" />}>New prescription</Button></Link>}>
-      <div className="mb-3 flex flex-wrap items-center gap-2.5"><div className="w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search patient, ID or diagnosis" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search prescriptions" /></div><DoctorFilter f={doc} /></div>
+    <Page title="Prescriptions" subtitle={doc.own ? `Your treatment sheets, ${doc.own}` : 'Treatment sheets written by the clinicians'} wide actions={<Link to={`/w/${ws.id}/prescriptions/new`} className="max-md:w-full"><Button className="max-md:w-full" variant="primary" icon={<Plus className="h-4 w-4" />}>New prescription</Button></Link>}>
+      <div className="mb-3 flex flex-wrap items-center gap-2.5"><div className="w-full max-w-xs max-md:max-w-none"><Input icon={<Search className="h-4 w-4" />} placeholder="Search patient, ID or diagnosis" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search prescriptions" /></div><DoctorFilter f={doc} /></div>
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={8} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="No prescriptions yet" body={q ? 'Try a different search.' : 'Create the first treatment sheet from here or from a patient’s record.'} /> : (
           <>
           <ul className="divide-y divide-line/60 md:hidden" aria-label="Prescriptions">{list.data.map((r) => (
-            <li key={r.rxId}><Link to={`/w/${ws.id}/prescriptions/${r.rxId}`} className="block px-4 py-3 active:bg-sage/40">
-              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium">{r.patientName || '—'}</div><div className="text-[12px] text-muted"><span className="font-mono">{r.rxId}</span> · {fdate(r.rxDate)}</div></div>{r.images.length > 0 && <span className="shrink-0 text-[12px] text-muted">{r.images.length} photo{r.images.length === 1 ? '' : 's'}</span>}</div>
-              {r.diagnosis && <div className="mt-1 line-clamp-2 text-[13px] text-fg-2">{r.diagnosis}</div>}
-              {r.treatingPhysio && <div className="mt-1 text-[12px] text-muted">{r.treatingPhysio}</div>}
+            <li key={r.rxId}><Link to={`/w/${ws.id}/prescriptions/${r.rxId}`} className="row-tap block px-4 py-3">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[15px] font-medium">{r.patientName || '—'}</div></div><span className="num shrink-0 text-[12.5px] text-muted">{fdate(r.rxDate)}</span></div>
+              <div className="mt-0.5 truncate text-[13px] text-fg-2">{r.diagnosis || 'No diagnosis entered'}</div>
+              <div className="mt-0.5 truncate text-[12px] text-muted">{[r.treatingPhysio, r.images.length > 0 && `${r.images.length} photo${r.images.length === 1 ? '' : 's'}`, r.rxId].filter(Boolean).join(' · ')}</div>
             </Link></li>))}</ul>
           <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[760px] text-left text-[13px]">
             <thead><tr className="border-b border-line bg-sage/40 text-[12.5px] text-fg-2"><th className="px-4 py-2.5 font-semibold">Rx</th><th className="px-3 py-2.5 font-semibold">Date</th><th className="px-3 py-2.5 font-semibold">Patient</th><th className="px-3 py-2.5 font-semibold">Diagnosis</th><th className="px-3 py-2.5 font-semibold">Physiotherapist</th><th className="px-3 py-2.5 font-semibold">Photos</th></tr></thead>
@@ -190,11 +190,11 @@ function Editor({ rxId }: { rxId: string }) {
   return (
     <Page title={isNew ? 'New prescription' : `Prescription ${rxId}`} subtitle={isNew ? 'Treatment sheet' : `Version ${version ?? ''} · last saved ${saved.data?.createdAt ? new Date(saved.data.createdAt).toLocaleString('en-IN', { timeZone: ws.timezone, dateStyle: 'medium', timeStyle: 'short' }) : ''} by ${saved.data?.createdBy || '—'}`}
       actions={<><Link to={`/w/${ws.id}/prescriptions`}><Button variant="ghost">Back to list</Button></Link>
-        <Button icon={<Printer className="h-4 w-4" />} disabled={!canPrint} title={canPrint ? undefined : isNew ? 'Save the prescription first' : 'Save your changes first so the printout matches the saved record'} onClick={() => nav(`/w/${ws.id}/print/prescription/${rxId}?auto=1`)}>Print Prescription</Button>
-        <Button variant="primary" loading={save.isPending} disabled={!dirty || !f.patient} onClick={() => save.mutate()}>{isNew ? 'Save prescription' : 'Save changes'}</Button></>}>
+        <Button className="max-md:hidden" icon={<Printer className="h-4 w-4" />} disabled={!canPrint} title={canPrint ? undefined : isNew ? 'Save the prescription first' : 'Save your changes first so the printout matches the saved record'} onClick={() => nav(`/w/${ws.id}/print/prescription/${rxId}?auto=1`)}>Print Prescription</Button>
+        <Button className="max-md:hidden" variant="primary" loading={save.isPending} disabled={!dirty || !f.patient} onClick={() => save.mutate()}>{isNew ? 'Save prescription' : 'Save changes'}</Button></>}>
       {conflict && <div role="alert" className="mb-4 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px]">Someone else saved a newer version of this prescription. <button className="font-medium underline" onClick={() => { loaded.current = ''; qc.invalidateQueries({ queryKey: ['rx', ws.id, rxId] }).then(() => saved.refetch()); }}>Reload it</button> and apply your edit again (what you typed here will be replaced).</div>}
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Patient" required className="sm:col-span-2" hint={isNew ? <button type="button" className="underline" onClick={() => setNewPatient(true)}>Not registered yet? Add a new patient</button> : undefined}>
               <PatientPicker value={f.patient} onChange={(p) => set('patient', p)} disabled={!isNew} />
@@ -256,6 +256,10 @@ function Editor({ rxId }: { rxId: string }) {
           <p className="px-1 text-[12px] leading-relaxed text-muted">Prescriptions are stored as typed and every save keeps the earlier version. Photos are stored in the clinic’s own records and are only shown to signed-in staff.</p>
         </div>
       </div>
+      <StickyBar>
+        <Button className="shrink-0" icon={<Printer className="h-4 w-4" />} disabled={!canPrint} aria-label="Print prescription" onClick={() => nav(`/w/${ws.id}/print/prescription/${rxId}?auto=1`)}>Print</Button>
+        <Button className="flex-1" variant="primary" loading={save.isPending} disabled={!dirty || !f.patient} onClick={() => save.mutate()}>{isNew ? 'Save prescription' : 'Save changes'}</Button>
+      </StickyBar>
       <PatientForm open={newPatient} onClose={() => setNewPatient(false)} onSaved={(p) => { setNewPatient(false); set('patient', { id: p.patientId, name: p.name }); }} />
     </Page>
   );

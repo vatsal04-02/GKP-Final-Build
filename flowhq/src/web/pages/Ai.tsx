@@ -69,7 +69,7 @@ export default function Ai() {
             <Card className="p-4"><div className="text-[12.5px] text-fg-2">Average confidence</div>{!d ? <Skeleton className="mt-3 h-6 w-20" /> : <div className="mt-3"><div className="num mb-2 text-[24px] font-semibold leading-none">{d.avgConfidence === null ? '—' : `${Math.round(d.avgConfidence * 100)}%`}</div>{d.avgConfidence !== null && <Progress value={d.avgConfidence * 100} />}</div>}</Card>
           </section>
 
-          <div className="grid gap-5 xl:grid-cols-3">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-3">
             <Card>
               <CardHeader title="What people asked about" subtitle="Intent the assistant recognised" />
               <div className="px-5 pb-5 pt-3">{!d ? <SkeletonRows rows={4} className="p-0" /> : <BarList items={d.intents.slice(0, 8).map((i) => ({ label: i.intent.replace(/_/g, ' '), value: i.count }))} format={(n) => number(f, n)} empty="No messages in the last 7 days" />}</div>
@@ -96,7 +96,22 @@ export default function Ai() {
             <CardHeader title="Recent decisions" subtitle="What the assistant decided for each incoming message, with its reason" icon={<Sparkles className="h-4 w-4" />} />
             <div className="px-2 pb-2 pt-2">
               {!d ? <SkeletonRows rows={5} /> : !d.recentDecisions.length ? <EmptyState className="py-10" icon={<Sparkles className="h-5 w-5" />} title="No decisions yet" body={`They appear as soon as messages arrive with the mode set to Draft or Auto.`} /> : (
-                <div className="overflow-x-auto">
+                <><ul className="divide-y divide-line/60 md:hidden" aria-label="Recent decisions">
+                  {d.recentDecisions.map((m) => {
+                    const st = STATUS_LABEL[m.ai?.status || ''] || { label: m.ai?.status || '—', tone: 'neutral' as const };
+                    return (
+                      <li key={m.id} className="px-3 py-3">
+                        <Link to={`/w/${ws.id}/inbox/${m.conversationId}`} className="row-tap block">
+                          <div className="flex items-center justify-between gap-2"><span className="truncate text-[12.5px] text-muted">{m.author.name}</span><span className="shrink-0 text-[12px] text-muted">{relative(m.createdAt)}</span></div>
+                          <p className="mt-0.5 line-clamp-2 text-[14px] text-fg">{m.body}</p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-fg-2"><Badge tone={st.tone}>{st.label}</Badge>{m.ai?.intent && <span>{m.ai.intent.replace(/_/g, ' ')}</span>}{m.ai?.confidence != null && <span className="num">{Math.round(m.ai.confidence * 100)}%</span>}</div>
+                          {m.ai?.reason && <p className="mt-1 line-clamp-2 text-[12.5px] text-fg-2"><span className="text-blue-soft">Why: </span>{m.ai.reason}</p>}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="hidden overflow-x-auto md:block">
                   <table className="w-full min-w-[760px] text-left text-[13px]">
                     <thead><tr className="text-[12.5px] text-muted"><th className="px-3 py-2 font-medium">Message</th><th className="px-3 py-2 font-medium">Intent</th><th className="px-3 py-2 font-medium">Decision</th><th className="px-3 py-2 font-medium">Confidence</th><th className="px-3 py-2 font-medium">When</th></tr></thead>
                     <tbody>
@@ -114,7 +129,7 @@ export default function Ai() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </div></>
               )}
             </div>
           </Card>
@@ -193,7 +208,7 @@ function KnowledgeEditor({ item, categories, onClose }: { item: KnowledgeItem | 
         </label>
         <label className="block"><span className="mb-1.5 block text-[12.5px] text-fg-2">What the assistant may say</span><Textarea value={content} onChange={(e) => setContent(e.target.value)} required maxLength={4000} rows={6} /></label>
         <div className="flex items-center justify-between rounded-lg border border-line bg-bg-2 px-3 py-2.5"><span className="text-[13px] text-fg-2">Used by the assistant</span><Switch checked={active} onChange={setActive} label="Used by the assistant" /></div>
-        <div className="flex justify-end gap-2 pt-1"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim() || !content.trim()}>Save</Button></div>
+        <div className="modal-actions flex justify-end gap-2 pt-1"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim() || !content.trim()}>Save</Button></div>
       </form>
     </Modal>
   );

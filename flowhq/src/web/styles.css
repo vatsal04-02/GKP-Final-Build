@@ -68,6 +68,11 @@
   .skeleton { background: linear-gradient(90deg, rgb(var(--surface-2)) 0%, rgb(var(--elevated)) 45%, rgb(var(--surface-2)) 90%); background-size: 800px 100%; animation: shimmer 1.7s ease-in-out infinite; @apply rounded-md; }
   /* Section heading inside a panel: a rule and a title, no icon tile. */
   .section-title { @apply text-[13px] font-semibold text-fg; font-family: Figtree, 'Noto Sans', sans-serif; letter-spacing: 0; }
+  /* A row of chips or buttons that scrolls sideways inside its own band (no scrollbar); .hscroll-bleed lets it run to the screen edges on a phone. */
+  .hscroll { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  .hscroll::-webkit-scrollbar { display: none; }
+  .hscroll > * { flex: none; scroll-snap-align: start; }
+  .card-link { @apply inline-flex shrink-0 items-center gap-1 text-xs text-blue-soft hover:text-blue-bright; }
   .btn-primary { background-color: rgb(var(--accent-strong)); }
   .bg-grid { background-image: radial-gradient(rgb(var(--line)) 1px, transparent 1px); background-size: 22px 22px; }
 }
@@ -76,8 +81,45 @@
 input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 3px rgb(var(--blue) / 0.14); }
 /* Touch screens: buttons and fields reach the 44px target without changing the desktop density. */
 @media (pointer: coarse) {
-  button, [role='tab'], select, input:not([type='checkbox']):not([type='radio']) { min-height: 44px; }
+  button:not([role='switch']), [role='tab'], select, input:not([type='checkbox']):not([type='radio']) { min-height: 44px; }
+  /* 16px text in fields: anything smaller makes iOS zoom the page when a field is focused. */
+  input:not([type='checkbox']):not([type='radio']), select, textarea { font-size: 16px !important; }
 }
+
+/* ---------------------------------------------------------------------------------------------------------------------------------
+   Phone and tablet (below lg). The sidebar becomes a bottom tab bar and a "More" sheet; dialogs and drawers become bottom sheets.
+   Everything here is scoped to small screens or touch, so the desktop layout is untouched.
+   --------------------------------------------------------------------------------------------------------------------------------- */
+:root { --tabbar-h: 64px; }
+html { -webkit-tap-highlight-color: transparent; }
+a, button, [role='tab'], summary, label { touch-action: manipulation; }
+@keyframes fhq-sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+/* "backwards" (not "both"): once the sheet is in, an inline transform from a drag-to-dismiss can take over. */
+.fhq-sheet-up { animation: fhq-sheet-up 0.3s var(--ease-out) backwards; }
+.fhq-modal { animation: fhq-sheet-up 0.3s var(--ease-out) backwards; }
+.fhq-drawer { animation: fhq-sheet-up 0.3s var(--ease-out) backwards; }
+@media (min-width: 640px) {
+  .fhq-modal { animation: fhq-scale-in 0.24s var(--ease-out) both; }
+  .fhq-drawer { animation: fhq-slide-in 0.26s var(--ease-out) both; }
+}
+/* A pressed control gives way a little on a touch screen; a pressed row tints. */
+@media (pointer: coarse) {
+  .press { transition: transform 0.12s var(--ease-out), background-color 0.12s; }
+  .press:active { transform: scale(0.97); }
+  .row-tap:active { background-color: rgb(var(--surface-2)); }
+  .card-hover:active { transform: scale(0.99); }
+}
+@media (max-width: 1023.98px) { .hscroll-bleed { margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; } }
+.safe-b { padding-bottom: env(safe-area-inset-bottom); }
+.safe-t { padding-top: env(safe-area-inset-top); }
+/* The Save / Cancel row of a form inside a bottom sheet stays pinned to the foot of the sheet while the fields scroll. */
+@media (max-width: 639.98px) {
+  .sheet-actions { position: sticky; bottom: 0; z-index: 5; margin: 20px -20px -20px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: rgb(var(--bg)); border-top: 1px solid rgb(var(--line)); display: flex; gap: 8px; }
+  .sheet-actions > * { flex: 1 1 0; }
+  .modal-actions > * { flex: 1 1 0; }
+}
+/* Header links such as "All" or "Register": a 44px-tall hit area on touch screens without moving the layout. */
+@media (max-width: 1023.98px) { .card-link { margin-block: -12px; padding-block: 12px; padding-left: 8px; font-size: 13px; font-weight: 500; --tw-text-opacity: 1; color: rgb(var(--blue-bright)); } }
 
 /* ---- Printing: A4 documents (prescription, invoice) and the register ---- */
 .paper { background: #fff; color: #111; }

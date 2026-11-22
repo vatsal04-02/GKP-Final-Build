@@ -65,7 +65,7 @@ export function Confirm({ open, title, body, confirmLabel, danger, busy, onConfi
       <div className="space-y-4 p-6">
         <h2 className="font-display text-lg font-semibold">{title}</h2>
         <div className="text-[13.5px] leading-relaxed text-fg-2">{body}</div>
-        <div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={danger ? 'danger' : 'primary'} loading={busy} onClick={onConfirm}>{confirmLabel}</Button></div>
+        <div className="modal-actions flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={danger ? 'danger' : 'primary'} loading={busy} onClick={onConfirm}>{confirmLabel}</Button></div>
       </div>
     </Modal>
   );

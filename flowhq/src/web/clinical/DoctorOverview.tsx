@@ -25,7 +25,7 @@ import { DoctorFilter, type DoctorFilterState } from './DoctorFilter';
 // true when this workspace keeps clinic records (the dashboard then leads with the doctor's view)
 export function useHasDoctorOverview() { return useWs().has('patients'); }
 
-const link = 'inline-flex items-center gap-1 text-xs text-blue-soft hover:text-blue-bright';
+const link = 'card-link';
 type Status = 'ok' | 'warn' | 'bad' | undefined;
 // one muted palette for status, used for accents only: soft green = healthy, soft amber = needs attention, soft red = overdue
 const TEXT: Record<'ok' | 'warn' | 'bad', string> = { ok: 'text-ok', warn: 'text-warn', bad: 'text-bad' };
@@ -88,11 +88,11 @@ function Tile({ spec, tile, d, vs, range, i, state, to }: { spec: TileSpec; tile
   const empty = tile.value === 0;
   return (
     <Go to={to}>
-    <Card hover={!!to} className="fhq-rise h-full overflow-hidden p-4" style={delay(i)}>
-      {status && <span aria-hidden="true" className={cn('absolute inset-x-0 top-0 h-[3px]', BAR[status])} />}
+    <Card hover={!!to} className="fhq-rise h-full overflow-hidden p-4 max-lg:rounded-none max-lg:border-0 max-lg:shadow-none" style={delay(i)}>
+      {status && <span aria-hidden="true" className={cn('absolute inset-x-0 top-0 h-[3px] max-lg:hidden', BAR[status])} />}
       <div className="flex items-start justify-between gap-2">
-        <span className="text-[12.5px] font-medium text-fg-2">{spec.label}</span>
-        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-fg-2 shadow-[0_1px_2px_rgb(13_64_56/0.08)] transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6', status && CHIP[status])}>{spec.icon}</span>
+        <span className="text-[13px] font-medium text-fg-2 lg:text-[12.5px]">{spec.label}</span>
+        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-fg-2 shadow-[0_1px_2px_rgb(13_64_56/0.08)] max-lg:hidden transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6', status && CHIP[status])}>{spec.icon}</span>
       </div>
       <div className="mt-2 flex min-h-[34px] flex-wrap items-end justify-between gap-x-2 gap-y-1">
         {note ? <span className="text-[14px] font-medium leading-tight text-muted">{note}</span> : empty ? (
@@ -100,7 +100,7 @@ function Tile({ spec, tile, d, vs, range, i, state, to }: { spec: TileSpec; tile
         ) : (
           <span className={cn('num-display text-[30px] font-semibold leading-none', status ? TEXT[status] : 'text-fg')}><Count value={tile.value} format={fmt} /></span>
         )}
-        {!note && <Spark values={tile.series} tone={status} />}
+        {!note && <span className="max-lg:hidden"><Spark values={tile.series} tone={status} /></span>}
       </div>
       <div className="mt-2 flex min-h-4 flex-wrap items-center gap-x-1.5 text-[11.5px] leading-4 text-muted">
         {note || diff === null ? <span>{spec.sub(range)}</span> : diff === 0 ? <><span>same as {vs}</span><span className="hidden sm:inline">· {spec.sub(range)}</span></> : (
@@ -121,11 +121,11 @@ function MiniStat({ spec, tile, vs, range, state, to }: { spec: TileSpec; tile: 
   const good = diff === null || diff === 0 || !spec.goodWhen ? null : (diff > 0) === (spec.goodWhen === 'up');
   return (
     <Go to={to}>
-    <Card hover={!!to} className="flex h-full min-w-0 items-center gap-2.5 !rounded-lg px-3 py-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-fg-2 transition-transform duration-200 group-hover:scale-110">{spec.icon}</span>
-      <div className="min-w-0">
+    <Card hover={!!to} className="flex h-full min-h-[52px] min-w-0 items-center gap-2.5 !rounded-lg px-3 py-2.5 max-sm:!rounded-none max-sm:border-0 max-sm:px-4 max-sm:shadow-none">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-fg-2 transition-transform duration-200 group-hover:scale-110 max-sm:hidden">{spec.icon}</span>
+      <div className="min-w-0 max-sm:flex max-sm:w-full max-sm:items-center max-sm:justify-between max-sm:gap-3">
         <div className="text-[11.5px] leading-tight text-fg-2">{spec.label} <span className="text-muted">· {range}</span></div>
-        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
+        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 max-sm:mt-0 max-sm:shrink-0 max-sm:justify-end">
           {note ? <span className="text-[12.5px] font-medium text-muted">{note}</span> : <span className="num text-[16px] font-semibold leading-tight">{fmt(tile.value)}</span>}
           {!note && diff !== null && diff !== 0 && <span className={cn('text-[12px] font-medium', good === null ? 'text-fg-2' : good ? 'text-ok' : 'text-bad')} title={`compared with ${vs}`}>{diff > 0 ? '+' : '-'}{fmt(Math.abs(diff))}</span>}
         </div>
@@ -184,7 +184,7 @@ function Hero({ d, base, has }: { d: DoctorSummary; base: string; has: (m: strin
             </span>
           </div>
         </div>
-        {showDue ? (callable ? <div className="flex flex-wrap items-center gap-2"><a href="#follow-ups" className="text-[13px] font-medium text-blue-soft hover:text-blue-bright">See the list</a><WhatsAppButton size="lg" phone={callable.phone} name={callable.name} label="Message now" message={(clinic) => followUpMessage({ name: callable.name, clinic, followUpOn: callable.followUpOn, today: d.today })} /></div>
+        {showDue ? (callable ? <div className="flex w-full items-center gap-3 sm:w-auto"><a href="#follow-ups" className="press px-1 py-3 text-[14px] font-medium text-blue-bright sm:py-0 sm:text-[13px] sm:text-blue-soft sm:hover:text-blue-bright">See the list</a><WhatsAppButton size="lg" className="max-sm:flex-1" phone={callable.phone} name={callable.name} label="Message now" message={(clinic) => followUpMessage({ name: callable.name, clinic, followUpOn: callable.followUpOn, today: d.today })} /></div>
           : has('patients') ? <Link to={`${base}/patients`} className={cta}>View<ArrowRight className="h-4 w-4" /></Link> : null)
           : has('invoices') ? <Link to={`${base}/invoices`} className={cta}>View<ArrowRight className="h-4 w-4" /></Link> : null}
       </div>
@@ -246,9 +246,9 @@ export function DoctorOverview({ days, doc }: { days: string; doc: DoctorFilterS
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <QuickActions base={base} />
+        <div className="w-full min-w-0 lg:w-auto"><QuickActions base={base} /></div>
         {(doc.show || doc.own) && (
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
             {doc.own ? <span className="text-[12.5px] text-fg-2">Showing <b className="font-medium text-fg">{doc.own}</b>'s own prescriptions and dues. Patients and attendance are shared.</span> : <><span className="text-[12.5px] text-fg-2">Prescriptions and dues for</span><DoctorFilter f={doc} /></>}
           </div>
         )}
@@ -256,21 +256,21 @@ export function DoctorOverview({ days, doc }: { days: string; doc: DoctorFilterS
       {!d ? <Card className="p-5"><Skeleton className="h-12 w-64" /></Card> : <Hero d={d} base={base} has={has} />}
 
       <div className="space-y-3">
-        <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {!d ? Array.from({ length: 4 }, (_, i) => <Card key={i} className="p-3.5"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /></Card>)
+        <section aria-label="Key numbers" className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4 lg:gap-3 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">
+          {!d ? Array.from({ length: 4 }, (_, i) => <Card key={i} className="p-3.5 max-lg:rounded-none max-lg:border-0 max-lg:shadow-none"><Skeleton className="h-3 w-24" /><Skeleton className="mt-4 h-7 w-16" /></Card>)
             : primary.map((s, i) => <Tile key={s.key} spec={s} tile={d.tiles[s.key]} d={d} vs={vs} range={range} i={i + 1} state={state} to={dest[s.key]} />)}
         </section>
-        <section aria-label="More numbers" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <section aria-label="More numbers" className="grid grid-cols-1 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface sm:grid-cols-4 sm:gap-3 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent">
           {!d ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[52px] rounded-lg" />)
             : more.map((s) => <MiniStat key={s.key} spec={s} tile={d.tiles[s.key]} vs={vs} range={range} state={state} to={dest[s.key]} />)}
         </section>
       </div>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] [&>*]:min-w-0">
-        <div className="space-y-6">
-          <div id="follow-ups" className="scroll-mt-4"><FollowUpList d={d} base={base} hasPatients={has('patients')} /></div>
-          {has('patients') && <PatientsToReview base={base} today={d?.today} />}
-          <Card className="fhq-rise" style={delay(11)}>
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] [&>*]:min-w-0">
+        <div className="xl:space-y-6 max-xl:contents">
+          <div id="follow-ups" className="scroll-mt-4 max-xl:order-1"><FollowUpList d={d} base={base} hasPatients={has('patients')} /></div>
+          {has('patients') && <PatientsToReview base={base} today={d?.today} className="max-xl:order-3" />}
+          <Card className="fhq-rise max-xl:order-7" style={delay(11)}>
             <CardHeader title="Recent prescriptions" subtitle={`Written ${period}`} icon={<FileText className="h-4 w-4" />}
               action={has('prescriptions') ? <Link to={`${base}/prescriptions`} className={cn(link, 'shrink-0')}>All <ArrowRight className="h-3 w-3" /></Link> : undefined} />
             <div className="px-4 pb-3 pt-1 sm:px-5">
@@ -291,18 +291,18 @@ export function DoctorOverview({ days, doc }: { days: string; doc: DoctorFilterS
           </Card>
 
 
-          <Card className="fhq-rise" style={delay(13)}>
+          <Card className="fhq-rise max-xl:order-8" style={delay(13)}>
             <CardHeader title={`Patients attended, last ${d ? d.attendance.length : 7} days`} subtitle="Today is highlighted" icon={<ClipboardList className="h-4 w-4" />} />
             {!d ? <Skeleton className="mx-5 mb-4 h-[150px]" /> : <AttendanceBars data={d.attendance} today={d.today} />}
           </Card>
 
         </div>
-        <div className="space-y-6">
-          {has('bookings') && <TodaysAppointments base={base} />}
+        <div className="xl:space-y-6 max-xl:contents">
+          {has('bookings') && <TodaysAppointments base={base} className="max-xl:order-2" />}
           {!d ? <Card className="p-5"><Skeleton className="h-20" /></Card> : (
             <>
-              <PaymentsSummary d={d} state={state} range={range} base={base} has={has} />
-              <Card className="fhq-rise" style={delay(9)}>
+              <PaymentsSummary d={d} state={state} range={range} base={base} has={has} className="max-xl:order-4" />
+              <Card className="fhq-rise max-xl:order-5" style={delay(9)}>
                 <CardHeader title="Dues to collect" subtitle="Largest balances first" icon={<Wallet className="h-4 w-4" />}
                   action={has('invoices') ? <Link to={`${base}/invoices`} className={cn(link, 'shrink-0')}>Invoices <ArrowRight className="h-3 w-3" /></Link> : undefined} />
                 <div className="px-4 pb-3 pt-1 sm:px-5">
@@ -322,7 +322,7 @@ export function DoctorOverview({ days, doc }: { days: string; doc: DoctorFilterS
 
             </>
           )}
-          <Card className="fhq-rise" style={delay(12)}>
+          <Card className="fhq-rise max-xl:order-6" style={delay(12)}>
             <CardHeader title="Today's patients" subtitle={d ? `${d.todaysVisits.length} marked in attendance` : ' '} icon={<UserCheck className="h-4 w-4" />}
               action={has('visits') ? <Link to={`${base}/attendance`} className={cn(link, 'shrink-0')}>Attendance <ArrowRight className="h-3 w-3" /></Link> : undefined} />
             <div className="px-4 pb-3 pt-1 sm:px-5">

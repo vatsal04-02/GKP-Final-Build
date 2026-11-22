@@ -14,9 +14,9 @@ export function QuickActions({ base }: { base: string }) {
   ].filter((i) => has(i.module as never));
   if (!items.length) return null;
   return (
-    <nav aria-label="Quick actions" className="flex flex-wrap gap-2">
+    <nav aria-label="Quick actions" className="hscroll hscroll-bleed lg:flex-wrap lg:overflow-visible">
       {items.map((i) => (
-        <Link key={i.label} to={i.to} className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-[13px] font-medium text-fg shadow-card transition-all hover:border-line-2 hover:bg-surface-2">
+        <Link key={i.label} to={i.to} className="press inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-full border border-line bg-surface px-4 text-[14px] font-medium text-fg shadow-card transition-all hover:border-line-2 hover:bg-surface-2 lg:h-10 lg:rounded-xl lg:px-3.5 lg:text-[13px]">
           <span className="text-blue-bright">{i.icon}</span>{i.label}
         </Link>
       ))}

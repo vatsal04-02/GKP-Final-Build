@@ -29,21 +29,38 @@ export default function Contacts() {
   const fields = ws.backend.capabilities.contactFields;
   return (
     <Page title={t('contact.plural')} subtitle={list.data ? tt(`${list.data.length} {contact.plural|lower}`) : ' '} wide>
-      <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <div className="w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name, number, interest" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" /></div>
+      <div className="mb-4 flex flex-wrap items-center gap-2.5 max-md:sticky max-md:top-0 max-md:z-10 max-md:-mx-4 max-md:mb-2 max-md:block max-md:space-y-2 max-md:bg-bg max-md:px-4 max-md:pb-2 max-md:pt-2">
+        <div className="w-full max-w-xs max-md:max-w-none"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name, number, interest" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" /></div>
+        <div className="hscroll hscroll-bleed items-center md:contents">
         <Segmented value={status} onChange={setStatus} options={[{ value: 'all', label: 'All' }, ...STATUSES.map((s) => ({ value: s, label: t(`contactStatus.${s}`) }))]} />
         {fields.includes('stage') && (
-          <Select value={stage} onChange={(e) => setStage(e.target.value)} className="w-36" aria-label="Stage">
+          <Select value={stage} onChange={(e) => setStage(e.target.value)} className="w-36 max-md:w-32" aria-label="Stage">
             <option value="">Any stage</option>{(['hot', 'warm', 'cold'] as const).map((s) => <option key={s} value={s}>{t(`contactStage.${s}`)}</option>)}<option value="not_rated">Not rated</option>
           </Select>
         )}
         <Button variant={attention ? 'subtle' : 'secondary'} icon={<AlertTriangle className="h-4 w-4" />} onClick={() => setAttention((a) => !a)} aria-pressed={attention}>Needs attention</Button>
+        </div>
       </div>
       <Card className="overflow-hidden">
         {list.isLoading ? <SkeletonRows rows={10} /> : list.error ? <ErrorState error={list.error} retry={() => list.refetch()} /> : !list.data?.length ? (
           <EmptyState icon={<Users className="h-5 w-5" />} title={tt('No {contact.plural|lower} found')} body={q || status !== 'all' || stage || attention ? 'Try clearing the filters.' : tt('New {contact.plural|lower} appear here automatically from your channels.')} />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <ul className="divide-y divide-line/60 md:hidden" aria-label={t('contact.plural')}>
+            {list.data.map((c) => (
+              <li key={c.id}>
+                <button type="button" onClick={() => nav(`/w/${ws.id}/contacts/${c.id}`)} className={cn('row-tap flex w-full items-center gap-3 px-4 py-3 text-left', c.id === contactId && 'bg-blue/[0.06]')}>
+                  <Avatar text={initials(c.name)} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2"><span className="truncate text-[15px] font-medium text-fg">{c.name}</span><span className="shrink-0 text-[12px] text-muted">{relative(c.lastActivityAt)}</span></div>
+                    <div className="mt-0.5 truncate text-[13px] text-fg-2">{c.interest || c.phone || c.email || '—'}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">{c.status && <Badge tone={STATUS_TONE[c.status]}>{t(`contactStatus.${c.status}`)}</Badge>}{fields.includes('stage') && c.stage && <StageDot stage={c.stage} />}{c.attentionRequired && <AttentionBadge priority={c.priority} />}{c.optedOut && <Badge tone="red">Opted out</Badge>}</div>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[880px] text-left text-[13px]">
               <thead><tr className="border-b border-line text-[12.5px] text-muted">
                 <th className="px-4 py-2.5 font-medium">Name</th><th className="px-3 py-2.5 font-medium">Status</th>
@@ -68,6 +85,7 @@ export default function Contacts() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
       <ContactDrawer id={contactId || null} onClose={() => nav(`/w/${ws.id}/contacts`)} />

@@ -31,7 +31,7 @@ export default function Inbox() {
     return { all: c.length, unread: c.filter((x) => x.unread > 0).length, attention: c.filter((x) => x.attentionRequired).length, ai: c.filter((x) => x.aiActive && !x.attentionRequired).length, paused: c.filter((x) => x.automationPaused).length };
   }, [all.data]);
   return (
-    <div className="flex h-[calc(100vh-56px)] min-h-[520px]">
+    <div className="flex h-full min-h-[520px] lg:h-[calc(100vh-56px)]">
       <section className={cn('flex w-full flex-col border-r border-line md:w-[340px] xl:w-[380px]', conversationId && 'hidden md:flex')} aria-label="Conversations">
         <div className="space-y-3 border-b border-line p-4">
           <div className="flex items-center justify-between"><h1 className="text-lg font-semibold tracking-tight">Inbox</h1>{counts.attention > 0 && <Badge tone="amber">{counts.attention} need a person</Badge>}</div>
@@ -60,15 +60,15 @@ function ConversationItem({ c, active, onOpen }: { c: Conversation; active: bool
   const { tt } = useWs();
   return (
     <li>
-      <button onClick={onOpen} className={cn('relative flex w-full gap-3 border-b border-line/60 px-4 py-3 text-left transition-colors', active ? 'bg-blue/[0.08]' : 'hover:bg-surface')} aria-current={active ? 'true' : undefined}>
+      <button onClick={onOpen} className={cn('row-tap relative flex w-full gap-3 border-b border-line/60 px-4 py-3.5 text-left transition-colors md:py-3', active ? 'bg-blue/[0.08]' : 'hover:bg-surface')} aria-current={active ? 'true' : undefined}>
         {active && <span className="absolute left-0 top-0 h-full w-[2px] bg-blue-bright shadow-[0_0_10px_rgb(var(--blue-bright))]" />}
-        <Avatar text={initials(c.contactName)} size={36} tone={active ? 'blue' : 'neutral'} />
+        <Avatar text={initials(c.contactName)} size={40} tone={active ? 'blue' : 'neutral'} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={cn('truncate text-[13.5px]', c.unread ? 'font-semibold text-fg' : 'font-medium text-fg')}>{c.contactName}</span>
+            <span className={cn('truncate text-[15px] md:text-[13.5px]', c.unread ? 'font-semibold text-fg' : 'font-medium text-fg')}>{c.contactName}</span>
             <span className="ml-auto shrink-0 text-[12px] text-muted">{relative(c.lastMessageAt)}</span>
           </div>
-          <p className={cn('mt-0.5 truncate text-[12.5px]', c.unread ? 'text-fg-2' : 'text-muted')}>{c.lastMessageDirection === 'out' && <span className="text-muted">You: </span>}{c.lastMessagePreview || '—'}</p>
+          <p className={cn('mt-0.5 truncate text-[13.5px] md:text-[12.5px]', c.unread ? 'text-fg-2' : 'text-muted')}>{c.lastMessageDirection === 'out' && <span className="text-muted">You: </span>}{c.lastMessagePreview || '—'}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {c.attentionRequired && <AttentionBadge priority={c.priority} />}
             {!c.attentionRequired && c.aiActive && <AiBadge label={tt('{ai.short} active')} />}
@@ -107,8 +107,8 @@ function Thread({ id }: { id: string }) {
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-line px-4 py-3">
-          <button className="rounded-lg p-1.5 text-fg-2 hover:bg-surface md:hidden" onClick={() => nav(`/w/${ws.id}/inbox`)} aria-label="Back"><ArrowLeft className="h-4 w-4" /></button>
+        <header className="flex items-center gap-3 border-b border-line px-4 py-2.5 md:py-3">
+          <button className="press -ml-2 flex h-11 w-11 items-center justify-center rounded-full text-fg hover:bg-surface md:hidden" onClick={() => nav(`/w/${ws.id}/inbox`)} aria-label="Back to inbox"><ArrowLeft className="h-5 w-5" /></button>
           <Avatar text={initials(c.contactName)} size={36} tone="blue" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2"><h2 className="truncate text-[15px] font-semibold">{c.contactName}</h2><Badge>{CHANNEL_LABEL[c.channel]}</Badge></div>
@@ -126,7 +126,7 @@ function Thread({ id }: { id: string }) {
             <div><span className="font-medium text-fg">A person should reply.</span> <span className="text-fg-2">{c.attentionReason || tt('The {ai.name} handed this conversation over.')}</span></div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           {!messages.length && <EmptyState icon={<MessageSquareDashed className="h-5 w-5" />} title="No messages yet" />}
           <div className="mx-auto max-w-3xl space-y-3">
             {messages.map((m) => {
@@ -155,7 +155,7 @@ function Bubble({ m, automationName, aiName, showAi }: { m: Message; automationN
   const who = m.author.kind === 'ai' ? aiName : m.author.kind === 'automation' ? automationName : m.author.kind === 'staff' ? m.author.name : m.author.kind === 'system' ? m.author.name : m.author.name;
   return (
     <div className={cn('flex animate-fade-up flex-col', out ? 'items-end' : 'items-start')}>
-      <div className={cn('max-w-[78%] rounded-2xl border px-3.5 py-2.5 text-[13.5px] leading-relaxed',
+      <div className={cn('max-w-[86%] rounded-2xl border px-3.5 py-2.5 text-[14.5px] leading-relaxed md:max-w-[78%] md:text-[13.5px]',
         !out && 'rounded-bl-md border-line bg-surface text-fg',
         out && m.author.kind === 'ai' && 'ai-tint rounded-br-md text-fg',
         out && m.author.kind === 'staff' && 'rounded-br-md border-blue/25 bg-blue/[0.07] text-fg',
@@ -212,11 +212,11 @@ function Composer({ c }: { c: Conversation }) {
   const blocked = !caps.staffReply ? 'Replies are not available for this channel.' : c.optedOut ? tt('This {contact.singular|lower} opted out: no messages can be sent.') : !c.replyWindow.open ? `The ${c.replyWindow.hours ?? 24}-hour reply window closed ${relative(c.replyWindow.closesAt)}. The channel only allows approved templates now: ask them to write first, or call.` : null;
   const submit = () => { const v = text.trim(); if (v && !blocked) send.mutate(v); };
   return (
-    <div className="border-t border-line bg-bg-2/60 p-3">
+    <div className="border-t border-line bg-bg-2/60 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       {blocked ? <p className="flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 text-[13px] text-fg-2"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted" />{blocked}</p> : (
         <div className="rounded-xl border border-line bg-surface transition-colors focus-within:border-blue/50 focus-within:shadow-[0_0_0_3px_rgb(var(--blue)/0.12)]">
           <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } }}
-            placeholder={`Reply to ${c.contactName}…`} rows={3} maxLength={4096} aria-label="Reply"
+            placeholder={`Reply to ${c.contactName}…`} rows={2} maxLength={4096} aria-label="Reply"
             className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[13.5px] leading-relaxed text-fg outline-none placeholder:text-muted" />
           <div className="flex items-center justify-between gap-3 px-3 pb-2.5">
             <span className="text-[11.5px] text-muted">{c.replyWindow.closesAt ? `Reply window open until ${dateTime(f, c.replyWindow.closesAt)}` : ''}</span>

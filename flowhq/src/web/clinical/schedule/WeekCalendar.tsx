@@ -25,15 +25,15 @@ export function WeekCalendar({ doctors, onOpen }: { doctors: Doctor[]; onOpen: (
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2.5 print:hidden">
-        <div className="flex items-center gap-1"><Button size="sm" variant="ghost" aria-label="Previous week" onClick={() => setDate(addDays(date, -7))}><ChevronLeft className="h-4 w-4" /></Button>
-          <Input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-[10.5rem]" aria-label="Any day in the week" />
+        <div className="flex items-center gap-1 max-sm:w-full"><Button size="sm" variant="ghost" aria-label="Previous week" onClick={() => setDate(addDays(date, -7))}><ChevronLeft className="h-4 w-4" /></Button>
+          <Input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-[10.5rem] max-sm:min-w-0 max-sm:flex-1" aria-label="Any day in the week" />
           <Button size="sm" variant="ghost" aria-label="Next week" onClick={() => setDate(addDays(date, 7))}><ChevronRight className="h-4 w-4" /></Button></div>
         <Button size="sm" variant="secondary" onClick={() => setDate(today)}>This week</Button>
-        <div className="w-[12rem]"><Select value={doctor} onChange={(e) => setDoctor(e.target.value)} aria-label="Doctor"><option value="">All doctors</option>{doctors.map((x) => <option key={x.doctor_id} value={x.doctor_id}>{x.name}</option>)}</Select></div>
-        <Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
+        <div className="w-[12rem] max-sm:min-w-0 max-sm:flex-1"><Select value={doctor} onChange={(e) => setDoctor(e.target.value)} aria-label="Doctor"><option value="">All doctors</option>{doctors.map((x) => <option key={x.doctor_id} value={x.doctor_id}>{x.name}</option>)}</Select></div>
+        <Button size="sm" variant="ghost" className="max-sm:hidden" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>Print</Button>
         {w && <span className="ml-auto text-[13px] text-fg-2">{w.totals.appointments} appointment{w.totals.appointments === 1 ? '' : 's'} · {w.totals.free_slots} free slot{w.totals.free_slots === 1 ? '' : 's'}</span>}
       </div>
-      <h3 className="font-display text-xl font-semibold">{who ? `${who.name}: ` : 'Clinic: '}{w ? `${dayName(w.from)} to ${dayName(w.to)}` : '…'}</h3>
+      <h3 className="font-display text-lg font-semibold sm:text-xl">{who ? `${who.name}: ` : 'Clinic: '}{w ? `${dayName(w.from)} to ${dayName(w.to)}` : '…'}</h3>
       {q.isLoading ? <Card className="p-5"><Skeleton className="h-6 w-1/3" /><Skeleton className="mt-4 h-40 w-full" /></Card>
         : q.isError || !w ? <Card><ErrorState error={q.error} retry={() => q.refetch()} /></Card>
         : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7" aria-label="Week">{w.days.map((d) => (

@@ -2,14 +2,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Download, Plus, Printer, Search, UserRound, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Download, Phone, Plus, Printer, Search, UserRound, X } from 'lucide-react';
 import { PATIENT_STATUSES, SEXES, type Patient, type PatientList, type PatientProfile, type PatientRow, type VisitStatus } from '@core/clinical';
 import { api, ApiError, ws as wsPath } from '../lib/api';
 import { useWs } from '../lib/workspace';
 import { cn } from '../lib/cn';
 import { Page } from '../components/layout/Shell';
 import { Avatar, Badge, Button, Card, Input, Segmented, Select, Textarea } from '../components/ui/primitives';
-import { Drawer, EmptyState, ErrorState, Modal, SkeletonRows, useToast } from '../components/ui/feedback';
+import { Drawer, EmptyState, ErrorState, Modal, Sheet, SkeletonRows, useToast } from '../components/ui/feedback';
 import { initials } from '../lib/format';
 import { Field, PaymentBadge, errText, fdate, rs, useDebounced, useToday } from './common';
 import { RegisterPrint } from './RegisterPrint';
@@ -33,7 +33,7 @@ export default function Register() {
   const [sort, setSort] = useState<SortKey>('serial'); const [dir, setDir] = useState<'asc' | 'desc'>('asc'); const [page, setPage] = useState(1);
   const [weekOn, setWeekOn] = useState(false); const [week, setWeek] = useState(() => mondayOf(today));
   const [sp] = useSearchParams(); const [creating, setCreating] = useState(sp.get('new') === '1');   // the dashboard's "Register patient" opens the form straight away
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState(false); const [dateSheet, setDateSheet] = useState(false);
   const qs = (extra = '') => `/patients?q=${encodeURIComponent(dq)}${status ? `&status=${status}` : ''}${followUp ? '&followUp=1' : ''}${owing ? '&owing=1' : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}&sort=${sort}&dir=${dir}${weekOn ? `&week=${week}` : ''}${extra}`;
   const list = useQuery({ queryKey: ['register', ws.id, dq, status, followUp, owing, from, to, sort, dir, page, weekOn ? week : ''], queryFn: () => api<PatientList>(wsPath(ws.id, qs(`&page=${page}&pageSize=50`))), placeholderData: keepPreviousData });
   const reset = () => setPage(1);
@@ -88,21 +88,24 @@ export default function Register() {
   const stats = list.data ? ([['Patients', String(list.data.total), ''], ['Billed', rs(list.data.totals.billedPaise), ''], ['Collected', rs(list.data.totals.paidPaise), 'text-ok'], ['Balance due', rs(list.data.totals.outstandingPaise), list.data.totals.outstandingPaise > 0 ? 'text-bad' : '']] as const) : null;
 
   return (<>
-    <Page className="print:hidden" title="Patient register" subtitle="Every patient the clinic has registered, with billing and attendance at a glance." wide
-      actions={<><Button variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} loading={exporting}>Export CSV</Button><Button variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={printAll} loading={printing} title="Prints every patient in this view, one per line, on A4 landscape">Print register</Button><Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Add patient</Button></>}>
-      <section aria-label="Register totals" className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {stats ? stats.map(([k, v, c]) => <Card key={k} className="px-4 py-3"><div className="label">{k}</div><div className={cn('num-display mt-1 text-[24px] font-semibold leading-tight', c)}>{v}</div></Card>)
-          : Array.from({ length: 4 }, (_, i) => <Card key={i} className="px-4 py-3"><div className="skeleton h-3 w-16" /><div className="skeleton mt-2 h-6 w-24" /></Card>)}
+    <Page className="print:hidden" title="Patient register" subtitle={<><span className="max-sm:hidden">Every patient the clinic has registered, with billing and attendance at a glance.</span><span className="sm:hidden">{list.data ? `${list.data.total} registered` : ' '}</span></>} wide
+      actions={<><Button className="max-md:order-first max-md:w-full md:order-last" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Add patient</Button><Button className="max-md:hidden" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} loading={exporting}>Export CSV</Button><Button className="max-md:hidden" variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={printAll} loading={printing} title="Prints every patient in this view, one per line, on A4 landscape">Print register</Button></>}>
+      <section aria-label="Register totals" className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4 lg:gap-3 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">
+        {stats ? stats.map(([k, v, c]) => <Card key={k} className="px-4 py-3 max-lg:rounded-none max-lg:border-0 max-lg:shadow-none"><div className="label">{k}</div><div className={cn('num-display mt-1 text-[24px] font-semibold leading-tight', c)}>{v}</div></Card>)
+          : Array.from({ length: 4 }, (_, i) => <Card key={i} className="px-4 py-3 max-lg:rounded-none max-lg:border-0 max-lg:shadow-none"><div className="skeleton h-3 w-16" /><div className="skeleton mt-2 h-6 w-24" /></Card>)}
       </section>
-      <div className="mb-3 flex flex-wrap items-center gap-2.5 print:hidden">
-        <div className="w-full max-w-sm"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name, phone, patient ID or complaint" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} aria-label="Search patients" /></div>
+      <div className="mb-3 flex flex-wrap items-center gap-2.5 max-md:sticky max-md:top-0 max-md:z-10 max-md:-mx-4 max-md:mb-2 max-md:block max-md:space-y-2 max-md:bg-bg max-md:px-4 max-md:pb-2 max-md:pt-2 print:hidden">
+        <div className="w-full max-w-sm max-md:max-w-none"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name, phone or patient ID" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} aria-label="Search patients" /></div>
+        <div className="hscroll hscroll-bleed items-center md:contents">
         <Segmented value={status || 'all'} onChange={(v) => { setStatus(v === 'all' ? '' : v); reset(); }} options={[{ value: 'all', label: 'All' }, ...PATIENT_STATUSES.map((s) => ({ value: s as string, label: s }))]} />
         <Button variant={followUp ? 'subtle' : 'secondary'} aria-pressed={followUp} onClick={() => { setFollowUp((v) => !v); reset(); }}>Follow-up due</Button>
         <Button variant={owing ? 'subtle' : 'secondary'} aria-pressed={owing} onClick={() => { setOwing((v) => !v); reset(); }}>Balance due</Button>
-        <Button variant={weekOn ? 'subtle' : 'secondary'} aria-pressed={weekOn} onClick={() => setWeekOn((v) => !v)}>Weekly attendance</Button>
-        {weekOn && <div className="flex items-center gap-1"><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[132px] text-center text-[13px] text-fg-2">{fdate(week)} – {fdate(addDays(week, 6))}</span><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button></div>}
+        <Button className="md:hidden" variant={dated ? 'subtle' : 'secondary'} aria-pressed={dated} icon={<CalendarDays className="h-4 w-4" />} onClick={() => setDateSheet(true)}>{dated ? 'Dates set' : 'Dates'}</Button>
+        <Button className="max-md:hidden" variant={weekOn ? 'subtle' : 'secondary'} aria-pressed={weekOn} onClick={() => setWeekOn((v) => !v)}>Weekly attendance</Button>
+        </div>
+        {weekOn && <div className="flex items-center gap-1 max-md:hidden"><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[132px] text-center text-[13px] text-fg-2">{fdate(week)} – {fdate(addDays(week, 6))}</span><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button></div>}
       </div>
-      <div className="mb-3 flex flex-wrap items-end gap-x-4 gap-y-2.5 rounded-xl border border-line bg-surface/70 px-3.5 py-3 print:hidden" role="group" aria-label="Filter by registration date">
+      <div className="mb-3 hidden flex-wrap items-end gap-x-4 gap-y-2.5 rounded-xl border border-line bg-surface/70 px-3.5 py-3 md:flex print:hidden" role="group" aria-label="Filter by registration date">
         <span className="flex items-center gap-2 self-center text-[13px] font-medium text-fg-2"><CalendarDays className="h-4 w-4 text-blue-bright" />Registered</span>
         <label className="block"><span className="mb-1 block text-[12px] text-muted">Month</span><Input type="month" value={monthValue} max={today.slice(0, 7)} onChange={(e) => setMonth(e.target.value)} className="w-[10.5rem]" aria-label="Filter by month" /></label>
         <label className="block"><span className="mb-1 block text-[12px] text-muted">From date</span><Input type="date" value={from} max={to || undefined} onChange={(e) => { setFrom(e.target.value); reset(); }} className="w-[10.5rem]" /></label>
@@ -122,26 +125,23 @@ export default function Register() {
           <>
           {/* Phone: one card per patient instead of a 14-column table */}
           <ul className="divide-y divide-line/60 md:hidden" aria-label="Patients">
-            {list.data.rows.map((p) => (
-              <li key={p.patientId}>
-                <Link to={`/w/${ws.id}/patients/${p.patientId}`} className={cn('block px-4 py-3 active:bg-sage/40', p.patientId === patientId && 'bg-sage/60')}>
-                  <div className="flex items-start gap-3">
-                    <Avatar text={initials(p.name)} size={36} tone={p.status === 'Active' ? 'blue' : 'neutral'} />
+            {list.data.rows.map((p) => {
+              const call = p.phone ? p.phone.replace(/[^\d+]/g, '') : '';
+              const due = !!p.followUpOn && p.followUpOn <= today && p.status === 'Active';
+              return (
+                <li key={p.patientId} className="flex items-stretch">
+                  <Link to={`/w/${ws.id}/patients/${p.patientId}`} className={cn('row-tap flex min-w-0 flex-1 items-center gap-3 py-3 pl-4', !call && 'pr-4', p.patientId === patientId && 'bg-sage/60')}>
+                    <Avatar text={initials(p.name)} size={40} tone={p.status === 'Active' ? 'blue' : 'neutral'} />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[14.5px] font-medium text-fg">{p.name}</div><div className="text-[12px] text-muted">{[p.age, p.sex].filter(Boolean).join(' · ') || '—'} · <span className="font-mono">{p.patientId}</span></div></div><Badge tone={p.status === 'Active' ? 'green' : 'neutral'}>{p.status}</Badge></div>
-                      {p.phone && <div className="num mt-1 text-[13px] text-fg-2">{p.phone}</div>}
-                      {p.mainComplaint && <div className="mt-1 line-clamp-2 text-[13px] text-fg-2">{p.mainComplaint}</div>}
-                      <div className="mt-2 grid grid-cols-3 gap-2 text-[12px]">
-                        <div><div className="text-muted">Billed</div><div className="num">{rs(p.billedPaise)}</div></div>
-                        <div><div className="text-muted">Paid</div><div className="num">{rs(p.paidPaise)}</div></div>
-                        <div><div className="text-muted">Balance</div><div className={cn('num font-medium', p.outstandingPaise > 0 ? 'text-bad' : 'text-muted')}>{rs(p.outstandingPaise)}</div></div>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap gap-x-3 text-[12px] text-muted"><span>Last visit {fdate(p.latestVisit)}</span>{p.followUpOn && <span className={cn(p.followUpOn <= today && p.status === 'Active' && 'font-medium text-warn')}>Follow-up {fdate(p.followUpOn)}</span>}</div>
+                      <div className="flex items-baseline justify-between gap-2"><span className="truncate text-[15px] font-medium text-fg">{p.name}</span>{p.outstandingPaise > 0 && <span className="num shrink-0 text-[13px] font-semibold text-bad">{rs(p.outstandingPaise)} due</span>}</div>
+                      <div className="mt-0.5 truncate text-[13px] text-fg-2">{p.mainComplaint || [p.age, p.sex].filter(Boolean).join(' · ') || p.patientId}</div>
+                      <div className="mt-0.5 truncate text-[12px] text-muted">{p.status !== 'Active' && <>{p.status} · </>}{due ? <span className="font-medium text-warn">Follow-up {fdate(p.followUpOn)}</span> : p.latestVisit ? <>Last visit {fdate(p.latestVisit)}</> : <>Registered {fdate(p.registeredOn)}</>}</div>
                     </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                  {call && <a href={`tel:${call}`} aria-label={`Call ${p.name}`} className="press row-tap flex w-14 shrink-0 items-center justify-center text-blue-bright"><Phone className="h-5 w-5" strokeWidth={1.75} /></a>}
+                </li>
+              );
+            })}
             <li className="bg-[rgb(235_242_238)] px-4 py-2.5 text-[12.5px] font-semibold">{list.data.total} patient{list.data.total === 1 ? '' : 's'} · Billed {rs(list.data.totals.billedPaise)} · Paid {rs(list.data.totals.paidPaise)} · Due {rs(list.data.totals.outstandingPaise)}</li>
           </ul>
           <div className="hidden max-h-[calc(100vh-20rem)] min-h-[320px] overflow-auto md:block">
@@ -187,10 +187,23 @@ export default function Register() {
       {list.data && pages > 1 && (
         <div className="mt-3 flex items-center justify-between text-[13px] text-fg-2 print:hidden">
           <span>Page {list.data.page} of {pages}</span>
-          <div className="flex gap-2"><Button size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button><Button size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</Button></div>
+          <div className="flex gap-2 max-sm:flex-1 max-sm:[&>*]:flex-1"><Button size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button><Button size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</Button></div>
         </div>
       )}
 
+      <Sheet open={dateSheet} onClose={() => setDateSheet(false)} title="Registered between" footer={<div className="flex gap-2"><Button className="flex-1" variant="ghost" onClick={() => { pickRange({ from: '', to: '' }); }} disabled={!dated}>Clear dates</Button><Button className="flex-1" variant="primary" onClick={() => setDateSheet(false)}>Show patients</Button></div>}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <Button variant={monthValue === thisMonth(0).from.slice(0, 7) ? 'subtle' : 'secondary'} onClick={() => pickRange(thisMonth(0))}>This month</Button>
+            <Button variant={monthValue === thisMonth(1).from.slice(0, 7) ? 'subtle' : 'secondary'} onClick={() => pickRange(thisMonth(1))}>Last month</Button>
+            <Button variant="secondary" onClick={() => pickRange({ from: addDays(today, -29), to: today })}>30 days</Button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="From date"><Input type="date" value={from} max={to || undefined} onChange={(e) => { setFrom(e.target.value); reset(); }} /></Field>
+            <Field label="To date"><Input type="date" value={to} min={from || undefined} onChange={(e) => { setTo(e.target.value); reset(); }} /></Field>
+          </div>
+        </div>
+      </Sheet>
       <PatientForm open={creating} onClose={() => setCreating(false)} onSaved={(p) => { setCreating(false); nav(`/w/${ws.id}/patients/${p.patientId}`); }} />
       <Drawer open={!!patientId} onClose={() => nav(`/w/${ws.id}/patients`)} title="Patient record" width={720}>{patientId && <Profile id={patientId} />}</Drawer>
     </Page>
@@ -223,12 +236,12 @@ export function PatientForm({ open, onClose, onSaved, patient }: { open: boolean
   });
   return (
     <Modal open={open} onClose={onClose} label={patient ? 'Edit patient' : 'Add patient'} className="w-[min(680px,96vw)]">
-      <form onSubmit={(e) => { e.preventDefault(); setErr(null); setDups([]); if (!f.name.trim()) { setErr({ field: 'name', text: 'Enter the patient’s name' }); return; } save.mutate(false); }} className="max-h-[80vh] overflow-y-auto p-5">
+      <form onSubmit={(e) => { e.preventDefault(); setErr(null); setDups([]); if (!f.name.trim()) { setErr({ field: 'name', text: 'Enter the patient’s name' }); return; } save.mutate(false); }} className="p-5 sm:max-h-[80vh] sm:overflow-y-auto">
         <h2 className="mb-4 text-lg font-semibold">{patient ? `Edit ${patient.name}` : 'Add patient'}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Patient name" required error={err?.field === 'name' ? err.text : undefined} className="sm:col-span-2"><Input value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus maxLength={120} /></Field>
-          <Field label="Mobile number" error={err?.field === 'phone' ? err.text : undefined} hint="10-digit Indian mobile"><Input value={f.phone} onChange={(e) => set('phone', e.target.value)} inputMode="tel" maxLength={30} /></Field>
-          <div className="grid grid-cols-2 gap-3"><Field label="Age"><Input value={f.age} onChange={(e) => set('age', e.target.value)} maxLength={20} /></Field>
+          <Field label="Patient name" required error={err?.field === 'name' ? err.text : undefined} className="sm:col-span-2"><Input value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus maxLength={120} autoComplete="off" autoCapitalize="words" enterKeyHint="next" /></Field>
+          <Field label="Mobile number" error={err?.field === 'phone' ? err.text : undefined} hint="10-digit Indian mobile"><Input value={f.phone} onChange={(e) => set('phone', e.target.value)} inputMode="tel" autoComplete="tel" maxLength={30} /></Field>
+          <div className="grid grid-cols-2 gap-3"><Field label="Age"><Input value={f.age} onChange={(e) => set('age', e.target.value)} maxLength={20} inputMode="numeric" /></Field>
             <Field label="Sex"><Select value={f.sex} onChange={(e) => set('sex', e.target.value as Patient['sex'])}><option value="">—</option>{SEXES.map((s) => <option key={s}>{s}</option>)}</Select></Field></div>
           <Field label="Address" className="sm:col-span-2"><Input value={f.address} onChange={(e) => set('address', e.target.value)} maxLength={400} /></Field>
           <Field label="Referred by (doctor)"><Input value={f.referredBy} onChange={(e) => set('referredBy', e.target.value)} maxLength={120} /></Field>
@@ -247,7 +260,7 @@ export function PatientForm({ open, onClose, onSaved, patient }: { open: boolean
           </div>
         )}
         {err && !err.field && <p className="mt-3 text-[13px] text-bad" role="alert">{err.text}</p>}
-        <div className="mt-5 flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>{patient ? 'Save changes' : 'Register patient'}</Button></div>
+        <div className="sheet-actions mt-5 flex justify-end gap-2"><Button type="button" onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" loading={save.isPending}>{patient ? 'Save changes' : 'Register patient'}</Button></div>
       </form>
     </Modal>
   );
@@ -269,10 +282,10 @@ function Profile({ id }: { id: string }) {
   const { patient: p, prescriptions, invoices, payments, visits } = q.data;
   const row = (k: string, v: string) => <div><dt className="text-[12.5px] text-muted">{k}</dt><dd className="mt-0.5 text-[13.5px]">{v || '—'}</dd></div>;
   return (
-    <div className="p-5">
+    <div className="p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><h3 className="font-display text-xl font-semibold">{p.name}</h3><div className="mt-0.5 text-[13px] text-muted">{p.patientId} · Serial {p.serialNo} · {p.phone || 'no phone'}</div></div>
-        <div className="flex gap-2"><Button size="sm" onClick={() => setEditing(true)}>Edit details</Button><Link to={`/w/${ws.id}/prescriptions/new?patient=${p.patientId}`}><Button size="sm" variant="primary">New prescription</Button></Link><Link to={`/w/${ws.id}/invoices/new?patient=${p.patientId}`}><Button size="sm" variant="primary">New invoice</Button></Link></div>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto"><Button size="sm" className="max-sm:order-3 max-sm:col-span-2" onClick={() => setEditing(true)}>Edit details</Button><Link to={`/w/${ws.id}/prescriptions/new?patient=${p.patientId}`} className="contents"><Button size="sm" variant="primary">New prescription</Button></Link><Link to={`/w/${ws.id}/invoices/new?patient=${p.patientId}`} className="contents"><Button size="sm" variant="primary">New invoice</Button></Link></div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2.5">
         {([['Billed', p.billedPaise, ''], ['Paid', p.paidPaise, ''], ['Balance due', p.outstandingPaise, p.outstandingPaise > 0 ? 'text-bad' : '']] as const).map(([k, v, c]) => <Card key={k} className="px-3.5 py-3"><div className="text-[12.5px] text-muted">{k}</div><div className={cn('num mt-1 text-lg font-semibold', c)}>{rs(v)}</div></Card>)}

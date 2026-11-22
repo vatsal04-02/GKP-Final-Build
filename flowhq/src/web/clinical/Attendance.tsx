@@ -22,7 +22,7 @@ const NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export default function Attendance() {
   const { ws } = useWs();
   const qc = useQueryClient(); const toast = useToast(); const today = useToday();
-  const [week, setWeek] = useState(() => mondayOf(today)); const [q, setQ] = useState(''); const [busy, setBusy] = useState<string | null>(null);
+  const [week, setWeek] = useState(() => mondayOf(today)); const [q, setQ] = useState(''); const [busy, setBusy] = useState<string | null>(null); const [day, setDay] = useState('');
   const key = ['attendance', ws.id, week];
   const data = useQuery({ queryKey: key, queryFn: () => api<VisitWeek>(wsPath(ws.id, `/visits?week=${week}`)), placeholderData: keepPreviousData });
   const set = useMutation({
@@ -33,13 +33,46 @@ export default function Attendance() {
   });
   const rows = (data.data?.rows || []).filter((r) => !q.trim() || r.name.toLowerCase().includes(q.trim().toLowerCase()) || r.patientId.toLowerCase().includes(q.trim().toLowerCase()));
   const count = (d: string) => (data.data?.rows || []).filter((r) => r.cells[d]?.status === 'Attended').length;
+  const days = data.data?.days || [];
+  const sel = days.includes(day) ? day : days.includes(today) ? today : days[0] && days[0] > today ? days[0] : days[days.length - 1] || '';
+  const markedOn = (d: string) => (data.data?.rows || []).filter((r) => r.cells[d]).length;
   return (
-    <Page title="Attendance" subtitle="Click a day to cycle: attended, missed, cancelled, cleared." wide
-      actions={<div className="flex items-center gap-1"><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[150px] text-center text-sm font-medium">{fdate(week)} – {fdate(addDays(week, 6))}</span><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button><Button size="sm" onClick={() => setWeek(mondayOf(today))}>This week</Button></div>}>
-      <div className="mb-3 w-full max-w-xs"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name or patient ID" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search patients" /></div>
-      <Card className="overflow-hidden">
+    <Page title="Attendance" subtitle={<><span className="max-md:hidden">Click a day to cycle: attended, missed, cancelled, cleared.</span><span className="md:hidden">Pick a day, then tap ✓ attended, ✗ missed or – cancelled.</span></>} wide
+      actions={<div className="flex w-full items-center gap-1 md:w-auto"><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-[150px] flex-1 text-center text-sm font-medium md:flex-none">{fdate(week)} – {fdate(addDays(week, 6))}</span><Button size="sm" variant="ghost" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button><Button size="sm" onClick={() => setWeek(mondayOf(today))}>This week</Button></div>}>
+      <div className="mb-3 w-full max-w-xs max-md:max-w-none"><Input icon={<Search className="h-4 w-4" />} placeholder="Search name or patient ID" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search patients" /></div>
+      <Card className="overflow-hidden max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none">
         {data.isLoading ? <SkeletonRows rows={8} /> : data.error ? <ErrorState error={data.error} retry={() => data.refetch()} /> : !rows.length ? <EmptyState icon={<CalendarCheck className="h-5 w-5" />} title="No patients to show" body="Active patients appear here automatically." /> : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="md:hidden">
+            <div className="hscroll hscroll-bleed pb-1 pt-0.5" role="group" aria-label="Day of the week">
+              {days.map((d, i) => (
+                <button key={d} type="button" onClick={() => setDay(d)} aria-pressed={d === sel} className={cn('press flex h-[70px] w-[54px] flex-col items-center justify-center rounded-2xl border text-center', d === sel ? 'border-blue bg-blue text-white' : 'border-line bg-surface text-fg', d > today && d !== sel && 'opacity-55')}>
+                  <span className={cn('text-[12px]', d === sel ? 'text-white/85' : 'text-fg-2')}>{NAMES[i]}</span>
+                  <span className="num text-[18px] font-semibold leading-tight">{d.slice(8)}</span>
+                  <span className={cn('num text-[11px]', d === sel ? 'text-white/85' : 'text-muted')}>{count(d)} ✓</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center justify-between px-0.5 pb-2 text-[13px] text-fg-2"><span className="font-medium text-fg">{fdate(sel)}{sel === today ? ' · Today' : ''}</span><span><b className="num font-semibold text-ok">{count(sel)}</b> attended · <span className="num">{(data.data?.rows.length || 0) - markedOn(sel)}</span> not marked</span></div>
+            <ul className="divide-y divide-line/60 rounded-xl border border-line bg-surface" aria-label="Patients">
+              {rows.map((r) => {
+                const c = r.cells[sel]; const future = sel > today; const k = `${r.patientId}|${sel}`;
+                return (
+                  <li key={r.patientId} className="flex items-center gap-3 py-2 pl-4 pr-3">
+                    <div className="min-w-0 flex-1"><Link to={`/w/${ws.id}/patients/${r.patientId}`} className="block truncate text-[15px] font-medium">{r.name}</Link><div className="text-[12px] text-muted">{r.patientId}</div></div>
+                    <div className="flex shrink-0 gap-1.5" role="group" aria-label={`${r.name}, ${fdate(sel)}`}>
+                      {(['Attended', 'Missed', 'Cancelled'] as const).map((s) => (
+                        <button key={s} type="button" disabled={future || busy === k} aria-pressed={c?.status === s} aria-label={s}
+                          onClick={() => { setBusy(k); set.mutate({ patientId: r.patientId, date: sel, status: c?.status === s ? null : s }); }}
+                          className={cn('press flex h-11 w-11 items-center justify-center rounded-xl border text-lg font-semibold transition-colors', c?.status === s ? `${LOOK[s].cls} border-current` : 'border-line bg-surface text-muted', (future || busy === k) && 'opacity-50')}>{LOOK[s].glyph}</button>
+                      ))}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] border-collapse text-[13px]">
               <thead><tr>
                 <th className="border-b border-r border-line/70 bg-sage/40 px-3 py-2 text-left text-[12.5px] font-semibold text-fg-2">Patient</th>
@@ -65,6 +98,7 @@ export default function Attendance() {
               <tfoot><tr className="bg-sage/30 text-[12px] font-semibold"><td className="px-3 py-2">Attended</td>{data.data!.days.map((d) => <td key={d} className="num px-1 py-2 text-center">{count(d)}</td>)}</tr></tfoot>
             </table>
           </div>
+          </>
         )}
       </Card>
     </Page>
