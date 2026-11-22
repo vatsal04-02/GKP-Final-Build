@@ -36,13 +36,24 @@ function Letterhead({ clinic, title, big }: { clinic: ClinicProfile; title?: str
   );
 }
 
-function Footer({ clinic }: { clinic: ClinicProfile }) {
-  return (
-    <footer className="keep mt-3 border-t border-black pt-1.5 text-center text-[8.5pt] leading-snug">
+function Footer({ clinic, rich }: { clinic: ClinicProfile; rich?: boolean }) {
+  const lines = (
+    <>
+      {rich && <div className="font-semibold">geetakrishnaphysiotherapy.co.in</div>}
       <div>{clinic.address}</div>
       {clinic.phones.length > 0 && <div>Mobile: {clinic.phones.join(', ')}</div>}
       {clinic.timings && <div>{clinic.timings}</div>}
       {clinic.runBy && <div>{clinic.runBy}</div>}
+    </>
+  );
+  return (
+    <footer className="keep mt-3 border-t border-black pt-1.5 text-center text-[8.5pt] leading-snug">
+      {rich ? (
+        <div className="flex items-center justify-center gap-4">
+          <div className="min-w-0 flex-1">{lines}</div>
+          <div className="shrink-0 text-center"><img src="/brand/locate-us-qr.png" alt="QR code: locate us on Google Maps" className="h-[19mm] w-[19mm]" /><div className="mt-0.5 text-[8pt] font-bold uppercase tracking-wider">Locate us</div></div>
+        </div>
+      ) : lines}
     </footer>
   );
 }
@@ -82,7 +93,7 @@ export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic
       )}
       <div className="keep mt-auto pt-8">
         <div className="flex justify-end"><div className="w-[68mm] max-w-full text-center text-[10pt]"><div className="h-[10mm] border-b border-black" /><div className="mt-1 font-semibold">{rx.treatingPhysio || 'Treating physiotherapist'}</div><div className="text-[9pt]">Treating Physiotherapist{physio?.regNo ? ` · Regd. No. ${physio.regNo}` : ''}</div></div></div>
-        <Footer clinic={clinic} />
+        <Footer clinic={clinic} rich />
       </div>
     </article>
   );
