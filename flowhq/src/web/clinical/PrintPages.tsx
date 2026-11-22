@@ -12,7 +12,10 @@ import { InvoiceDocument, PrescriptionDocument } from './documents';
 import { useClinic } from './common';
 
 // One sheet of paper: if the content is taller than an A4 page (less the 10mm print margins), shrink it just enough to fit on ONE page.
-const PAGE_MM = 255;   // 297mm - 2 x 10mm margins = 277mm of paper; 22mm of slack so printers and browsers that differ a little (or a phone) still give ONE page
+// iPhone / iPad Safari print the sheet about 14% larger and with a bigger top margin, so there is only about 237mm of (CSS) height and 166mm of width: plan for that there.
+const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+const PAGE_MM = IOS ? 222 : 255;
+const SHEET_W_MM = IOS ? 166 : 190;   // the width the sheet is laid out at when printed
 function useFitOnePage(wrap: React.RefObject<HTMLDivElement>, on: boolean) {
   useEffect(() => {
     if (!on) return;
@@ -23,7 +26,7 @@ function useFitOnePage(wrap: React.RefObject<HTMLDivElement>, on: boolean) {
       // Measure the sheet the way it PRINTS: 190mm wide (A4 less the margins), no screen padding, border or shadow. The screen layout is
       // narrower, so measuring it would give the wrong height.
       const keep = { width: el.style.width, maxWidth: el.style.maxWidth, padding: el.style.padding, border: el.style.border, overflowWrap: el.style.overflowWrap };
-      Object.assign(el.style, { width: '190mm', maxWidth: 'none', padding: '0', border: '0', overflowWrap: 'normal' });
+      Object.assign(el.style, { width: `${SHEET_W_MM}mm`, maxWidth: 'none', padding: '0', border: '0', overflowWrap: 'normal' });
       const h = mm(el.getBoundingClientRect().height);
       Object.assign(el.style, keep);
       const z = h > PAGE_MM ? Math.max(0.5, PAGE_MM / h) : 1;
