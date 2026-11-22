@@ -12,7 +12,7 @@ import { InvoiceDocument, PrescriptionDocument } from './documents';
 import { useClinic } from './common';
 
 // One sheet of paper: if the content is taller than an A4 page (less the 10mm print margins), shrink it just enough to fit on ONE page.
-const PAGE_MM = 260;   // 297mm - 2 x 10mm margins = 277mm of paper; 17mm of slack so printers and browsers that differ a little still give ONE page
+const PAGE_MM = 255;   // 297mm - 2 x 10mm margins = 277mm of paper; 22mm of slack so printers and browsers that differ a little (or a phone) still give ONE page
 function useFitOnePage(wrap: React.RefObject<HTMLDivElement>, on: boolean) {
   useEffect(() => {
     if (!on) return;

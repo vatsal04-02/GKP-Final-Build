@@ -63,14 +63,14 @@ function Section({ label, text }: { label: string; text: string }) {
   return (
     <section className="keep mt-4">
       <h3 className="border-b border-black pb-1 text-[10pt] font-bold uppercase tracking-wider">{label}</h3>
-      <div className="min-h-[13mm] whitespace-pre-wrap break-words pt-2 text-[11pt] leading-loose">{text}</div>
+      <div className="min-h-[9mm] whitespace-pre-wrap break-words pt-2 text-[11pt] leading-loose">{text}</div>
     </section>
   );
 }
 
 export function PrescriptionDocument({ clinic, rx, patient, imageUrl }: { clinic: ClinicProfile; rx: Prescription; patient: Pick<Patient, 'name' | 'patientId' | 'age' | 'sex' | 'phone'>; imageUrl: (imageId: string) => string }) {
   return (
-    <article className="paper flex flex-col text-[10.5pt] print:min-h-[258mm]" aria-label="Prescription">
+    <article className="paper flex flex-col text-[10.5pt] print:min-h-[250mm]" aria-label="Prescription">
       <Letterhead clinic={clinic} big />
       <div className="keep mt-6 grid grid-cols-2 gap-x-5 gap-y-4 text-[10.5pt] print:grid-cols-[1.6fr_1fr_1fr] sm:grid-cols-[1.6fr_1fr_1fr]">
         <Cell k="Name:" v={patient.name} /><Cell k="Age / Sex:" v={[patient.age, patient.sex].filter(Boolean).join(' / ')} /><Cell k="Date:" v={fdate(rx.rxDate)} />
